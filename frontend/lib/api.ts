@@ -1,7 +1,14 @@
 import axios from 'axios'
 
+// Get the base API URL from environment variable
+export const getApiBaseUrl = () => {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+  // Ensure it ends with /api
+  return baseUrl.endsWith('/api') ? baseUrl : `${baseUrl}/api`
+}
+
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api',
+  baseURL: getApiBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
   },

@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import api from '@/lib/api'
+import api, { getApiBaseUrl } from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser, hasRole } from '@/lib/auth'
 
@@ -98,29 +98,7 @@ export default function TicketDetailsPage() {
     setUser(currentUser)
   }, [])
 
-  useEffect(() => {
-    if (!mounted) return
-
-    if (!user) {
-      router.push('/login')
-      return
-    }
-    fetchTicket()
-  }, [params.id, user, router, mounted])
-
-  // Initialize edit data when ticket loads
-  useEffect(() => {
-    if (ticket) {
-      setEditData({
-        title: ticket.title || '',
-        description: ticket.description || '',
-        affectedSystem: ticket.affectedSystem || ticket.affected_system || '',
-        priority: ticket.priority || 'medium'
-      })
-    }
-  }, [ticket])
-
-  const fetchTicket = async () => {
+  const fetchTicket = useCallback(async () => {
     try {
       const response = await api.get(`/tickets/${params.id}`)
       console.log('Ticket data received:', {
@@ -135,7 +113,29 @@ export default function TicketDetailsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [params.id])
+
+  useEffect(() => {
+    if (!mounted) return
+
+    if (!user) {
+      router.push('/login')
+      return
+    }
+    fetchTicket()
+  }, [params.id, user, router, mounted, fetchTicket])
+
+  // Initialize edit data when ticket loads
+  useEffect(() => {
+    if (ticket) {
+      setEditData({
+        title: ticket.title || '',
+        description: ticket.description || '',
+        affectedSystem: ticket.affectedSystem || ticket.affected_system || '',
+        priority: ticket.priority || 'medium'
+      })
+    }
+  }, [ticket])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -178,10 +178,7 @@ export default function TicketDetailsPage() {
             uploadFormData.append('file', file)
             
             const token = localStorage.getItem('token')
-            // Get base URL - if it already includes /api, don't add it again
-            const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
-            const apiUrl = baseUrl.endsWith('/api') ? baseUrl : `${baseUrl}/api`
-            const response = await fetch(`${apiUrl}/attachments/ticket/${params.id}`, {
+            const response = await fetch(`${getApiBaseUrl()}/attachments/ticket/${params.id}`, {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${token}`
@@ -627,17 +624,14 @@ export default function TicketDetailsPage() {
                       const isImage = att.mimeType?.startsWith('image/') || att.mime_type?.startsWith('image/')
                       const originalName = att.originalName || att.original_name || 'Unknown'
                       const size = att.size || 0
-                      // Get base URL - if it already includes /api, don't add it again
-                      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
-                      const apiBaseUrl = baseUrl.endsWith('/api') ? baseUrl : `${baseUrl}/api`
                       const token = localStorage.getItem('token')
                       // Use Cloudinary URL directly if available, otherwise use API endpoint
                       const cloudinaryPath = att.filePath || att.file_path
                       const isCloudinaryUrl = cloudinaryPath && cloudinaryPath.startsWith('http')
                       const viewUrl = isCloudinaryUrl 
                         ? (cloudinaryPath || '')
-                        : `${apiBaseUrl}/attachments/view/${att.id}?token=${token}`
-                      const downloadUrl = `${apiBaseUrl}/attachments/download/${att.id}`
+                        : `${getApiBaseUrl()}/attachments/view/${att.id}?token=${token}`
+                      const downloadUrl = `${getApiBaseUrl()}/attachments/download/${att.id}`
                       
                       const handleDownload = async (e: React.MouseEvent) => {
                         e.preventDefault()

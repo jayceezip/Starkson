@@ -140,7 +140,7 @@ export default function RegisterPage() {
             </Link>
           </p>
           <p className="text-xs text-gray-500 mt-2">
-            Note: New accounts are created with "User" role. Contact an administrator to change your role.
+            Note: New accounts are created with &quot;User&quot; role. Contact an administrator to change your role.
           </p>
         </div>
       </div>

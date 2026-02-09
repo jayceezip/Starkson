@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import api from '@/lib/api'
+import api, { getApiBaseUrl } from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser } from '@/lib/auth'
 
@@ -61,17 +61,7 @@ export default function IncidentDetailsPage() {
     setUser(currentUser)
   }, [])
 
-  useEffect(() => {
-    if (!mounted) return
-
-    if (!user) {
-      router.push('/login')
-      return
-    }
-    fetchIncident()
-  }, [params.id, user, router, mounted])
-
-  const fetchIncident = async () => {
+  const fetchIncident = useCallback(async () => {
     try {
       const response = await api.get(`/incidents/${params.id}`)
       setIncident(response.data)
@@ -80,7 +70,17 @@ export default function IncidentDetailsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [params.id])
+
+  useEffect(() => {
+    if (!mounted) return
+
+    if (!user) {
+      router.push('/login')
+      return
+    }
+    fetchIncident()
+  }, [params.id, user, router, mounted, fetchIncident])
 
   const handleStatusChange = async (newStatus: string) => {
     try {
@@ -221,15 +221,41 @@ export default function IncidentDetailsPage() {
                 <div className="bg-white p-6 rounded-lg shadow">
                   <h2 className="text-xl font-bold mb-4">Evidence Attachments</h2>
                   <div className="space-y-2">
-                    {incident.attachments.map((att: any) => (
-                      <a
-                        key={att.id}
-                        href={`/api/attachments/download/${att.id}`}
-                        className="block p-2 hover:bg-gray-50 rounded"
-                      >
-                        📎 {att.original_name || att.originalName || 'Attachment'} ({(att.size / 1024).toFixed(2)} KB)
-                      </a>
-                    ))}
+                    {incident.attachments.map((att: any) => {
+                      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : ''
+                      const downloadUrl = `${getApiBaseUrl()}/attachments/download/${att.id}`
+                      return (
+                        <a
+                          key={att.id}
+                          href={downloadUrl}
+                          className="block p-2 hover:bg-gray-50 rounded"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            // Use fetch to download with auth token
+                            fetch(downloadUrl, {
+                              headers: { 'Authorization': `Bearer ${token}` }
+                            })
+                              .then(response => response.blob())
+                              .then(blob => {
+                                const blobUrl = window.URL.createObjectURL(blob)
+                                const a = document.createElement('a')
+                                a.href = blobUrl
+                                a.download = att.original_name || att.originalName || 'attachment'
+                                document.body.appendChild(a)
+                                a.click()
+                                document.body.removeChild(a)
+                                window.URL.revokeObjectURL(blobUrl)
+                              })
+                              .catch(error => {
+                                console.error('Download error:', error)
+                                alert('Failed to download file')
+                              })
+                          }}
+                        >
+                          📎 {att.original_name || att.originalName || 'Attachment'} ({(att.size / 1024).toFixed(2)} KB)
+                        </a>
+                      )
+                    })}
                   </div>
                 </div>
               )}

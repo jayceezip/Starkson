@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import api from '@/lib/api'
+import api, { getApiBaseUrl } from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 
 const REQUEST_TYPES = [
@@ -90,10 +90,7 @@ export default function CreateTicketPage() {
             uploadFormData.append('file', file)
             
             const token = localStorage.getItem('token')
-            // Get base URL - if it already includes /api, don't add it again
-            const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
-            const apiUrl = baseUrl.endsWith('/api') ? baseUrl : `${baseUrl}/api`
-            const uploadUrl = `${apiUrl}/attachments/ticket/${ticketId}`
+            const uploadUrl = `${getApiBaseUrl()}/attachments/ticket/${ticketId}`
             console.log(`📤 Uploading ${file.name} to: ${uploadUrl}`)
             const response = await fetch(uploadUrl, {
               method: 'POST',
