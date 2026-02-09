@@ -1,0 +1,347 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import api from '@/lib/api'
+import ProtectedRoute from '@/components/ProtectedRoute'
+import { getStoredUser } from '@/lib/auth'
+
+interface Incident {
+  id: number
+  incidentNumber: string
+  category: string
+  title: string
+  description: string
+  severity: string
+  status: string
+  impactConfidentiality: string
+  impactIntegrity: string
+  impactAvailability: string
+  affectedAsset: string
+  affectedUser: string
+  rootCause: string
+  resolutionSummary: string
+  assignedToName: string
+  createdByName: string
+  sourceTicketNumber: string
+  createdAt: string
+  timeline: TimelineEntry[]
+  attachments: Attachment[]
+}
+
+interface TimelineEntry {
+  id: number
+  action: string
+  description: string
+  userName: string
+  createdAt: string
+}
+
+interface Attachment {
+  id: number
+  originalName: string
+  size: number
+  createdAt: string
+}
+
+const STATUS_OPTIONS = ['new', 'triaged', 'investigating', 'contained', 'recovered', 'closed']
+
+export default function IncidentDetailsPage() {
+  const params = useParams()
+  const router = useRouter()
+  const [user, setUser] = useState<any>(null)
+  const [mounted, setMounted] = useState(false)
+  const [incident, setIncident] = useState<Incident | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [timelineEntry, setTimelineEntry] = useState({ action: '', description: '' })
+
+  useEffect(() => {
+    setMounted(true)
+    const currentUser = getStoredUser()
+    setUser(currentUser)
+  }, [])
+
+  useEffect(() => {
+    if (!mounted) return
+
+    if (!user) {
+      router.push('/login')
+      return
+    }
+    fetchIncident()
+  }, [params.id, user, router, mounted])
+
+  const fetchIncident = async () => {
+    try {
+      const response = await api.get(`/incidents/${params.id}`)
+      setIncident(response.data)
+    } catch (error) {
+      console.error('Failed to fetch incident:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleStatusChange = async (newStatus: string) => {
+    try {
+      await api.put(`/incidents/${params.id}`, { status: newStatus })
+      fetchIncident()
+    } catch (error) {
+      console.error('Failed to update status:', error)
+    }
+  }
+
+  const handleAddTimelineEntry = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!timelineEntry.action.trim() || !timelineEntry.description.trim()) return
+
+    try {
+      await api.post(`/incidents/${params.id}/timeline`, timelineEntry)
+      setTimelineEntry({ action: '', description: '' })
+      fetchIncident()
+    } catch (error) {
+      console.error('Failed to add timeline entry:', error)
+    }
+  }
+
+  const handleUpdateRootCause = async () => {
+    const rootCause = prompt('Enter root cause analysis:')
+    if (!rootCause) return
+
+    try {
+      await api.put(`/incidents/${params.id}`, { rootCause: rootCause })
+      fetchIncident()
+    } catch (error) {
+      console.error('Failed to update root cause:', error)
+    }
+  }
+
+  const handleUpdateResolution = async () => {
+    const resolution = prompt('Enter resolution summary:')
+    if (!resolution) return
+
+    try {
+      await api.put(`/incidents/${params.id}`, { resolutionSummary: resolution, status: 'closed' })
+      fetchIncident()
+    } catch (error) {
+      console.error('Failed to update resolution:', error)
+    }
+  }
+
+  if (!mounted || !user || loading || !incident) {
+    return (
+      <ProtectedRoute allowedRoles={['security_officer', 'admin', 'it_support']}>
+        <div className="min-h-screen bg-gray-50 pt-20 lg:pt-8 px-4 lg:px-8 pb-8 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading...</p>
+          </div>
+        </div>
+      </ProtectedRoute>
+    )
+  }
+
+  // IT Support has read-only access (can view but not edit)
+  const isReadOnly = user?.role === 'it_support'
+
+  return (
+    <ProtectedRoute allowedRoles={['security_officer', 'admin', 'it_support']}>
+      <div className="min-h-screen bg-gray-50 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold">{incident.title || 'Untitled Incident'}</h1>
+            <p className="text-gray-600 font-mono">{incident.incident_number || incident.incidentNumber || `#${incident.id}`}</p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h2 className="text-xl font-bold mb-4">Description</h2>
+                <p className="text-gray-700 whitespace-pre-wrap">{incident.description}</p>
+              </div>
+
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h2 className="text-xl font-bold mb-4">Timeline</h2>
+                <div className="space-y-4 mb-4">
+                  {incident.timeline && incident.timeline.length > 0 ? (
+                    incident.timeline.map((entry: any) => {
+                      const entryDate = entry.created_at || entry.createdAt
+                      const formattedDate = entryDate 
+                        ? new Date(entryDate).toLocaleString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: true
+                          })
+                        : 'Invalid Date'
+                      
+                      return (
+                        <div key={entry.id} className="border-l-4 border-blue-400 pl-4">
+                          <div className="flex justify-between mb-2">
+                            <span className="font-medium">{entry.action}</span>
+                            <span className="text-xs text-gray-500">{formattedDate}</span>
+                          </div>
+                          <p className="text-gray-700">{entry.description}</p>
+                          <p className="text-xs text-gray-500 mt-1">by {entry.userName || 'Unknown User'}</p>
+                        </div>
+                      )
+                    })
+                  ) : (
+                    <p className="text-gray-500 text-sm">No timeline entries yet</p>
+                  )}
+                </div>
+                {!isReadOnly && (
+                  <form onSubmit={handleAddTimelineEntry} className="space-y-2">
+                    <input
+                      type="text"
+                      value={timelineEntry.action}
+                      onChange={(e) => setTimelineEntry({ ...timelineEntry, action: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-md"
+                      placeholder="Action (e.g., Investigation started)"
+                      required
+                    />
+                    <textarea
+                      value={timelineEntry.description}
+                      onChange={(e) => setTimelineEntry({ ...timelineEntry, description: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-md"
+                      rows={3}
+                      placeholder="Description"
+                      required
+                    />
+                    <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+                      Add Timeline Entry
+                    </button>
+                  </form>
+                )}
+              </div>
+
+              {incident.attachments && incident.attachments.length > 0 && (
+                <div className="bg-white p-6 rounded-lg shadow">
+                  <h2 className="text-xl font-bold mb-4">Evidence Attachments</h2>
+                  <div className="space-y-2">
+                    {incident.attachments.map((att: any) => (
+                      <a
+                        key={att.id}
+                        href={`/api/attachments/download/${att.id}`}
+                        className="block p-2 hover:bg-gray-50 rounded"
+                      >
+                        📎 {att.original_name || att.originalName || 'Attachment'} ({(att.size / 1024).toFixed(2)} KB)
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-6">
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h2 className="text-xl font-bold mb-4">Details</h2>
+                <div className="space-y-3">
+                  <div>
+                    <span className="text-sm font-medium text-gray-600">Status</span>
+                    {isReadOnly ? (
+                      <p className="mt-1">{incident.status}</p>
+                    ) : (
+                      <select
+                        value={incident.status}
+                        onChange={(e) => handleStatusChange(e.target.value)}
+                        className="w-full mt-1 px-3 py-2 border rounded-md"
+                      >
+                        {STATUS_OPTIONS.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-gray-600">Severity</span>
+                    <p className="mt-1">{incident.severity}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-gray-600">Category</span>
+                    <p className="mt-1">{incident.category.replace('_', ' ')}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-gray-600">Impact (CIA)</span>
+                    <p className="mt-1 text-sm">
+                      C: {incident.impactConfidentiality} | I: {incident.impactIntegrity} | A: {incident.impactAvailability}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-gray-600">Affected Asset</span>
+                    <p className="mt-1">{incident.affectedAsset || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-gray-600">Affected User</span>
+                    <p className="mt-1">{incident.affectedUser || 'N/A'}</p>
+                  </div>
+                  {incident.sourceTicketNumber && (
+                    <div>
+                      <span className="text-sm font-medium text-gray-600">Source Ticket</span>
+                      <p className="mt-1">
+                        <a href={`/tickets/${incident.sourceTicketNumber}`} className="text-blue-600 hover:underline">
+                          {incident.sourceTicketNumber}
+                        </a>
+                      </p>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-sm font-medium text-gray-600">Assigned To</span>
+                    <p className="mt-1">{incident.assignedToName || 'Unassigned'}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-gray-600">Created</span>
+                    <p className="mt-1">
+                      {incident.created_at || incident.createdAt 
+                        ? new Date(incident.created_at || incident.createdAt).toLocaleString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: true
+                          })
+                        : 'N/A'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h2 className="text-xl font-bold mb-4">Investigation</h2>
+                <div className="space-y-3">
+                  <div>
+                    <span className="text-sm font-medium text-gray-600">Root Cause</span>
+                    <p className="mt-1 text-sm text-gray-700">{incident.rootCause || 'Not documented'}</p>
+                    {!isReadOnly && (
+                      <button
+                        onClick={handleUpdateRootCause}
+                        className="mt-2 text-sm text-blue-600 hover:underline"
+                      >
+                        {incident.rootCause ? 'Update' : 'Add'} Root Cause
+                      </button>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-gray-600">Resolution Summary</span>
+                    <p className="mt-1 text-sm text-gray-700">{incident.resolutionSummary || 'Not documented'}</p>
+                    {!isReadOnly && (
+                      <button
+                        onClick={handleUpdateResolution}
+                        className="mt-2 text-sm text-blue-600 hover:underline"
+                      >
+                        {incident.resolutionSummary ? 'Update' : 'Add'} Resolution
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </ProtectedRoute>
+  )
+}
