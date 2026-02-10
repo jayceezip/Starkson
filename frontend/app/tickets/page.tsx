@@ -135,13 +135,13 @@ export default function TicketsPage() {
                   <tr key={ticket.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Link href={`/tickets/${ticket.id}`} className="text-blue-600 hover:underline font-mono">
-                        {ticket.ticket_number || ticket.ticketNumber || `#${ticket.id}`}
+                        {ticket.ticketNumber || ticket.ticketNumber || `#${ticket.id}`}
                       </Link>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-sm text-gray-600">
-                        {ticket.request_type || ticket.requestType 
-                          ? (ticket.request_type || ticket.requestType).replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+                        {ticket.requestType || ticket.requestType 
+                          ? (ticket.requestType || ticket.requestType).replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
                           : 'N/A'}
                       </span>
                     </td>
@@ -166,8 +166,8 @@ export default function TicketsPage() {
                       </td>
                     )}
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {ticket.created_at || ticket.createdAt 
-                        ? new Date(ticket.created_at || ticket.createdAt).toLocaleString('en-US', {
+                      {ticket.createdAt || ticket.createdAt 
+                        ? new Date(ticket.createdAt || ticket.createdAt).toLocaleString('en-US', {
                             year: 'numeric',
                             month: 'short',
                             day: 'numeric',
@@ -178,11 +178,11 @@ export default function TicketsPage() {
                         : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {ticket.sla_due || ticket.slaDue ? (
-                        <span className={`text-xs ${isSLABreached(ticket.sla_due || ticket.slaDue) ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
-                          {isSLABreached(ticket.sla_due || ticket.slaDue) 
+                      {ticket.slaDue || ticket.slaDue ? (
+                        <span className={`text-xs ${isSLABreached(ticket.slaDue || ticket.slaDue) ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
+                          {isSLABreached(ticket.slaDue || ticket.slaDue) 
                             ? '⚠ Breached' 
-                            : new Date(ticket.sla_due || ticket.slaDue).toLocaleString('en-US', {
+                            : new Date(ticket.slaDue || ticket.slaDue).toLocaleString('en-US', {
                                 year: 'numeric',
                                 month: 'short',
                                 day: 'numeric',
