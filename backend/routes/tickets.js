@@ -757,6 +757,12 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
     const assignedToId = await findSecurityOfficer()
     console.log('🔍 Incident assignment check:', { assignedToId, ticketNumber: ticket.ticket_number })
 
+    // From database: Affected Asset = ticket.affected_system; Affected User = link to ticket creator by id
+    const affectedAsset = ticket.affected_system != null && String(ticket.affected_system).trim() !== ''
+      ? String(ticket.affected_system).trim()
+      : null
+    const ticketCreatorId = ticket.created_by || null
+
     const incidentData = {
       incident_number: incidentNumber,
       source_ticket_id: ticket.id,
@@ -767,10 +773,12 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
       severity: severity || 'medium',
       status: 'new',
       assigned_to: assignedToId,
-      created_by: req.user.id
+      created_by: req.user.id,
+      affected_asset: affectedAsset,
+      affected_user_id: ticketCreatorId
     }
 
-    console.log('💾 Inserting incident:', { ...incidentData, assigned_to: assignedToId || 'NULL' })
+    console.log('💾 Inserting incident:', { ...incidentData, assigned_to: assignedToId || 'NULL', affected_asset: affectedAsset, affected_user_id: ticketCreatorId })
 
     // Use Supabase directly to ensure assignment is saved correctly
     const { data: insertedIncident, error: insertError } = await supabase

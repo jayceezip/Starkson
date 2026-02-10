@@ -35,19 +35,43 @@ router.get('/', authenticate, authorize('security_officer', 'admin'), async (req
     if (severity) filters.push({ column: 'severity', value: severity })
     if (category) filters.push({ column: 'category', value: category })
 
-    const incidents = await query('incidents', 'select', {
-      select: `
-        *,
-        created_by_user:users!incidents_created_by_fkey(id, name),
-        assigned_to_user:users!incidents_assigned_to_fkey(id, name),
-        source_ticket:tickets!incidents_source_ticket_id_fkey(ticket_number)
-      `,
-      filters: filters.length > 0 ? filters : undefined,
-      orderBy: { column: 'created_at', ascending: false }
-    })
+    const selectWithAffectedUser = `
+      *,
+      created_by_user:users!incidents_created_by_fkey(id, name),
+      assigned_to_user:users!incidents_assigned_to_fkey(id, name),
+      source_ticket:tickets!incidents_source_ticket_id_fkey(ticket_number, affected_system, created_by),
+      affected_user_link:users!incidents_affected_user_id_fkey(id, name)
+    `
+    const selectWithoutAffectedUser = `
+      *,
+      created_by_user:users!incidents_created_by_fkey(id, name),
+      assigned_to_user:users!incidents_assigned_to_fkey(id, name),
+      source_ticket:tickets!incidents_source_ticket_id_fkey(ticket_number, affected_system, created_by)
+    `
+    let incidents
+    try {
+      incidents = await query('incidents', 'select', {
+        select: selectWithAffectedUser,
+        filters: filters.length > 0 ? filters : undefined,
+        orderBy: { column: 'created_at', ascending: false }
+      })
+    } catch (selectErr) {
+      incidents = await query('incidents', 'select', {
+        select: selectWithoutAffectedUser,
+        filters: filters.length > 0 ? filters : undefined,
+        orderBy: { column: 'created_at', ascending: false }
+      })
+    }
 
-    // Get timeline and attachment counts
-    const incidentsWithCounts = await Promise.all(incidents.map(async (incident) => {
+    // Resolve ticket creator name for incidents where ticket still exists (for list display)
+    const incidentsWithAffected = await Promise.all(incidents.map(async (incident) => {
+      let affectedUser = incident.affected_user_link?.name ?? incident.affected_user ?? null
+      if (!affectedUser && incident.source_ticket?.created_by) {
+        const { data: creator } = await supabase.from('users').select('name').eq('id', incident.source_ticket.created_by).single()
+        affectedUser = creator?.name ?? null
+      }
+      const affectedAsset = incident.affected_asset ?? incident.source_ticket?.affected_system ?? null
+
       const [timelineCount, attachmentCount] = await Promise.all([
         query('incident_timeline', 'count', {
           filters: [{ column: 'incident_id', value: incident.id }]
@@ -61,22 +85,21 @@ router.get('/', authenticate, authorize('security_officer', 'admin'), async (req
       ])
       return {
         ...incident,
-        // Snake case (from DB)
         incident_number: incident.incident_number,
         created_at: incident.created_at,
-        // Camel case (for frontend compatibility)
         incidentNumber: incident.incident_number,
         createdAt: incident.created_at,
-        // Counts and names
         timelineCount: timelineCount.count || 0,
         attachmentCount: attachmentCount.count || 0,
         createdByName: incident.created_by_user?.name,
         assignedToName: incident.assigned_to_user?.name,
-        sourceTicketNumber: incident.source_ticket?.ticket_number
+        sourceTicketNumber: incident.source_ticket?.ticket_number,
+        affectedAsset: affectedAsset ?? null,
+        affectedUser: affectedUser ?? null
       }
     }))
 
-    res.json(incidentsWithCounts)
+    res.json(incidentsWithAffected)
   } catch (error) {
     console.error('Get incidents error:', error)
     res.status(500).json({ message: 'Server error' })
@@ -95,7 +118,7 @@ router.get('/:id', authenticate, async (req, res) => {
         *,
         created_by_user:users!incidents_created_by_fkey(id, name, email),
         assigned_to_user:users!incidents_assigned_to_fkey(id, name, email),
-        source_ticket:tickets!incidents_source_ticket_id_fkey(ticket_number, created_by, assigned_to)
+        source_ticket:tickets!incidents_source_ticket_id_fkey(ticket_number, created_by, assigned_to, affected_system)
       `)
       .eq('id', req.params.id)
       .single()
@@ -154,21 +177,55 @@ router.get('/:id', authenticate, async (req, res) => {
       ]
     })
 
+    // Affected asset: from incident row (set at convert from ticket.affected_system in DB only)
+    const affectedAsset = incident.affected_asset != null && incident.affected_asset !== ''
+      ? incident.affected_asset
+      : (incident.source_ticket?.affected_system ?? null)
+    // Affected user: get from database by affected_user_id (ticket creator id); fallback to legacy affected_user
+    let affectedUser = null
+    let affectedUserId = incident.affected_user_id ?? null
+    if (affectedUserId) {
+      const { data: affectedUserRow } = await supabase.from('users').select('id, name, email').eq('id', affectedUserId).single()
+      if (affectedUserRow) {
+        affectedUser = affectedUserRow.name ?? null
+        affectedUserId = affectedUserRow.id
+      }
+    }
+    if (!affectedUser && incident.affected_user != null && String(incident.affected_user).trim() !== '') {
+      affectedUser = incident.affected_user
+    }
+    if (!affectedUser && incident.source_ticket?.created_by) {
+      const { data: ticketCreator } = await supabase.from('users').select('id, name').eq('id', incident.source_ticket.created_by).single()
+      if (ticketCreator) {
+        affectedUser = ticketCreator.name ?? null
+        affectedUserId = ticketCreator.id
+      }
+    }
+    // Impact (CIA): ensure we always send a string, default 'none'
+    const impactConfidentiality = incident.impact_confidentiality ?? 'none'
+    const impactIntegrity = incident.impact_integrity ?? 'none'
+    const impactAvailability = incident.impact_availability ?? 'none'
+
     res.json({
       ...incident,
-      // Snake case (from DB)
       incident_number: incident.incident_number,
       created_at: incident.created_at,
-      // Camel case (for frontend compatibility)
       incidentNumber: incident.incident_number,
       createdAt: incident.created_at,
-      // User names
       createdByName: incident.created_by_user?.name,
       createdByEmail: incident.created_by_user?.email,
       assignedToName: incident.assigned_to_user?.name,
       assignedToEmail: incident.assigned_to_user?.email,
       sourceTicketNumber: incident.source_ticket?.ticket_number,
-      // Timeline with formatted dates
+      // Explicit camelCase so frontend always receives these
+      affectedAsset: affectedAsset ?? null,
+      affectedUser: affectedUser ?? null,
+      affectedUserId: affectedUserId ?? null,
+      rootCause: incident.root_cause ?? null,
+      resolutionSummary: incident.resolution_summary ?? null,
+      impactConfidentiality,
+      impactIntegrity,
+      impactAvailability,
       timeline: timeline.map(t => ({
         ...t,
         userName: t.user?.name || 'Unknown User',
@@ -176,7 +233,6 @@ router.get('/:id', authenticate, async (req, res) => {
         createdAt: t.created_at,
         isInternal: t.is_internal
       })),
-      // Attachments with formatted dates
       attachments: attachments.map(a => ({
         ...a,
         createdAt: a.created_at,
@@ -273,6 +329,7 @@ router.put('/:id', authenticate, authorize('security_officer', 'admin'), async (
       impactAvailability,
       affectedAsset,
       affectedUser,
+      affectedUserId,
       rootCause,
       resolutionSummary
     } = req.body
@@ -304,6 +361,7 @@ router.put('/:id', authenticate, authorize('security_officer', 'admin'), async (
     if (impactAvailability) updateData.impact_availability = impactAvailability
     if (affectedAsset !== undefined) updateData.affected_asset = affectedAsset || null
     if (affectedUser !== undefined) updateData.affected_user = affectedUser || null
+    if (affectedUserId !== undefined) updateData.affected_user_id = affectedUserId || null
     if (rootCause !== undefined) updateData.root_cause = rootCause || null
     if (resolutionSummary !== undefined) updateData.resolution_summary = resolutionSummary || null
     updateData.updated_at = new Date().toISOString()

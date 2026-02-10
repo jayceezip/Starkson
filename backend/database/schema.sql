@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS incidents (
   impact_availability VARCHAR(50) DEFAULT 'none' CHECK (impact_availability IN ('none', 'low', 'medium', 'high')),
   affected_asset VARCHAR(255),
   affected_user VARCHAR(255),
+  affected_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
   root_cause TEXT,
   resolution_summary TEXT,
   assigned_to UUID REFERENCES users(id) ON DELETE SET NULL,

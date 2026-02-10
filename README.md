@@ -151,6 +151,17 @@ npm run dev
 - `GET /api/notifications` - Get user notifications
 - `GET /api/audit` - Get audit logs (admin only)
 
+## Deploy on Vercel (frontend only)
+
+The Next.js app lives in `frontend/`, so Vercel must build from that folder:
+
+1. In the [Vercel dashboard](https://vercel.com/dashboard), open your project → **Settings** → **General**.
+2. Under **Root Directory**, click **Edit**, set it to **`frontend`**, and save.
+3. Add environment variables (e.g. `NEXT_PUBLIC_API_URL`) under **Settings** → **Environment Variables**.
+4. Redeploy (e.g. **Deployments** → … → **Redeploy**).
+
+If you skip step 2, the build runs from the repo root and fails with: *"Couldn't find any \`pages\` or \`app\` directory"*.
+
 ## Documentation
 
 - [Getting Started](./docs/GETTING_STARTED.md) - **START HERE** - First time setup and quick start guide
