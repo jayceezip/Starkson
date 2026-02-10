@@ -278,7 +278,7 @@ export default function IncidentDetailsPage() {
                     onClick={openInvestigationModal}
                     className="mt-4 w-full sm:w-auto bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700"
                   >
-                    {incident.root_cause || incident.rootCause || incident.resolution_summary || incident.resolutionSummary ? 'Edit' : 'Add'} Root Cause & Resolution Summary
+                    {incident.rootCause || incident.rootCause || incident.resolutionSummary || incident.resolutionSummary ? 'Edit' : 'Add'} Root Cause & Resolution Summary
                   </button>
                 )}
               </div>
