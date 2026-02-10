@@ -34,6 +34,10 @@ app.use('/api/*', (req, res, next) => {
   next()
 })
 
+app.head('/api/health', (req, res) => {
+  res.sendStatus(200)
+})
+
 // Health check
 app.get('/api/health', async (req, res) => {
   res.status(200).json({ status: "ok" });
