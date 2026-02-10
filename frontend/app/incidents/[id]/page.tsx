@@ -150,7 +150,7 @@ export default function IncidentDetailsPage() {
         <div className="max-w-6xl mx-auto">
           <div className="mb-6">
             <h1 className="text-3xl font-bold">{incident.title || 'Untitled Incident'}</h1>
-            <p className="text-gray-600 font-mono">{incident.incident_number || incident.incidentNumber || `#${incident.id}`}</p>
+            <p className="text-gray-600 font-mono">{incident.incidentNumber || incident.incidentNumber || `#${incident.id}`}</p>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -320,8 +320,8 @@ export default function IncidentDetailsPage() {
                   <div>
                     <span className="text-sm font-medium text-gray-600">Created</span>
                     <p className="mt-1">
-                      {incident.created_at || incident.createdAt 
-                        ? new Date(incident.created_at || incident.createdAt).toLocaleString('en-US', {
+                      {incident.createdAt || incident.createdAt 
+                        ? new Date(incident.createdAt || incident.createdAt).toLocaleString('en-US', {
                             year: 'numeric',
                             month: 'short',
                             day: 'numeric',
