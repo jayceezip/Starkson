@@ -36,14 +36,7 @@ app.use('/api/*', (req, res, next) => {
 
 // Health check
 app.get('/api/health', async (req, res) => {
-  try {
-    // Test Supabase connection
-    const { data, error } = await supabase.from('users').select('count').limit(1)
-    if (error) throw error
-    res.json({ status: 'ok', message: 'STARKSON API is running', database: 'connected' })
-  } catch (error) {
-    res.json({ status: 'ok', message: 'STARKSON API is running', database: 'disconnected', error: error.message })
-  }
+  res.status(200).json({ status: "ok" });
 })
 
 // Debug route to test attachments router (must be before 404 handler)
