@@ -1,36 +1,54 @@
 const express = require('express')
 const router = express.Router()
-const { query } = require('../config/database')
+const { query, supabase } = require('../config/database')
 const { authenticate, authorize } = require('../middleware/auth')
 
 // Get all users (admin only)
 router.get('/', authenticate, authorize('admin'), async (req, res) => {
   try {
-    const users = await query('SELECT id, email, name, role, createdAt FROM users ORDER BY createdAt DESC')
-    res.json(users)
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('id, email, name, role, status, created_at, updated_at')
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+
+    res.json((users || []).map(u => ({
+      ...u,
+      createdAt: u.created_at,
+      updatedAt: u.updated_at
+    })))
   } catch (error) {
     console.error('Get users error:', error)
     res.status(500).json({ message: 'Server error' })
   }
 })
 
-// Get single user
+// Get single user (admin only)
 router.get('/:id', authenticate, authorize('admin'), async (req, res) => {
   try {
-    const [user] = await query('SELECT id, email, name, role, createdAt FROM users WHERE id = ?', [req.params.id])
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, email, name, role, status, created_at, updated_at')
+      .eq('id', req.params.id)
+      .single()
 
-    if (!user) {
+    if (error || !user) {
       return res.status(404).json({ message: 'User not found' })
     }
 
-    res.json(user)
+    res.json({
+      ...user,
+      createdAt: user.created_at,
+      updatedAt: user.updated_at
+    })
   } catch (error) {
     console.error('Get user error:', error)
     res.status(500).json({ message: 'Server error' })
   }
 })
 
-// Update user role
+// Update user role (admin only)
 router.put('/:id/role', authenticate, authorize('admin'), async (req, res) => {
   try {
     const { role } = req.body
@@ -39,17 +57,69 @@ router.put('/:id/role', authenticate, authorize('admin'), async (req, res) => {
       return res.status(400).json({ message: 'Invalid role' })
     }
 
-    await query('UPDATE users SET role = ? WHERE id = ?', [role, req.params.id])
+    const { data: existing } = await supabase
+      .from('users')
+      .select('id, role')
+      .eq('id', req.params.id)
+      .single()
 
-    // Log audit
-    await query(
-      'INSERT INTO audit_logs (action, userId, resourceType, resourceId) VALUES (?, ?, ?, ?)',
-      ['UPDATE_USER_ROLE', req.user.id, 'user', req.params.id]
-    )
+    if (!existing) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ role, updated_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+
+    if (updateError) throw updateError
+
+    await query('audit_logs', 'insert', {
+      data: {
+        action: 'UPDATE_USER_ROLE',
+        user_id: req.user.id,
+        resource_type: 'user',
+        resource_id: req.params.id,
+        details: { previousRole: existing.role, newRole: role }
+      }
+    })
 
     res.json({ message: 'User role updated' })
   } catch (error) {
     console.error('Update user role error:', error)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
+// Update user status (admin only)
+router.put('/:id/status', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const { status } = req.body
+
+    if (!['active', 'inactive'].includes(status)) {
+      return res.status(400).json({ message: 'Invalid status' })
+    }
+
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+
+    if (updateError) throw updateError
+
+    await query('audit_logs', 'insert', {
+      data: {
+        action: 'UPDATE_USER_STATUS',
+        user_id: req.user.id,
+        resource_type: 'user',
+        resource_id: req.params.id,
+        details: { status }
+      }
+    })
+
+    res.json({ message: 'User status updated' })
+  } catch (error) {
+    console.error('Update user status error:', error)
     res.status(500).json({ message: 'Server error' })
   }
 })

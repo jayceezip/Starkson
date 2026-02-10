@@ -32,16 +32,15 @@ router.get('/stats', authenticate, async (req, res) => {
     }
     console.log('Total tickets count:', ticketsCount, 'for user:', req.user.id, 'role:', req.user.role)
 
-    // Total incidents count (all records, no limit)
-    const { count: incidentsCount, error: incidentsError } = await supabase
-      .from('incidents')
-      .select('*', { count: 'exact', head: true })
-    
-    if (incidentsError) {
-      console.error('Total incidents count error:', incidentsError)
-      throw incidentsError
+    // Total incidents count: only for security_officer and admin (role-based)
+    let incidentsCount = 0
+    if (req.user.role === 'security_officer' || req.user.role === 'admin') {
+      const { count: incCount, error: incidentsError } = await supabase
+        .from('incidents')
+        .select('*', { count: 'exact', head: true })
+      if (!incidentsError) incidentsCount = incCount || 0
+      console.log('Total incidents count:', incidentsCount)
     }
-    console.log('Total incidents count:', incidentsCount)
 
     // Open tickets count (status: new, assigned, in_progress, waiting_for_user)
     const openStatuses = ['new', 'assigned', 'in_progress', 'waiting_for_user']
@@ -119,6 +118,35 @@ router.get('/stats', authenticate, async (req, res) => {
     res.json(response)
   } catch (error) {
     console.error('Get dashboard stats error:', error)
+    res.status(500).json({ message: 'Server error', error: error.message })
+  }
+})
+
+// Get recent activity for the current user (role-based: actions they performed)
+router.get('/activity', authenticate, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 25, 50)
+    const { data: logs, error } = await supabase
+      .from('audit_logs')
+      .select('id, action, resource_type, resource_id, details, created_at')
+      .eq('user_id', req.user.id)
+      .order('created_at', { ascending: false })
+      .limit(limit)
+
+    if (error) throw error
+
+    const list = (logs || []).map((l) => ({
+      id: l.id,
+      action: l.action,
+      resourceType: l.resource_type,
+      resourceId: l.resource_id,
+      details: l.details,
+      createdAt: l.created_at,
+    }))
+
+    res.json({ activity: list })
+  } catch (error) {
+    console.error('Get dashboard activity error:', error)
     res.status(500).json({ message: 'Server error', error: error.message })
   }
 })

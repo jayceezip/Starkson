@@ -57,10 +57,10 @@ export default function TicketsPage() {
   if (!mounted || !user) {
     return (
       <ProtectedRoute allowedRoles={['user', 'it_support', 'admin']}>
-        <div className="min-h-screen bg-gray-50 pt-20 lg:pt-8 px-4 lg:px-8 pb-8 flex items-center justify-center">
+        <div className="panel-page flex items-center justify-center">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto" />
+            <p className="mt-4 text-gray-500">Loading...</p>
           </div>
         </div>
       </ProtectedRoute>
@@ -96,9 +96,9 @@ export default function TicketsPage() {
 
   return (
     <ProtectedRoute allowedRoles={['user', 'it_support', 'admin']}>
-      <div className="min-h-screen bg-gray-50 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">IT Support Tickets</h1>
+      <div className="panel-page">
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-2xl font-bold text-gray-900">IT Support Tickets</h1>
           {hasRole(user, 'user', 'admin') && (
             <Link
               href="/tickets/create"
@@ -110,11 +110,11 @@ export default function TicketsPage() {
         </div>
 
         {loading ? (
-          <div className="text-center py-8">Loading...</div>
+          <div className="text-center py-8 text-gray-500">Loading...</div>
         ) : tickets.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">No tickets found</div>
+          <div className="panel-card text-center py-8 text-gray-500">No tickets found</div>
         ) : (
-          <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="panel-card overflow-hidden p-0">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>

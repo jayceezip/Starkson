@@ -48,10 +48,10 @@ export default function StaffDashboardPage() {
   if (!mounted || !user) {
     return (
       <ProtectedRoute allowedRoles={['it_support', 'admin']}>
-        <div className="min-h-screen bg-gray-50 pt-20 lg:pt-8 px-4 lg:px-8 pb-8 flex items-center justify-center">
+        <div className="panel-page flex items-center justify-center">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto" />
+            <p className="mt-4 text-gray-500">Loading...</p>
           </div>
         </div>
       </ProtectedRoute>
@@ -60,32 +60,32 @@ export default function StaffDashboardPage() {
 
   return (
     <ProtectedRoute allowedRoles={['it_support', 'admin']}>
-      <div className="min-h-screen bg-gray-50 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
-        <h1 className="text-3xl font-bold mb-6">IT Support Console</h1>
+      <div className="panel-page">
+        <h1 className="text-2xl font-bold text-gray-900 mb-8">IT Support Console</h1>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-gray-600 mb-2">Assigned Tickets</h3>
-            <p className="text-3xl font-bold">{stats.assignedTickets}</p>
+          <div className="panel-card">
+            <h3 className="panel-card-title">Assigned Tickets</h3>
+            <p className="panel-card-value">{stats.assignedTickets}</p>
           </div>
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-gray-600 mb-2">Pending Tickets</h3>
-            <p className="text-3xl font-bold">{stats.pendingTickets}</p>
+          <div className="panel-card">
+            <h3 className="panel-card-title">Pending Tickets</h3>
+            <p className="panel-card-value">{stats.pendingTickets}</p>
           </div>
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-gray-600 mb-2">Resolved Today</h3>
-            <p className="text-3xl font-bold">{stats.resolvedToday}</p>
+          <div className="panel-card">
+            <h3 className="panel-card-title">Resolved Today</h3>
+            <p className="panel-card-value">{stats.resolvedToday}</p>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h2 className="text-xl font-bold mb-4">Quick Actions</h2>
+        <div className="panel-card">
+          <h2 className="panel-section-title">Quick Actions</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <a href="/tickets" className="p-4 border rounded-lg hover:bg-gray-50">
-              <h3 className="font-semibold">View All Tickets</h3>
-              <p className="text-sm text-gray-600">Manage ticket queue</p>
+            <a href="/tickets" className="p-4 border border-gray-100 rounded-xl hover:bg-gray-50 transition-colors">
+              <h3 className="font-semibold text-gray-900">View All Tickets</h3>
+              <p className="text-sm text-gray-500">Manage ticket queue</p>
             </a>
-            <a href="/tickets?status=new" className="p-4 border rounded-lg hover:bg-gray-50">
-              <h3 className="font-semibold">Unassigned Tickets</h3>
-              <p className="text-sm text-gray-600">View new tickets</p>
+            <a href="/tickets?status=new" className="p-4 border border-gray-100 rounded-xl hover:bg-gray-50 transition-colors">
+              <h3 className="font-semibold text-gray-900">Unassigned Tickets</h3>
+              <p className="text-sm text-gray-500">View new tickets</p>
             </a>
           </div>
         </div>

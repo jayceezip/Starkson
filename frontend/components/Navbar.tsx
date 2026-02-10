@@ -40,7 +40,7 @@ export default function Navbar() {
     return (
       <nav className="bg-gray-800 text-white p-4">
         <div className="container mx-auto flex justify-between items-center">
-          <Link href="/" className="text-xl font-bold">STARKSON</Link>
+          <Link href="/" className="flex items-center"><img src="/STARKSON-LG.png" alt="STARKSON" className="h-8 w-auto object-contain" /></Link>
           <div className="w-20 h-8"></div>
         </div>
       </nav>
@@ -51,7 +51,7 @@ export default function Navbar() {
     return (
       <nav className="bg-gray-800 text-white p-4">
         <div className="container mx-auto flex justify-between items-center">
-          <Link href="/" className="text-xl font-bold">STARKSON</Link>
+          <Link href="/" className="flex items-center"><img src="/STARKSON-LG.png" alt="STARKSON" className="h-8 w-auto object-contain" /></Link>
           <Link href="/login" className="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700">Login</Link>
         </div>
       </nav>
@@ -66,8 +66,8 @@ export default function Navbar() {
   return (
     <nav className="bg-gray-800 text-white p-4 shadow-lg">
       <div className="container mx-auto flex justify-between items-center">
-        <Link href="/" className="text-xl font-bold hover:text-gray-300 transition-colors">
-          STARKSON
+        <Link href="/" className="flex items-center hover:opacity-90 transition-opacity">
+          <img src="/STARKSON-LG.png" alt="STARKSON" className="h-8 w-auto object-contain" />
         </Link>
         <div className="flex items-center gap-6">
           {/* Navigation Links - Role-based */}

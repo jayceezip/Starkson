@@ -1,40 +1,148 @@
 const express = require('express')
 const router = express.Router()
-const { query } = require('../config/database')
+const { supabase } = require('../config/database')
 const { authenticate, authorize } = require('../middleware/auth')
 
-// Get audit logs (admin only)
+// Export audit reports (must be before /:param routes)
+const EXPORT_PAGE_SIZE = 1000
+
+router.get('/export', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const { startDate, endDate, format = 'csv', resourceType, action } = req.query
+
+    const logs = []
+    let offset = 0
+    let hasMore = true
+
+    while (hasMore) {
+      let q = supabase
+        .from('audit_logs')
+        .select(`
+          id, action, resource_type, resource_id, details, ip_address, created_at, user_id,
+          user:users!audit_logs_user_id_fkey(name, email)
+        `)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + EXPORT_PAGE_SIZE - 1)
+
+      if (resourceType) q = q.eq('resource_type', resourceType)
+      if (action) q = q.eq('action', action)
+      if (startDate) q = q.gte('created_at', startDate)
+      if (endDate) q = q.lte('created_at', endDate)
+
+      const { data: page, error } = await q
+
+      if (error) throw error
+      if (!page || page.length === 0) break
+      logs.push(...page)
+      hasMore = page.length === EXPORT_PAGE_SIZE
+      offset += EXPORT_PAGE_SIZE
+    }
+
+    if (format === 'json') {
+      res.setHeader('Content-Disposition', 'attachment; filename=audit-report.json')
+      res.setHeader('Content-Type', 'application/json')
+      return res.json(logs || [])
+    }
+
+    const rows = (logs || []).map(l => ({
+      id: l.id,
+      createdAt: l.created_at,
+      action: l.action,
+      resourceType: l.resource_type || '',
+      resourceId: l.resource_id || '',
+      userName: l.user?.name || '',
+      userEmail: l.user?.email || '',
+      details: typeof l.details === 'object' ? JSON.stringify(l.details) : (l.details || ''),
+      ipAddress: l.ip_address || ''
+    }))
+
+    const headers = ['id', 'createdAt', 'action', 'resourceType', 'resourceId', 'userName', 'userEmail', 'details', 'ipAddress']
+    const csv = [headers.join(',')].concat(
+      rows.map(r => headers.map(h => `"${String(r[h] || '').replace(/"/g, '""')}"`).join(','))
+    ).join('\n')
+
+    res.setHeader('Content-Disposition', 'attachment; filename=audit-report.csv')
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.send('\uFEFF' + csv)
+  } catch (error) {
+    console.error('Export audit error:', error)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
+// Get audit logs (admin only) - immutable activity logs, who/when/what
 router.get('/', authenticate, authorize('admin'), async (req, res) => {
   try {
-    const logs = await query(
-      `SELECT al.*, u.name as userName, u.email as userEmail 
-       FROM audit_logs al 
-       LEFT JOIN users u ON al.userId = u.id 
-       ORDER BY al.createdAt DESC 
-       LIMIT 100`
-    )
-    res.json(logs)
+    const { limit = 200, offset = 0, resourceType, resourceId, action, startDate, endDate } = req.query
+
+    let q = supabase
+      .from('audit_logs')
+      .select(`
+        *,
+        user:users!audit_logs_user_id_fkey(id, name, email)
+      `, { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(parseInt(offset, 10) || 0, (parseInt(offset, 10) || 0) + (parseInt(limit, 10) || 200) - 1)
+
+    if (resourceType) q = q.eq('resource_type', resourceType)
+    if (resourceId) q = q.eq('resource_id', resourceId)
+    if (action) q = q.eq('action', action)
+    if (startDate) q = q.gte('created_at', startDate)
+    if (endDate) q = q.lte('created_at', endDate)
+
+    const { data: logs, error, count } = await q
+
+    if (error) throw error
+
+    const list = (logs || []).map(l => ({
+      id: l.id,
+      action: l.action,
+      resourceType: l.resource_type,
+      resourceId: l.resource_id,
+      details: l.details,
+      ipAddress: l.ip_address,
+      userAgent: l.user_agent,
+      createdAt: l.created_at,
+      userName: l.user?.name,
+      userEmail: l.user?.email,
+      userId: l.user_id
+    }))
+
+    res.json({ logs: list, total: count ?? list.length })
   } catch (error) {
     console.error('Get audit logs error:', error)
     res.status(500).json({ message: 'Server error' })
   }
 })
 
-// Get audit logs for specific resource
-router.get('/:resourceType/:resourceId', authenticate, authorize('admin'), async (req, res) => {
+// Get audit logs for a specific resource (record history - who/when/what)
+router.get('/resource/:resourceType/:resourceId', authenticate, authorize('admin'), async (req, res) => {
   try {
     const { resourceType, resourceId } = req.params
-    const logs = await query(
-      `SELECT al.*, u.name as userName 
-       FROM audit_logs al 
-       LEFT JOIN users u ON al.userId = u.id 
-       WHERE al.resourceType = ? AND al.resourceId = ? 
-       ORDER BY al.createdAt DESC`,
-      [resourceType, resourceId]
-    )
-    res.json(logs)
+
+    const { data: logs, error } = await supabase
+      .from('audit_logs')
+      .select(`
+        *,
+        user:users!audit_logs_user_id_fkey(id, name, email)
+      `)
+      .eq('resource_type', resourceType)
+      .eq('resource_id', resourceId)
+      .order('created_at', { ascending: false })
+      .limit(100)
+
+    if (error) throw error
+
+    res.json((logs || []).map(l => ({
+      id: l.id,
+      action: l.action,
+      details: l.details,
+      createdAt: l.created_at,
+      userName: l.user?.name,
+      userEmail: l.user?.email
+    })))
   } catch (error) {
-    console.error('Get resource audit logs error:', error)
+    console.error('Get resource audit error:', error)
     res.status(500).json({ message: 'Server error' })
   }
 })

@@ -63,10 +63,10 @@ export default function IncidentsPage() {
   if (!mounted || !user) {
     return (
       <ProtectedRoute allowedRoles={['security_officer', 'admin']}>
-        <div className="min-h-screen bg-gray-50 pt-20 lg:pt-8 px-4 lg:px-8 pb-8 flex items-center justify-center">
+        <div className="panel-page flex items-center justify-center">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto" />
+            <p className="mt-4 text-gray-500">Loading...</p>
           </div>
         </div>
       </ProtectedRoute>
@@ -97,9 +97,9 @@ export default function IncidentsPage() {
 
   return (
     <ProtectedRoute allowedRoles={['security_officer', 'admin']}>
-      <div className="min-h-screen bg-gray-50 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">Cybersecurity Incidents</h1>
+      <div className="panel-page">
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-2xl font-bold text-gray-900">Cybersecurity Incidents</h1>
           <Link
             href="/incidents/create"
             className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
@@ -108,7 +108,7 @@ export default function IncidentsPage() {
           </Link>
         </div>
 
-        <div className="bg-white p-4 rounded-lg shadow mb-6">
+        <div className="panel-card mb-6">
           <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">Status</label>
@@ -160,11 +160,11 @@ export default function IncidentsPage() {
         </div>
 
         {loading ? (
-          <div className="text-center py-8">Loading...</div>
+          <div className="text-center py-8 text-gray-500">Loading...</div>
         ) : incidents.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">No incidents found</div>
+          <div className="panel-card text-center py-8 text-gray-500">No incidents found</div>
         ) : (
-          <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="panel-card overflow-hidden p-0">
             <div className="overflow-x-auto">
               <table className="min-w-[1000px] w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">

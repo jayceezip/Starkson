@@ -1,9 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { getStoredUser, clearStoredAuth, hasRole } from '@/lib/auth'
+import api from '@/lib/api'
+import { formatActionLabel, getActionIcon, timeAgo } from '@/lib/activity'
+import type { ActivityItem } from '@/lib/activity'
+
+const ACTIVITY_POLL_MS = 15000
 
 export default function Sidebar() {
   const router = useRouter()
@@ -11,6 +16,12 @@ export default function Sidebar() {
   const [user, setUser] = useState<any>(null)
   const [mounted, setMounted] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [activity, setActivity] = useState<ActivityItem[]>([])
+  const [lastSeenCount, setLastSeenCount] = useState(0)
+  const notifRef = useRef<HTMLDivElement>(null)
+
+  const newCount = Math.max(0, activity.length - lastSeenCount)
 
   // Only access localStorage on client side after mount
   useEffect(() => {
@@ -29,6 +40,56 @@ export default function Sidebar() {
   useEffect(() => {
     setIsMobileMenuOpen(false)
   }, [pathname])
+
+  // Fetch recent activity for notification bell (all roles see their own actions)
+  const fetchActivity = async () => {
+    try {
+      const res = await api.get('/dashboard/activity?limit=15')
+      setActivity(res.data?.activity ?? [])
+    } catch {
+      setActivity([])
+    }
+  }
+
+  useEffect(() => {
+    if (!mounted || !user) return
+    fetchActivity()
+    const interval = setInterval(fetchActivity, ACTIVITY_POLL_MS)
+    return () => clearInterval(interval)
+  }, [mounted, user])
+
+  // Refetch activity when user navigates (e.g. after creating/updating a ticket) so badge updates
+  useEffect(() => {
+    if (!mounted || !user) return
+    fetchActivity()
+  }, [pathname, mounted, user])
+
+  // Refetch when user returns to the tab
+  useEffect(() => {
+    if (!mounted || !user) return
+    const onFocus = () => fetchActivity()
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [mounted, user])
+
+  // Mark as seen when user is on the notifications page
+  useEffect(() => {
+    if (pathname === '/notifications' && activity.length > 0) {
+      setLastSeenCount(activity.length)
+    }
+  }, [pathname, activity.length])
+
+  // Close notification dropdown when clicking outside
+  useEffect(() => {
+    if (!notifOpen) return
+    const handleClick = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false)
+      }
+    }
+    document.addEventListener('click', handleClick)
+    return () => document.removeEventListener('click', handleClick)
+  }, [notifOpen])
 
   const handleLogout = () => {
     // Clear authentication
@@ -108,11 +169,84 @@ export default function Sidebar() {
         `}
       >
         <div className="flex flex-col h-full">
-          {/* Logo */}
-          <div className="p-6 border-b border-gray-700">
-            <Link href="/dashboard" className="text-2xl font-bold hover:text-gray-300 transition-colors">
+          {/* Brand + Notification bell */}
+          <div className="px-4 py-4 border-b border-gray-700 relative flex items-center justify-between gap-2" ref={notifRef}>
+            <Link href="/dashboard" className="text-xl font-bold text-white tracking-tight hover:opacity-90 transition-opacity flex-1 min-w-0 truncate text-center">
               STARKSON
             </Link>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                if (!notifOpen) setLastSeenCount(activity.length)
+                setNotifOpen((o) => !o)
+              }}
+              className="relative flex-shrink-0 p-1.5 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+              aria-label="Notifications"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              {newCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-medium">
+                  {newCount > 9 ? '9+' : newCount}
+                </span>
+              )}
+            </button>
+            {/* Dropdown: recent actions (scrollable) */}
+            {notifOpen && (
+              <div className="absolute left-0 right-0 top-full mt-1 mx-2 bg-gray-700 border border-gray-600 rounded-xl shadow-xl z-50 overflow-hidden flex flex-col max-h-[min(320px,60vh)]">
+                <div className="px-3 py-2 border-b border-gray-600 flex items-center justify-between flex-shrink-0">
+                  <span className="text-sm font-semibold text-white">Recent activity</span>
+                  <Link
+                    href="/notifications"
+                    onClick={() => {
+                      setLastSeenCount(activity.length)
+                      setNotifOpen(false)
+                    }}
+                    className="text-xs text-sky-400 hover:text-sky-300"
+                  >
+                    Show all
+                  </Link>
+                </div>
+                <div className="overflow-y-auto flex-1 min-h-0">
+                  {activity.length === 0 ? (
+                    <p className="px-3 py-4 text-sm text-gray-400">No recent activity</p>
+                  ) : (
+                    <ul className="py-1">
+                      {activity.map((item) => {
+                        const { label, href } = formatActionLabel(item)
+                        return (
+                          <li key={item.id} className="px-3 py-2 hover:bg-gray-600/50">
+                            {href ? (
+                              <Link
+                                href={href}
+                                onClick={() => setNotifOpen(false)}
+                                className="flex items-start gap-2"
+                              >
+                                <span className="text-gray-400 mt-0.5 flex-shrink-0">
+                                  {getActionIcon(item.action, 'text-sky-400')}
+                                </span>
+                                <span className="text-sm text-gray-200 line-clamp-2 flex-1">{label}</span>
+                                <span className="text-xs text-gray-500 flex-shrink-0 mt-0.5">{timeAgo(item.createdAt)}</span>
+                              </Link>
+                            ) : (
+                              <div className="flex items-start gap-2">
+                                <span className="text-gray-400 mt-0.5 flex-shrink-0">
+                                  {getActionIcon(item.action, 'text-sky-400')}
+                                </span>
+                                <span className="text-sm text-gray-200 line-clamp-2 flex-1">{label}</span>
+                                <span className="text-xs text-gray-500 flex-shrink-0 mt-0.5">{timeAgo(item.createdAt)}</span>
+                              </div>
+                            )}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Navigation Links */}
@@ -133,6 +267,23 @@ export default function Sidebar() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                 </svg>
                 <span className="font-medium">Dashboard</span>
+              </Link>
+
+              {/* Notifications - all roles (own activity) */}
+              <Link
+                href="/notifications"
+                className={`
+                  flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
+                  ${isActive('/notifications')
+                    ? 'bg-gray-700 text-white'
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                  }
+                `}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                <span className="font-medium">Notifications</span>
               </Link>
 
               {/* Tickets - User, IT Support, Admin */}
