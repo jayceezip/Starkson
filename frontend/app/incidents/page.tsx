@@ -180,7 +180,7 @@ export default function IncidentsPage() {
                   <tr key={incident.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Link href={`/incidents/${incident.id}`} className="text-red-600 hover:underline font-mono">
-                        {incident.incident_number || incident.incidentNumber || `#${incident.id}`}
+                        {incident.incidentNumber || incident.incidentNumber || `#${incident.id}`}
                       </Link>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -213,8 +213,8 @@ export default function IncidentsPage() {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {incident.created_at || incident.createdAt 
-                        ? new Date(incident.created_at || incident.createdAt).toLocaleString('en-US', {
+                      {incident.createdAt || incident.createdAt 
+                        ? new Date(incident.createdAt || incident.createdAt).toLocaleString('en-US', {
                             year: 'numeric',
                             month: 'short',
                             day: 'numeric',
