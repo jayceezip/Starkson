@@ -9,6 +9,7 @@ import { formatActionLabel, getActionIcon, timeAgo } from '@/lib/activity'
 import type { ActivityItem } from '@/lib/activity'
 
 const ACTIVITY_POLL_MS = 15000
+const NOTIFICATIONS_POLL_MS = 30000 // Increased to 30 seconds to reduce flickering
 
 export default function Sidebar() {
   const router = useRouter()
@@ -18,10 +19,15 @@ export default function Sidebar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [activity, setActivity] = useState<ActivityItem[]>([])
-  const [lastSeenCount, setLastSeenCount] = useState(0)
+  const [notifications, setNotifications] = useState<any[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [markingAll, setMarkingAll] = useState(false)
   const notifRef = useRef<HTMLDivElement>(null)
-
-  const newCount = Math.max(0, activity.length - lastSeenCount)
+  
+  // Refs to track operations and prevent race conditions
+  const lastMarkedRef = useRef<string | null>(null)
+  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const markingInProgressRef = useRef<boolean>(false)
 
   // Only access localStorage on client side after mount
   useEffect(() => {
@@ -51,33 +57,147 @@ export default function Sidebar() {
     }
   }
 
-  useEffect(() => {
-    if (!mounted || !user) return
-    fetchActivity()
-    const interval = setInterval(fetchActivity, ACTIVITY_POLL_MS)
-    return () => clearInterval(interval)
-  }, [mounted, user])
+  // Fetch notifications with debounce and race condition protection
+  const fetchNotifications = async (force = false) => {
+    try {
+      // Skip fetch if we just marked a notification (unless forced)
+      if (markingInProgressRef.current && !force) {
+        return
+      }
+      
+      // Clear any pending fetch
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current)
+        fetchTimeoutRef.current = null
+      }
+      
+      // Debounce the fetch to prevent rapid calls
+      fetchTimeoutRef.current = setTimeout(async () => {
+        const [notifRes, countRes] = await Promise.all([
+          api.get('/notifications?limit=10'),
+          api.get('/notifications/unread-count')
+        ])
+        setNotifications(notifRes.data ?? [])
+        setUnreadCount(countRes.data?.count ?? 0)
+        fetchTimeoutRef.current = null
+      }, 300) // 300ms debounce
+    } catch (error) {
+      console.error('Error fetching notifications:', error)
+      setNotifications([])
+      setUnreadCount(0)
+    }
+  }
 
-  // Refetch activity when user navigates (e.g. after creating/updating a ticket) so badge updates
+  // Mark notification as read (when user clicks on it)
+  const markAsRead = async (id: string, event?: React.MouseEvent) => {
+    if (event) {
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    
+    // Track this operation to prevent race conditions
+    lastMarkedRef.current = id
+    markingInProgressRef.current = true
+    
+    try {
+      // Optimistic update - update UI immediately
+      setNotifications(prev => prev.map(n => 
+        n.id === id ? { ...n, isRead: true } : n
+      ))
+      setUnreadCount(prev => Math.max(0, prev - 1))
+      
+      // Then make API call
+      await api.put(`/notifications/${id}/read`)
+      
+      // Force refresh after a delay to sync with server
+      setTimeout(() => {
+        fetchNotifications(true)
+        markingInProgressRef.current = false
+        lastMarkedRef.current = null
+      }, 1000)
+      
+    } catch (error) {
+      console.error('Error marking notification as read:', error)
+      // Revert optimistic update on error
+      setNotifications(prev => prev.map(n => 
+        n.id === id ? { ...n, isRead: false } : n
+      ))
+      setUnreadCount(prev => prev + 1)
+      markingInProgressRef.current = false
+      lastMarkedRef.current = null
+    }
+  }
+
+  // Mark all notifications as read (only when user explicitly clicks "Mark all read")
+  const markAllAsRead = async () => {
+    try {
+      setMarkingAll(true)
+      markingInProgressRef.current = true
+      
+      // Optimistic update
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })))
+      setUnreadCount(0)
+      
+      await api.put('/notifications/read-all')
+      
+      // Force refresh after marking all
+      setTimeout(() => {
+        fetchNotifications(true)
+        setMarkingAll(false)
+        markingInProgressRef.current = false
+      }, 1000)
+      
+    } catch (error) {
+      console.error('Error marking all as read:', error)
+      setMarkingAll(false)
+      markingInProgressRef.current = false
+    }
+  }
+
+  useEffect(() => {
+    if (!mounted || !user) return
+    
+    // Initial fetch
+    fetchActivity()
+    fetchNotifications()
+    
+    // Set up polling intervals
+    const activityInterval = setInterval(fetchActivity, ACTIVITY_POLL_MS)
+    
+    // Only poll for notifications when dropdown is NOT open
+    let notificationsInterval: NodeJS.Timeout
+    if (!notifOpen) {
+      notificationsInterval = setInterval(fetchNotifications, NOTIFICATIONS_POLL_MS)
+    }
+    
+    return () => {
+      clearInterval(activityInterval)
+      if (notificationsInterval) {
+        clearInterval(notificationsInterval)
+      }
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current)
+      }
+    }
+  }, [mounted, user, notifOpen]) // Added notifOpen dependency
+
+  // Refetch when user navigates (e.g. after creating/updating a ticket)
   useEffect(() => {
     if (!mounted || !user) return
     fetchActivity()
+    fetchNotifications()
   }, [pathname, mounted, user])
 
   // Refetch when user returns to the tab
   useEffect(() => {
     if (!mounted || !user) return
-    const onFocus = () => fetchActivity()
+    const onFocus = () => {
+      fetchActivity()
+      fetchNotifications()
+    }
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
   }, [mounted, user])
-
-  // Mark as seen when user is on the notifications page
-  useEffect(() => {
-    if (pathname === '/notifications' && activity.length > 0) {
-      setLastSeenCount(activity.length)
-    }
-  }, [pathname, activity.length])
 
   // Close notification dropdown when clicking outside
   useEffect(() => {
@@ -125,6 +245,36 @@ export default function Sidebar() {
 
   if (!user) {
     return null
+  }
+
+  // Get notification icon
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'ticket':
+        return (
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        )
+      case 'incident':
+        return (
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        )
+      case 'system':
+        return (
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        )
+      default:
+        return (
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        )
+    }
   }
 
   return (
@@ -178,7 +328,7 @@ export default function Sidebar() {
               type="button"
               onClick={(e) => {
                 e.stopPropagation()
-                if (!notifOpen) setLastSeenCount(activity.length)
+                // Just toggle the dropdown, don't mark as read
                 setNotifOpen((o) => !o)
               }}
               className="relative flex-shrink-0 p-1.5 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
@@ -187,56 +337,91 @@ export default function Sidebar() {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
-              {newCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-medium">
-                  {newCount > 9 ? '9+' : newCount}
+              {/* Show badge with unread count - never disappears automatically */}
+              {unreadCount >= 0 && (
+                <span className={`absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full ${unreadCount > 0 ? 'bg-red-500 animate-pulse' : 'bg-gray-500'} text-white text-xs font-medium`}>
+                  {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
             </button>
-            {/* Dropdown: recent actions (scrollable) */}
+            {/* Dropdown: Notifications (scrollable) */}
             {notifOpen && (
               <div className="absolute left-0 right-0 top-full mt-1 mx-2 bg-gray-700 border border-gray-600 rounded-xl shadow-xl z-50 overflow-hidden flex flex-col max-h-[min(320px,60vh)]">
                 <div className="px-3 py-2 border-b border-gray-600 flex items-center justify-between flex-shrink-0">
-                  <span className="text-sm font-semibold text-white">Recent activity</span>
-                  <Link
-                    href="/notifications"
-                    onClick={() => {
-                      setLastSeenCount(activity.length)
-                      setNotifOpen(false)
-                    }}
-                    className="text-xs text-sky-400 hover:text-sky-300"
-                  >
-                    Show all
-                  </Link>
+                  <span className="text-sm font-semibold text-white">
+                    Notifications
+                    {unreadCount > 0 && (
+                      <span className="ml-2 inline-flex items-center justify-center h-5 px-1.5 rounded-full bg-red-500 text-xs">
+                        {unreadCount} unread
+                      </span>
+                    )}
+                  </span>
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={markAllAsRead}
+                      disabled={markingAll}
+                      className="text-xs text-sky-400 hover:text-sky-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                    >
+                      {markingAll ? (
+                        <>
+                          <div className="animate-spin rounded-full h-3 w-3 border-2 border-sky-400 border-t-transparent" />
+                          Marking...
+                        </>
+                      ) : (
+                        'Mark all read'
+                      )}
+                    </button>
+                  )}
                 </div>
                 <div className="overflow-y-auto flex-1 min-h-0">
-                  {activity.length === 0 ? (
-                    <p className="px-3 py-4 text-sm text-gray-400">No recent activity</p>
+                  {notifications.length === 0 ? (
+                    <p className="px-3 py-4 text-sm text-gray-400">No notifications</p>
                   ) : (
                     <ul className="py-1">
-                      {activity.map((item) => {
-                        const { label, href } = formatActionLabel(item)
+                      {notifications.slice(0, 10).map((notification) => {
+                        const isUnread = !notification.isRead
                         return (
-                          <li key={item.id} className="px-3 py-2 hover:bg-gray-600/50">
-                            {href ? (
-                              <Link
-                                href={href}
-                                onClick={() => setNotifOpen(false)}
-                                className="flex items-start gap-2"
-                              >
-                                <span className="text-gray-400 mt-0.5 flex-shrink-0">
-                                  {getActionIcon(item.action, 'text-sky-400')}
-                                </span>
-                                <span className="text-sm text-gray-200 line-clamp-2 flex-1">{label}</span>
-                                <span className="text-xs text-gray-500 flex-shrink-0 mt-0.5">{timeAgo(item.createdAt)}</span>
-                              </Link>
-                            ) : (
-                              <div className="flex items-start gap-2">
-                                <span className="text-gray-400 mt-0.5 flex-shrink-0">
-                                  {getActionIcon(item.action, 'text-sky-400')}
-                                </span>
-                                <span className="text-sm text-gray-200 line-clamp-2 flex-1">{label}</span>
-                                <span className="text-xs text-gray-500 flex-shrink-0 mt-0.5">{timeAgo(item.createdAt)}</span>
+                          <li 
+                            key={notification.id} 
+                            className={`px-3 py-2 hover:bg-gray-600/50 border-l-2 ${isUnread ? 'border-sky-500 bg-gray-600/30' : 'border-transparent'}`}
+                          >
+                            <div 
+                              className="flex items-start gap-2 cursor-pointer"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                // Only mark as read if it's unread
+                                if (isUnread) {
+                                  markAsRead(notification.id, e)
+                                }
+                                // Navigate if there's a link
+                                if (notification.link) {
+                                  router.push(notification.link)
+                                  setNotifOpen(false)
+                                }
+                              }}
+                            >
+                              <span className={`mt-0.5 flex-shrink-0 ${isUnread ? 'text-sky-400' : 'text-gray-400'}`}>
+                                {getNotificationIcon(notification.type)}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-200">{notification.title}</p>
+                                {notification.message && (
+                                  <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{notification.message}</p>
+                                )}
+                                <p className="text-xs text-gray-500 mt-0.5">{timeAgo(notification.createdAt)}</p>
+                              </div>
+                              {isUnread && (
+                                <span className="flex-shrink-0 w-2 h-2 rounded-full bg-sky-500 mt-1.5"></span>
+                              )}
+                            </div>
+                            {isUnread && (
+                              <div className="mt-2 flex justify-end">
+                                <button
+                                  onClick={(e) => markAsRead(notification.id, e)}
+                                  className="text-xs text-sky-400 hover:text-sky-300 px-2 py-1 rounded hover:bg-gray-600/50 transition-colors"
+                                >
+                                  Mark as read
+                                </button>
                               </div>
                             )}
                           </li>
@@ -244,6 +429,15 @@ export default function Sidebar() {
                       })}
                     </ul>
                   )}
+                </div>
+                <div className="px-3 py-2 border-t border-gray-600 flex-shrink-0">
+                  <Link
+                    href="/notifications"
+                    onClick={() => setNotifOpen(false)}
+                    className="text-xs text-center text-sky-400 hover:text-sky-300 w-full block"
+                  >
+                    View all notifications
+                  </Link>
                 </div>
               </div>
             )}
@@ -273,7 +467,7 @@ export default function Sidebar() {
               <Link
                 href="/notifications"
                 className={`
-                  flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
+                  flex items-center gap-3 px-4 py-3 rounded-lg transition-colors relative
                   ${isActive('/notifications')
                     ? 'bg-gray-700 text-white'
                     : 'text-gray-300 hover:bg-gray-700 hover:text-white'
@@ -284,6 +478,12 @@ export default function Sidebar() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                 </svg>
                 <span className="font-medium">Notifications</span>
+                {/* Show badge on navigation link too */}
+                {unreadCount >= 0 && (
+                  <span className={`absolute left-8 top-2.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full ${unreadCount > 0 ? 'bg-red-500 animate-pulse' : 'bg-gray-500'} text-white text-xs font-medium`}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
               </Link>
 
               {/* Tickets - User, IT Support, Admin */}
