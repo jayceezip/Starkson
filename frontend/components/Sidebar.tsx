@@ -11,7 +11,13 @@ import type { ActivityItem } from '@/lib/activity'
 const ACTIVITY_POLL_MS = 15000
 const NOTIFICATIONS_POLL_MS = 30000 // Increased to 30 seconds to reduce flickering
 
-export default function Sidebar() {
+export default function Sidebar({
+  collapsed = false,
+  onToggleCollapse,
+}: {
+  collapsed?: boolean
+  onToggleCollapse?: () => void
+} = {}) {
   const router = useRouter()
   const pathname = usePathname()
   const [user, setUser] = useState<any>(null)
@@ -310,20 +316,24 @@ export default function Sidebar() {
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar - collapsible on desktop */}
       <aside
         className={`
-          fixed left-0 top-0 h-screen w-64 bg-gray-800 text-white shadow-lg z-40
-          transform transition-transform duration-300 ease-in-out
+          fixed left-0 top-0 h-screen bg-gray-800 text-white shadow-lg z-40
+          transform transition-[transform,width] duration-300 ease-in-out
           ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          ${collapsed ? 'lg:w-16' : 'lg:w-64'}
+          w-64
         `}
       >
-        <div className="flex flex-col h-full">
-          {/* Brand + Notification bell */}
-          <div className="px-4 py-4 border-b border-gray-700 relative flex items-center justify-between gap-2" ref={notifRef}>
-            <Link href="/dashboard" className="text-xl font-bold text-white tracking-tight hover:opacity-90 transition-opacity flex-1 min-w-0 truncate text-center">
-              STARKSON
-            </Link>
+        <div className="flex flex-col h-full w-full">
+          {/* Brand + Notification bell + collapse toggle */}
+          <div className={`py-4 border-b border-gray-700 relative flex items-center gap-2 ${collapsed ? 'px-0 justify-center flex-col' : 'px-4 justify-between'}`} ref={notifRef}>
+            <div className={`flex items-center ${collapsed ? 'flex-col gap-2' : 'flex-1 min-w-0'} justify-center`}>
+              <Link href="/dashboard" className={`font-bold text-white tracking-tight hover:opacity-90 transition-opacity truncate ${collapsed ? 'text-lg' : 'text-xl flex-1 text-center'}`} title="STARKSON">
+                {collapsed ? 'S' : 'STARKSON'}
+              </Link>
+            </div>
             <button
               type="button"
               onClick={(e) => {
@@ -343,7 +353,7 @@ export default function Sidebar() {
               )}
             </button>
             {notifOpen && (
-              <div className="absolute left-0 right-0 top-full mt-1 mx-2 bg-gray-700 border border-gray-600 rounded-xl shadow-xl z-50 overflow-hidden flex flex-col max-h-[min(320px,60vh)]">
+              <div className={`absolute top-full mt-1 z-50 overflow-hidden flex flex-col max-h-[min(320px,60vh)] bg-gray-700 border border-gray-600 rounded-xl shadow-xl ${collapsed ? 'left-full ml-1 w-72' : 'left-0 right-0 mx-2'}`}>
                 <div className="px-3 py-2 border-b border-gray-600 flex items-center justify-between flex-shrink-0">
                   <span className="text-sm font-semibold text-white">
                     Notifications
@@ -437,43 +447,46 @@ export default function Sidebar() {
           </div>
 
           {/* Navigation Links */}
-          <nav className="flex-1 overflow-y-auto py-4">
-            <div className="space-y-1 px-3">
+          <nav className={`flex-1 overflow-y-auto py-4 ${collapsed ? 'px-2' : 'px-3'}`}>
+            <div className={`space-y-1 ${collapsed ? 'flex flex-col items-center' : ''}`}>
               {/* Dashboard */}
               <Link
                 href="/dashboard"
+                title="Dashboard"
                 className={`
-                  flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
+                  flex items-center rounded-lg transition-colors
+                  ${collapsed ? 'justify-center p-3' : 'gap-3 px-4 py-3'}
                   ${isActive('/dashboard')
                     ? 'bg-gray-700 text-white'
                     : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                   }
                 `}
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                 </svg>
-                <span className="font-medium">Dashboard</span>
+                {!collapsed && <span className="font-medium">Dashboard</span>}
               </Link>
 
               {/* Notifications - all roles (own activity) */}
               <Link
                 href="/notifications"
+                title="Notifications"
                 className={`
-                  flex items-center gap-3 px-4 py-3 rounded-lg transition-colors relative
+                  flex items-center rounded-lg transition-colors relative
+                  ${collapsed ? 'justify-center p-3' : 'gap-3 px-4 py-3'}
                   ${isActive('/notifications')
                     ? 'bg-gray-700 text-white'
                     : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                   }
                 `}
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                 </svg>
-                <span className="font-medium">Notifications</span>
-                {/* Show badge on navigation link too */}
+                {!collapsed && <span className="font-medium">Notifications</span>}
                 {unreadCount >= 0 && (
-                  <span className={`absolute left-8 top-2.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full ${unreadCount > 0 ? 'bg-red-500 animate-pulse' : 'bg-gray-500'} text-white text-xs font-medium`}>
+                  <span className={`absolute flex items-center justify-center rounded-full text-white text-xs font-medium min-w-[18px] h-[18px] px-1 ${collapsed ? 'top-1.5 right-1.5' : 'left-8 top-2.5'} ${unreadCount > 0 ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`}>
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </span>
                 )}
@@ -483,18 +496,20 @@ export default function Sidebar() {
               {hasRole(user, 'user', 'it_support', 'admin') && (
                 <Link
                   href="/tickets"
+                  title="Tickets"
                   className={`
-                    flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
+                    flex items-center rounded-lg transition-colors
+                    ${collapsed ? 'justify-center p-3' : 'gap-3 px-4 py-3'}
                     ${isActive('/tickets')
                       ? 'bg-gray-700 text-white'
                       : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                     }
                   `}
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  <span className="font-medium">Tickets</span>
+                  {!collapsed && <span className="font-medium">Tickets</span>}
                 </Link>
               )}
 
@@ -502,18 +517,20 @@ export default function Sidebar() {
               {hasRole(user, 'security_officer', 'admin') && (
                 <Link
                   href="/incidents"
+                  title="Incidents"
                   className={`
-                    flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
+                    flex items-center rounded-lg transition-colors
+                    ${collapsed ? 'justify-center p-3' : 'gap-3 px-4 py-3'}
                     ${isActive('/incidents')
                       ? 'bg-gray-700 text-white'
                       : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                     }
                   `}
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
-                  <span className="font-medium">Incidents</span>
+                  {!collapsed && <span className="font-medium">Incidents</span>}
                 </Link>
               )}
 
@@ -521,66 +538,89 @@ export default function Sidebar() {
               {hasRole(user, 'admin') && (
                 <Link
                   href="/admin"
+                  title="Admin"
                   className={`
-                    flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
+                    flex items-center rounded-lg transition-colors
+                    ${collapsed ? 'justify-center p-3' : 'gap-3 px-4 py-3'}
                     ${isActive('/admin')
                       ? 'bg-gray-700 text-white'
                       : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                     }
                   `}
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                   </svg>
-                  <span className="font-medium">Admin</span>
+                  {!collapsed && <span className="font-medium">Admin</span>}
                 </Link>
+              )}
+
+              {/* Collapse toggle - desktop only */}
+              {onToggleCollapse && (
+                <button
+                  type="button"
+                  onClick={onToggleCollapse}
+                  className={`hidden lg:flex items-center rounded-lg transition-colors text-gray-400 hover:bg-gray-700 hover:text-white mt-2 ${collapsed ? 'justify-center p-3 w-full' : 'gap-3 px-4 py-3 w-full'}`}
+                  title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                  aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                >
+                  <svg className={`w-5 h-5 flex-shrink-0 transition-transform ${collapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                  </svg>
+                  {!collapsed && <span className="font-medium">Collapse</span>}
+                </button>
               )}
             </div>
           </nav>
 
           {/* User Info and Actions */}
-          <div className="border-t border-gray-700 p-4 space-y-3">
+          <div className={`border-t border-gray-700 space-y-3 ${collapsed ? 'p-2' : 'p-4'}`}>
             {/* User Info */}
-            <div className="px-4 py-2">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center">
+            <div className={collapsed ? 'flex justify-center' : 'px-4 py-2'}>
+              <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'} mb-2`}>
+                <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center flex-shrink-0" title={collapsed ? `${user.name} · ${formatRole(user.role)}` : undefined}>
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{user.name}</p>
-                  <p className="text-xs text-gray-400 truncate">{formatRole(user.role)}</p>
-                </div>
+                {!collapsed && (
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white truncate">{user.name}</p>
+                    <p className="text-xs text-gray-400 truncate">{formatRole(user.role)}</p>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Profile Button */}
             <Link
               href="/profile"
+              title="Profile"
               className={`
-                flex items-center gap-3 px-4 py-2 rounded-lg transition-colors w-full
+                flex items-center rounded-lg transition-colors w-full
+                ${collapsed ? 'justify-center p-2' : 'gap-3 px-4 py-2'}
                 ${isActive('/profile')
                   ? 'bg-gray-700 text-white'
                   : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                 }
               `}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
-              <span className="font-medium">Profile</span>
+              {!collapsed && <span className="font-medium">Profile</span>}
             </Link>
 
             {/* Logout Button */}
             <button
               onClick={handleLogout}
-              className="flex items-center gap-3 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors w-full font-medium"
+              title="Logout"
+              className={`flex items-center rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors w-full font-medium ${collapsed ? 'justify-center p-2' : 'gap-3 px-4 py-2'}`}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
-              <span>Logout</span>
+              {!collapsed && <span>Logout</span>}
             </button>
           </div>
         </div>

@@ -14,6 +14,7 @@ export default function ConditionalLayout({
 }) {
   const pathname = usePathname()
   const [mounted, setMounted] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -28,13 +29,19 @@ export default function ConditionalLayout({
   // 2. Not on a no-sidebar route
   const showSidebar = mounted && !isNoSidebarRoute
 
+  // Main content margin: 16rem when expanded, 4rem when collapsed; transition for smooth resize
+  const mainMarginClass = sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'
+
   // Always render children immediately - don't block them
   // Only conditionally add sidebar wrapper
   if (showSidebar) {
     return (
       <>
-        <Sidebar />
-        <div className="lg:ml-64 min-h-screen">
+        <Sidebar
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
+        />
+        <div className={`min-h-screen transition-[margin] duration-300 ease-in-out ${mainMarginClass}`}>
           {children}
         </div>
       </>
