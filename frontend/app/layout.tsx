@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import ConditionalLayout from '@/components/ConditionalLayout'
+import { NotificationProvider } from '@/context/NotificationContext'
 
 export const metadata: Metadata = {
   title: 'STARKSON - IT Support & Cybersecurity',
@@ -15,9 +16,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <ConditionalLayout>
-          {children}
-        </ConditionalLayout>
+        <NotificationProvider>
+          <ConditionalLayout>
+            {children}
+          </ConditionalLayout>
+        </NotificationProvider>
       </body>
     </html>
   )

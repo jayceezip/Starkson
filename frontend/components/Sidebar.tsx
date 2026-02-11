@@ -4,12 +4,12 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { getStoredUser, clearStoredAuth, hasRole } from '@/lib/auth'
-import api from '@/lib/api'
+import api from '@/lib/api' // Add this import
 import { formatActionLabel, getActionIcon, timeAgo } from '@/lib/activity'
+import { useNotifications } from '@/context/NotificationContext'
 import type { ActivityItem } from '@/lib/activity'
 
 const ACTIVITY_POLL_MS = 15000
-const NOTIFICATIONS_POLL_MS = 30000 // Increased to 30 seconds to reduce flickering
 
 export default function Sidebar() {
   const router = useRouter()
@@ -19,15 +19,20 @@ export default function Sidebar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [activity, setActivity] = useState<ActivityItem[]>([])
-  const [notifications, setNotifications] = useState<any[]>([])
-  const [unreadCount, setUnreadCount] = useState(0)
-  const [markingAll, setMarkingAll] = useState(false)
   const notifRef = useRef<HTMLDivElement>(null)
   
-  // Refs to track operations and prevent race conditions
-  const lastMarkedRef = useRef<string | null>(null)
-  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const markingInProgressRef = useRef<boolean>(false)
+  // Use the notification context
+  const {
+    notifications,
+    unreadCount,
+    loading: notifLoading,
+    markAllAsRead,
+    markAsRead,
+    fetchNotifications,
+    forceRefresh
+  } = useNotifications()
+
+  const [markingAll, setMarkingAll] = useState(false)
 
   // Only access localStorage on client side after mount
   useEffect(() => {
@@ -57,100 +62,27 @@ export default function Sidebar() {
     }
   }
 
-  // Fetch notifications with debounce and race condition protection
-  const fetchNotifications = async (force = false) => {
-    try {
-      // Skip fetch if we just marked a notification (unless forced)
-      if (markingInProgressRef.current && !force) {
-        return
-      }
-      
-      // Clear any pending fetch
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current)
-        fetchTimeoutRef.current = null
-      }
-      
-      // Debounce the fetch to prevent rapid calls
-      fetchTimeoutRef.current = setTimeout(async () => {
-        const [notifRes, countRes] = await Promise.all([
-          api.get('/notifications?limit=10'),
-          api.get('/notifications/unread-count')
-        ])
-        setNotifications(notifRes.data ?? [])
-        setUnreadCount(countRes.data?.count ?? 0)
-        fetchTimeoutRef.current = null
-      }, 300) // 300ms debounce
-    } catch (error) {
-      console.error('Error fetching notifications:', error)
-      setNotifications([])
-      setUnreadCount(0)
-    }
-  }
-
-  // Mark notification as read (when user clicks on it)
-  const markAsRead = async (id: string, event?: React.MouseEvent) => {
+  const handleMarkAsRead = async (id: string, event?: React.MouseEvent) => {
     if (event) {
       event.preventDefault()
       event.stopPropagation()
     }
     
-    // Track this operation to prevent race conditions
-    lastMarkedRef.current = id
-    markingInProgressRef.current = true
-    
     try {
-      // Optimistic update - update UI immediately
-      setNotifications(prev => prev.map(n => 
-        n.id === id ? { ...n, isRead: true } : n
-      ))
-      setUnreadCount(prev => Math.max(0, prev - 1))
-      
-      // Then make API call
-      await api.put(`/notifications/${id}/read`)
-      
-      // Force refresh after a delay to sync with server
-      setTimeout(() => {
-        fetchNotifications(true)
-        markingInProgressRef.current = false
-        lastMarkedRef.current = null
-      }, 1000)
-      
+      await markAsRead(id)
     } catch (error) {
       console.error('Error marking notification as read:', error)
-      // Revert optimistic update on error
-      setNotifications(prev => prev.map(n => 
-        n.id === id ? { ...n, isRead: false } : n
-      ))
-      setUnreadCount(prev => prev + 1)
-      markingInProgressRef.current = false
-      lastMarkedRef.current = null
     }
   }
 
-  // Mark all notifications as read (only when user explicitly clicks "Mark all read")
-  const markAllAsRead = async () => {
+  const handleMarkAllAsRead = async () => {
     try {
       setMarkingAll(true)
-      markingInProgressRef.current = true
-      
-      // Optimistic update
-      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })))
-      setUnreadCount(0)
-      
-      await api.put('/notifications/read-all')
-      
-      // Force refresh after marking all
-      setTimeout(() => {
-        fetchNotifications(true)
-        setMarkingAll(false)
-        markingInProgressRef.current = false
-      }, 1000)
-      
+      await markAllAsRead()
     } catch (error) {
       console.error('Error marking all as read:', error)
+    } finally {
       setMarkingAll(false)
-      markingInProgressRef.current = false
     }
   }
 
@@ -159,33 +91,19 @@ export default function Sidebar() {
     
     // Initial fetch
     fetchActivity()
-    fetchNotifications()
     
     // Set up polling intervals
     const activityInterval = setInterval(fetchActivity, ACTIVITY_POLL_MS)
     
-    // Only poll for notifications when dropdown is NOT open
-    let notificationsInterval: NodeJS.Timeout
-    if (!notifOpen) {
-      notificationsInterval = setInterval(fetchNotifications, NOTIFICATIONS_POLL_MS)
-    }
-    
     return () => {
       clearInterval(activityInterval)
-      if (notificationsInterval) {
-        clearInterval(notificationsInterval)
-      }
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current)
-      }
     }
-  }, [mounted, user, notifOpen]) // Added notifOpen dependency
+  }, [mounted, user])
 
   // Refetch when user navigates (e.g. after creating/updating a ticket)
   useEffect(() => {
     if (!mounted || !user) return
     fetchActivity()
-    fetchNotifications()
   }, [pathname, mounted, user])
 
   // Refetch when user returns to the tab
@@ -193,7 +111,6 @@ export default function Sidebar() {
     if (!mounted || !user) return
     const onFocus = () => {
       fetchActivity()
-      fetchNotifications()
     }
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
@@ -336,6 +253,7 @@ export default function Sidebar() {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
+              {/* Show badge with unread count - will update immediately when mark all as read is clicked */}
               {unreadCount >= 0 && (
                 <span className={`absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full ${unreadCount > 0 ? 'bg-red-500 animate-pulse' : 'bg-gray-500'} text-white text-xs font-medium`}>
                   {unreadCount > 9 ? '9+' : unreadCount}
@@ -355,7 +273,7 @@ export default function Sidebar() {
                   </span>
                   {unreadCount > 0 && (
                     <button
-                      onClick={markAllAsRead}
+                      onClick={handleMarkAllAsRead}
                       disabled={markingAll}
                       className="text-xs text-sky-400 hover:text-sky-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                     >
@@ -371,7 +289,11 @@ export default function Sidebar() {
                   )}
                 </div>
                 <div className="overflow-y-auto flex-1 min-h-0">
-                  {notifications.length === 0 ? (
+                  {notifLoading ? (
+                    <div className="flex items-center justify-center py-4">
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-sky-400 border-t-transparent" />
+                    </div>
+                  ) : notifications.length === 0 ? (
                     <p className="px-3 py-4 text-sm text-gray-400">No notifications</p>
                   ) : (
                     <ul className="py-1">
@@ -386,7 +308,11 @@ export default function Sidebar() {
                               className="flex items-start gap-2 cursor-pointer"
                               onClick={(e) => {
                                 e.preventDefault()
-                                if (isUnread) markAsRead(notification.id, e)
+                                // Only mark as read if it's unread
+                                if (isUnread) {
+                                  handleMarkAsRead(notification.id, e)
+                                }
+                                // Navigate if there's a link
                                 if (notification.link) {
                                   router.push(notification.link)
                                   setNotifOpen(false)
@@ -410,7 +336,7 @@ export default function Sidebar() {
                             {isUnread && (
                               <div className="mt-2 flex justify-end">
                                 <button
-                                  onClick={(e) => markAsRead(notification.id, e)}
+                                  onClick={(e) => handleMarkAsRead(notification.id, e)}
                                   className="text-xs text-sky-400 hover:text-sky-300 px-2 py-1 rounded hover:bg-gray-600/50 transition-colors"
                                 >
                                   Mark as read

@@ -3,28 +3,28 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import api from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser } from '@/lib/auth'
-
-interface Notification {
-  id: string
-  type: 'ticket' | 'incident' | 'system' | 'other'
-  title: string
-  message: string | null
-  resourceType: string | null
-  resourceId: string | null
-  link: string | null
-  isRead: boolean
-  createdAt: string
-}
+import { useNotifications } from '@/context/NotificationContext'
 
 export default function NotificationsPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [mounted, setMounted] = useState(false)
-  const [notifications, setNotifications] = useState<Notification[]>([])
-  const [loading, setLoading] = useState(true)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
+  
+  // Use the notification context
+  const {
+    notifications,
+    unreadCount,
+    loading,
+    markAllAsRead,
+    markAsRead,
+    deleteNotification,
+    forceRefresh
+  } = useNotifications()
+
   const [markingAll, setMarkingAll] = useState(false)
 
   useEffect(() => {
@@ -32,51 +32,20 @@ export default function NotificationsPage() {
     setUser(getStoredUser())
   }, [])
 
-  const fetchNotifications = async () => {
-    if (!user) return
-    setLoading(true)
-    try {
-      const res = await api.get('/notifications?limit=100')
-      setNotifications(res.data ?? [])
-    } catch (error) {
-      console.error('Error fetching notifications:', error)
-      setNotifications([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
     if (!mounted || !user) return
     if (!user) {
       router.push('/login')
       return
     }
-    
-    fetchNotifications()
-    const interval = setInterval(fetchNotifications, 30000)
-    return () => clearInterval(interval)
   }, [mounted, user, router])
 
-  const markAsRead = async (id: string) => {
-    try {
-      await api.put(`/notifications/${id}/read`)
-      // Update local state
-      setNotifications(prev => prev.map(n => 
-        n.id === id ? { ...n, isRead: true } : n
-      ))
-    } catch (error) {
-      console.error('Error marking notification as read:', error)
-    }
-  }
-
-  const markAllAsRead = async () => {
+  const handleMarkAllAsRead = async () => {
     if (notifications.length === 0) return
     
     setMarkingAll(true)
     try {
-      await api.put('/notifications/read-all')
-      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })))
+      await markAllAsRead()
     } catch (error) {
       console.error('Error marking all notifications as read:', error)
     } finally {
@@ -84,15 +53,36 @@ export default function NotificationsPage() {
     }
   }
 
-  const deleteNotification = async (id: string) => {
+  const handleDeleteNotification = async (id: string) => {
+    if (deletingId === id) return // Prevent multiple clicks
+    
+    setDeletingId(id)
+    setShowDeleteConfirm(null) // Close confirmation dialog
+    
     try {
-      // If you have a delete endpoint, use it:
-      // await api.delete(`/notifications/${id}`)
-      // Otherwise, just filter it out locally
-      setNotifications(prev => prev.filter(n => n.id !== id))
+      await deleteNotification(id)
+      // No need to update local state - context will handle it
     } catch (error) {
       console.error('Error deleting notification:', error)
+      alert('Failed to delete notification. Please try again.')
+    } finally {
+      setDeletingId(null)
     }
+  }
+
+  const handleDeleteClick = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setShowDeleteConfirm(id)
+  }
+
+  const confirmDelete = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    handleDeleteNotification(id)
+  }
+
+  const cancelDelete = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setShowDeleteConfirm(null)
   }
 
   const getNotificationIcon = (type: string) => {
@@ -136,8 +126,6 @@ export default function NotificationsPage() {
         return 'bg-gray-50 text-gray-600'
     }
   }
-
-  const unreadCount = notifications.filter(n => !n.isRead).length
 
   // Helper function to format time ago
   const timeAgo = (dateString: string) => {
@@ -183,7 +171,7 @@ export default function NotificationsPage() {
           
           {unreadCount > 0 && (
             <button
-              onClick={markAllAsRead}
+              onClick={handleMarkAllAsRead}
               disabled={markingAll}
               className="px-4 py-2 bg-sky-600 text-white text-sm font-medium rounded-lg hover:bg-sky-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
@@ -226,7 +214,7 @@ export default function NotificationsPage() {
                 return (
                   <div 
                     key={notification.id} 
-                    className={`py-4 px-1 hover:bg-gray-50 transition-colors ${isUnread ? 'bg-blue-50/50' : ''}`}
+                    className={`py-4 px-1 hover:bg-gray-50 transition-colors relative ${isUnread ? 'bg-blue-50/50' : ''}`}
                   >
                     <div className="flex items-start gap-3">
                       <div className={`flex items-center justify-center w-10 h-10 rounded-lg flex-shrink-0 ${getNotificationColor(notification.type)}`}>
@@ -260,14 +248,53 @@ export default function NotificationsPage() {
                               </button>
                             )}
                             
+                            {showDeleteConfirm === notification.id ? (
+                              <div className="absolute right-4 top-4 bg-white border border-gray-200 rounded-lg shadow-lg p-3 z-10 w-48">
+                                <p className="text-sm font-medium text-gray-900 mb-2">
+                                  Delete this notification?
+                                </p>
+                                <p className="text-xs text-gray-500 mb-3">
+                                  This action cannot be undone.
+                                </p>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={(e) => confirmDelete(notification.id, e)}
+                                    disabled={deletingId === notification.id}
+                                    className="flex-1 px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
+                                  >
+                                    {deletingId === notification.id ? (
+                                      <>
+                                        <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                                        Deleting...
+                                      </>
+                                    ) : (
+                                      'Delete'
+                                    )}
+                                  </button>
+                                  <button
+                                    onClick={cancelDelete}
+                                    disabled={deletingId === notification.id}
+                                    className="flex-1 px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded hover:bg-gray-200 transition-colors disabled:opacity-50"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : null}
+                            
                             <button
-                              onClick={() => deleteNotification(notification.id)}
-                              className="text-gray-400 hover:text-red-500 transition-colors p-1"
+                              onClick={(e) => handleDeleteClick(notification.id, e)}
+                              disabled={deletingId === notification.id}
+                              className="text-gray-400 hover:text-red-500 transition-colors p-1 disabled:opacity-50 disabled:cursor-not-allowed relative"
                               title="Delete notification"
                             >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
+                              {deletingId === notification.id ? (
+                                <div className="animate-spin rounded-full h-4 w-4 border-2 border-red-500 border-t-transparent" />
+                              ) : (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              )}
                             </button>
                           </div>
                         </div>
