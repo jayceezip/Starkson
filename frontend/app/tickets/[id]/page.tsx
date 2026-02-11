@@ -83,6 +83,7 @@ export default function TicketDetailsPage() {
   const [comment, setComment] = useState('')
   const [isInternal, setIsInternal] = useState(false)
   const [showConvertModal, setShowConvertModal] = useState(false)
+  const [converting, setConverting] = useState(false)
   const [convertData, setConvertData] = useState({ category: '', severity: 'medium', description: '' })
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [uploadingFiles, setUploadingFiles] = useState(false)
@@ -231,34 +232,44 @@ export default function TicketDetailsPage() {
 
   const handleConvertToIncident = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Prevent conversion if already converted
     if (!ticket) {
       alert('Ticket not found')
       return
     }
     if (ticket.isConverted) {
       alert('This ticket has already been converted to an incident.')
-      // If already converted, redirect to the incident
       if (ticket.convertedIncidentId) {
         router.push(`/incidents/${ticket.convertedIncidentId}`)
       }
       return
     }
-    
+
+    setConverting(true)
     try {
-      await api.post(`/tickets/${params.id}/convert`, convertData)
-      // Refresh ticket data so it shows status "Converted to Incident" and link to incident (ticket remains visible)
-      await fetchTicket()
+      const response = await api.post(`/tickets/${params.id}/convert`, convertData)
+      const { incidentId, incidentNumber } = response.data || {}
+      // Update ticket state immediately so the page shows "Converted to Incident" without waiting for a full refetch
+      setTicket((prev) => (prev ? {
+        ...prev,
+        status: 'converted_to_incident',
+        isConverted: true,
+        convertedIncidentId: incidentId ?? prev.convertedIncidentId,
+        convertedIncidentNumber: incidentNumber ?? prev.convertedIncidentNumber,
+      } : prev))
+      setShowConvertModal(false)
+      // Refetch in background to load incident timeline etc.; do not block the UI
+      fetchTicket()
     } catch (error: any) {
       console.error('Failed to convert ticket:', error)
       const errorMessage = error.response?.data?.message || 'Failed to convert ticket. It may have already been converted.'
       alert(errorMessage)
-      // Refresh ticket data in case it was converted
-      await fetchTicket()
-      // If the error indicates it was already converted, try to redirect to the incident
       if (error.response?.status === 400 && error.response?.data?.incidentId) {
         router.push(`/incidents/${error.response.data.incidentId}`)
+      } else {
+        fetchTicket()
       }
+    } finally {
+      setConverting(false)
     }
   }
 
@@ -936,13 +947,18 @@ export default function TicketDetailsPage() {
                   />
                 </div>
                 <div className="flex gap-4">
-                  <button type="submit" className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700">
-                    Convert
+                  <button
+                    type="submit"
+                    disabled={converting}
+                    className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {converting ? 'Converting…' : 'Convert'}
                   </button>
                   <button
                     type="button"
+                    disabled={converting}
                     onClick={() => setShowConvertModal(false)}
-                    className="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400"
+                    className="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
