@@ -48,19 +48,16 @@ interface Attachment {
 
 const STATUS_OPTIONS = ['new', 'triaged', 'investigating', 'contained', 'recovered', 'closed']
 
+// Pill/badge colors for Severity (and Impact (CIA) — same value)
 function getSeverityBadgeClass(severity: string): string {
   const map: Record<string, string> = {
+    none: 'bg-gray-100 text-gray-800',
     low: 'bg-gray-100 text-gray-800',
     medium: 'bg-yellow-100 text-yellow-800',
     high: 'bg-orange-100 text-orange-800',
     critical: 'bg-red-100 text-red-800',
   }
   return map[severity?.toLowerCase()] ?? 'bg-gray-100 text-gray-800'
-}
-
-// Use same badge styling as severity for Impact (CIA)
-function getImpactBadgeClass(impact: string): string {
-  return getSeverityBadgeClass(impact === 'none' ? 'low' : impact)
 }
 
 // Read from API response (camelCase or snake_case)
@@ -117,24 +114,6 @@ export default function IncidentDetailsPage() {
       fetchIncident()
     } catch (error) {
       console.error('Failed to update status:', error)
-    }
-  }
-
-  const handleSeverityChange = async (severity: string) => {
-    try {
-      await api.put(`/incidents/${params.id}`, { severity })
-      fetchIncident()
-    } catch (error) {
-      console.error('Failed to update severity:', error)
-    }
-  }
-
-  const handleImpactChange = async (field: 'impactConfidentiality' | 'impactIntegrity' | 'impactAvailability', value: string) => {
-    try {
-      await api.put(`/incidents/${params.id}`, { [field]: value })
-      fetchIncident()
-    } catch (error) {
-      console.error('Failed to update impact:', error)
     }
   }
 
@@ -412,24 +391,11 @@ export default function IncidentDetailsPage() {
                   </div>
                   <div>
                     <span className="text-sm font-medium text-gray-600">Severity</span>
-                    {isReadOnly ? (
-                      <p className="mt-1">
-                        <span className={`inline-block px-2 py-1 rounded text-sm font-medium ${getSeverityBadgeClass(getIncidentField(incident, 'severity'))}`}>
-                          {getIncidentField(incident, 'severity') || '—'}
-                        </span>
-                      </p>
-                    ) : (
-                      <select
-                        value={getIncidentField(incident, 'severity') || 'medium'}
-                        onChange={(e) => handleSeverityChange(e.target.value)}
-                        className="mt-1 px-3 py-2 border rounded-md"
-                      >
-                        <option value="low">Low</option>
-                        <option value="medium">Medium</option>
-                        <option value="high">High</option>
-                        <option value="critical">Critical</option>
-                      </select>
-                    )}
+                    <p className="mt-1">
+                      <span className={`inline-block px-3 py-1.5 rounded-md text-sm font-medium ${getSeverityBadgeClass(getIncidentField(incident, 'severity'))}`}>
+                        {getIncidentField(incident, 'severity') || '—'}
+                      </span>
+                    </p>
                   </div>
                   <div>
                     <span className="text-sm font-medium text-gray-600">Category</span>
@@ -437,46 +403,11 @@ export default function IncidentDetailsPage() {
                   </div>
                   <div>
                     <span className="text-sm font-medium text-gray-600">Impact (CIA)</span>
-                    {isReadOnly ? (
-                      <p className="mt-1 flex flex-wrap gap-1.5">
-                        <span className={`inline-block px-2 py-1 rounded text-sm font-medium ${getImpactBadgeClass(getIncidentField(incident, 'impactConfidentiality'))}`}>C: {getIncidentField(incident, 'impactConfidentiality') || 'none'}</span>
-                        <span className={`inline-block px-2 py-1 rounded text-sm font-medium ${getImpactBadgeClass(getIncidentField(incident, 'impactIntegrity'))}`}>I: {getIncidentField(incident, 'impactIntegrity') || 'none'}</span>
-                        <span className={`inline-block px-2 py-1 rounded text-sm font-medium ${getImpactBadgeClass(getIncidentField(incident, 'impactAvailability'))}`}>A: {getIncidentField(incident, 'impactAvailability') || 'none'}</span>
-                      </p>
-                    ) : (
-                      <div className="mt-1 flex flex-wrap gap-2">
-                        <select
-                          value={getIncidentField(incident, 'impactConfidentiality') || 'none'}
-                          onChange={(e) => handleImpactChange('impactConfidentiality', e.target.value)}
-                          className="px-3 py-2 border rounded-md text-sm"
-                        >
-                          <option value="none">C: None</option>
-                          <option value="low">C: Low</option>
-                          <option value="medium">C: Medium</option>
-                          <option value="high">C: High</option>
-                        </select>
-                        <select
-                          value={getIncidentField(incident, 'impactIntegrity') || 'none'}
-                          onChange={(e) => handleImpactChange('impactIntegrity', e.target.value)}
-                          className="px-3 py-2 border rounded-md text-sm"
-                        >
-                          <option value="none">I: None</option>
-                          <option value="low">I: Low</option>
-                          <option value="medium">I: Medium</option>
-                          <option value="high">I: High</option>
-                        </select>
-                        <select
-                          value={getIncidentField(incident, 'impactAvailability') || 'none'}
-                          onChange={(e) => handleImpactChange('impactAvailability', e.target.value)}
-                          className="px-3 py-2 border rounded-md text-sm"
-                        >
-                          <option value="none">A: None</option>
-                          <option value="low">A: Low</option>
-                          <option value="medium">A: Medium</option>
-                          <option value="high">A: High</option>
-                        </select>
-                      </div>
-                    )}
+                    <p className="mt-1">
+                      <span className={`inline-block px-3 py-1.5 rounded-md text-sm font-medium ${getSeverityBadgeClass(getIncidentField(incident, 'severity'))}`}>
+                        {getIncidentField(incident, 'severity') || '—'}
+                      </span>
+                    </p>
                   </div>
                   <div>
                     <span className="text-sm font-medium text-gray-600">Affected Asset</span>

@@ -22,12 +22,15 @@ interface Ticket {
   convertedIncidentNumber?: string | null
 }
 
+const PAGE_SIZE = 10
+
 export default function TicketsPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [mounted, setMounted] = useState(false)
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
 
   useEffect(() => {
     setMounted(true)
@@ -55,6 +58,15 @@ export default function TicketsPage() {
     }
     fetchTickets()
   }, [user, router, mounted])
+
+  const totalPages = Math.max(1, Math.ceil(tickets.length / PAGE_SIZE))
+  const start = (page - 1) * PAGE_SIZE
+  const paginatedTickets = tickets.slice(start, start + PAGE_SIZE)
+
+  // Clamp page when list shrinks (e.g. after filter)
+  useEffect(() => {
+    if (page > totalPages && totalPages >= 1) setPage(totalPages)
+  }, [tickets.length, totalPages, page])
 
   if (!mounted || !user) {
     return (
@@ -122,24 +134,26 @@ export default function TicketsPage() {
         ) : tickets.length === 0 ? (
           <div className="panel-card text-center py-8 text-gray-500">No tickets found</div>
         ) : (
-          <div className="panel-card overflow-hidden p-0">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ticket #</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
-                  {hasRole(user, 'it_support', 'admin') && (
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Assigned To</th>
-                  )}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">SLA</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {tickets.map((ticket) => (
+          <>
+            <div className="panel-card overflow-hidden p-0 border border-gray-200 rounded-xl">
+              <div className="overflow-auto max-h-[calc(100vh-14rem)] min-h-[200px]">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50 sticky top-0 z-10">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ticket #</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
+                      {hasRole(user, 'it_support', 'admin') && (
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Assigned To</th>
+                      )}
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">SLA</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {paginatedTickets.map((ticket) => (
                   <tr key={ticket.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Link href={`/tickets/${ticket.id}`} className="text-blue-600 hover:underline font-mono">
@@ -211,10 +225,38 @@ export default function TicketsPage() {
                       )}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between flex-wrap gap-2">
+                <p className="text-sm text-gray-600">
+                  Showing {tickets.length === 0 ? 0 : start + 1}–{Math.min(start + PAGE_SIZE, tickets.length)} of {tickets.length} tickets
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                    className="px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    Page {page} of {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages}
+                    className="px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
         )}
       </div>
     </ProtectedRoute>
