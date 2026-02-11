@@ -660,6 +660,9 @@ router.put('/:id', authenticate, async (req, res) => {
     if (ticket.status === 'converted_to_incident') {
       return res.status(400).json({ message: 'This ticket was converted to an incident and cannot be edited. View the linked incident for updates.' })
     }
+    if (['resolved', 'closed'].includes(ticket.status)) {
+      return res.status(400).json({ message: 'Resolved or closed tickets cannot be edited.' })
+    }
 
     // RBAC: Users can only update their own tickets (limited fields)
     if (req.user.role === 'user') {

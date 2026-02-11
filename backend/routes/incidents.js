@@ -378,6 +378,10 @@ router.put('/:id', authenticate, authorize('security_officer', 'admin'), async (
       return res.status(404).json({ message: 'Incident not found' })
     }
 
+    if (incident.status === 'closed') {
+      return res.status(400).json({ message: 'Closed incidents cannot be edited.' })
+    }
+
     const updateData = {}
     if (title) updateData.title = title
     if (description) updateData.description = description

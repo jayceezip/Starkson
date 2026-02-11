@@ -729,7 +729,7 @@ export default function TicketDetailsPage() {
                 <div className="space-y-3">
                   <div>
                     <span className="text-sm font-medium text-gray-600">Status</span>
-                    {canEdit && hasRole(user, 'it_support', 'admin') ? (
+                    {canModify && hasRole(user, 'it_support', 'admin') ? (
                       <select
                         value={ticket.status}
                         onChange={(e) => handleStatusChange(e.target.value)}
@@ -740,7 +740,7 @@ export default function TicketDetailsPage() {
                         ))}
                       </select>
                     ) : (
-                      <p className="mt-1">{ticket.status ? ticket.status.replace('_', ' ') : 'new'}</p>
+                      <p className="mt-1">{ticket.status ? ticket.status.replace(/_/g, ' ') : 'new'}</p>
                     )}
                   </div>
                   <div>

@@ -101,12 +101,14 @@ export default function IncidentsPage() {
       <div className="panel-page">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-2xl font-bold text-gray-900">Cybersecurity Incidents</h1>
-          <Link
-            href="/incidents/create"
-            className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
-          >
-            Create Incident
-          </Link>
+          {user?.role === 'user' && (
+            <Link
+              href="/incidents/create"
+              className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+            >
+              Create Incident
+            </Link>
+          )}
         </div>
 
         <div className="panel-card mb-6">

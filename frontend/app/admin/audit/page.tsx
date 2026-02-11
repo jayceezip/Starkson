@@ -217,6 +217,7 @@ export default function AdminAuditPage() {
               <input
                 type="date"
                 value={filters.startDate}
+                max={new Date().toISOString().slice(0, 10)}
                 onChange={(e) => { setFilters({ ...filters, startDate: e.target.value }); setPage(1) }}
                 className="w-full border rounded px-3 py-2"
               />
@@ -226,6 +227,7 @@ export default function AdminAuditPage() {
               <input
                 type="date"
                 value={filters.endDate}
+                max={new Date().toISOString().slice(0, 10)}
                 onChange={(e) => { setFilters({ ...filters, endDate: e.target.value }); setPage(1) }}
                 className="w-full border rounded px-3 py-2"
               />

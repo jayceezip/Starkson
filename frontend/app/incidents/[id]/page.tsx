@@ -58,14 +58,9 @@ function getSeverityBadgeClass(severity: string): string {
   return map[severity?.toLowerCase()] ?? 'bg-gray-100 text-gray-800'
 }
 
+// Use same badge styling as severity for Impact (CIA)
 function getImpactBadgeClass(impact: string): string {
-  const map: Record<string, string> = {
-    none: 'bg-gray-100 text-gray-700 border border-gray-300',
-    low: 'bg-emerald-100 text-emerald-800 border border-emerald-300',
-    medium: 'bg-amber-100 text-amber-800 border border-amber-300',
-    high: 'bg-red-100 text-red-800 border border-red-300',
-  }
-  return map[impact?.toLowerCase()] ?? 'bg-gray-100 text-gray-700 border border-gray-300'
+  return getSeverityBadgeClass(impact === 'none' ? 'low' : impact)
 }
 
 // Read from API response (camelCase or snake_case)
@@ -122,6 +117,24 @@ export default function IncidentDetailsPage() {
       fetchIncident()
     } catch (error) {
       console.error('Failed to update status:', error)
+    }
+  }
+
+  const handleSeverityChange = async (severity: string) => {
+    try {
+      await api.put(`/incidents/${params.id}`, { severity })
+      fetchIncident()
+    } catch (error) {
+      console.error('Failed to update severity:', error)
+    }
+  }
+
+  const handleImpactChange = async (field: 'impactConfidentiality' | 'impactIntegrity' | 'impactAvailability', value: string) => {
+    try {
+      await api.put(`/incidents/${params.id}`, { [field]: value })
+      fetchIncident()
+    } catch (error) {
+      console.error('Failed to update impact:', error)
     }
   }
 
@@ -199,8 +212,8 @@ export default function IncidentDetailsPage() {
     )
   }
 
-  // IT Support has read-only access (can view but not edit)
-  const isReadOnly = user?.role === 'it_support'
+  // IT Support has read-only access; no one can edit when incident is closed
+  const isReadOnly = user?.role === 'it_support' || incident?.status === 'closed'
 
   return (
     <ProtectedRoute allowedRoles={['security_officer', 'admin', 'it_support']}>
@@ -399,11 +412,24 @@ export default function IncidentDetailsPage() {
                   </div>
                   <div>
                     <span className="text-sm font-medium text-gray-600">Severity</span>
-                    <p className="mt-1">
-                      <span className={`inline-block px-2 py-1 rounded text-sm font-medium ${getSeverityBadgeClass(getIncidentField(incident, 'severity'))}`}>
-                        {getIncidentField(incident, 'severity') || '—'}
-                      </span>
-                    </p>
+                    {isReadOnly ? (
+                      <p className="mt-1">
+                        <span className={`inline-block px-2 py-1 rounded text-sm font-medium ${getSeverityBadgeClass(getIncidentField(incident, 'severity'))}`}>
+                          {getIncidentField(incident, 'severity') || '—'}
+                        </span>
+                      </p>
+                    ) : (
+                      <select
+                        value={getIncidentField(incident, 'severity') || 'medium'}
+                        onChange={(e) => handleSeverityChange(e.target.value)}
+                        className="mt-1 px-3 py-2 border rounded-md"
+                      >
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                      </select>
+                    )}
                   </div>
                   <div>
                     <span className="text-sm font-medium text-gray-600">Category</span>
@@ -411,11 +437,46 @@ export default function IncidentDetailsPage() {
                   </div>
                   <div>
                     <span className="text-sm font-medium text-gray-600">Impact (CIA)</span>
-                    <p className="mt-1 flex flex-wrap gap-1.5">
-                      <span className={`inline-block px-2 py-1 rounded text-sm font-medium ${getImpactBadgeClass(getIncidentField(incident, 'impactConfidentiality'))}`}>C: {getIncidentField(incident, 'impactConfidentiality') || 'none'}</span>
-                      <span className={`inline-block px-2 py-1 rounded text-sm font-medium ${getImpactBadgeClass(getIncidentField(incident, 'impactIntegrity'))}`}>I: {getIncidentField(incident, 'impactIntegrity') || 'none'}</span>
-                      <span className={`inline-block px-2 py-1 rounded text-sm font-medium ${getImpactBadgeClass(getIncidentField(incident, 'impactAvailability'))}`}>A: {getIncidentField(incident, 'impactAvailability') || 'none'}</span>
-                    </p>
+                    {isReadOnly ? (
+                      <p className="mt-1 flex flex-wrap gap-1.5">
+                        <span className={`inline-block px-2 py-1 rounded text-sm font-medium ${getImpactBadgeClass(getIncidentField(incident, 'impactConfidentiality'))}`}>C: {getIncidentField(incident, 'impactConfidentiality') || 'none'}</span>
+                        <span className={`inline-block px-2 py-1 rounded text-sm font-medium ${getImpactBadgeClass(getIncidentField(incident, 'impactIntegrity'))}`}>I: {getIncidentField(incident, 'impactIntegrity') || 'none'}</span>
+                        <span className={`inline-block px-2 py-1 rounded text-sm font-medium ${getImpactBadgeClass(getIncidentField(incident, 'impactAvailability'))}`}>A: {getIncidentField(incident, 'impactAvailability') || 'none'}</span>
+                      </p>
+                    ) : (
+                      <div className="mt-1 flex flex-wrap gap-2">
+                        <select
+                          value={getIncidentField(incident, 'impactConfidentiality') || 'none'}
+                          onChange={(e) => handleImpactChange('impactConfidentiality', e.target.value)}
+                          className="px-3 py-2 border rounded-md text-sm"
+                        >
+                          <option value="none">C: None</option>
+                          <option value="low">C: Low</option>
+                          <option value="medium">C: Medium</option>
+                          <option value="high">C: High</option>
+                        </select>
+                        <select
+                          value={getIncidentField(incident, 'impactIntegrity') || 'none'}
+                          onChange={(e) => handleImpactChange('impactIntegrity', e.target.value)}
+                          className="px-3 py-2 border rounded-md text-sm"
+                        >
+                          <option value="none">I: None</option>
+                          <option value="low">I: Low</option>
+                          <option value="medium">I: Medium</option>
+                          <option value="high">I: High</option>
+                        </select>
+                        <select
+                          value={getIncidentField(incident, 'impactAvailability') || 'none'}
+                          onChange={(e) => handleImpactChange('impactAvailability', e.target.value)}
+                          className="px-3 py-2 border rounded-md text-sm"
+                        >
+                          <option value="none">A: None</option>
+                          <option value="low">A: Low</option>
+                          <option value="medium">A: Medium</option>
+                          <option value="high">A: High</option>
+                        </select>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <span className="text-sm font-medium text-gray-600">Affected Asset</span>
@@ -510,11 +571,6 @@ export default function IncidentDetailsPage() {
                   <div>
                     <span className="text-sm font-medium text-gray-600">Root Cause</span>
                     <p className="mt-1 text-sm text-gray-700">{(incident as any).rootCause ?? (incident as any).root_cause ?? 'Not documented'}</p>
-                    {!isReadOnly && (
-                      <button type="button" onClick={openInvestigationModal} className="mt-2 text-sm text-blue-600 hover:underline">
-                        {(incident as any).rootCause || (incident as any).root_cause ? 'Update' : 'Add'} Root Cause & Resolution
-                      </button>
-                    )}
                   </div>
                   <div>
                     <span className="text-sm font-medium text-gray-600">Resolution Summary</span>

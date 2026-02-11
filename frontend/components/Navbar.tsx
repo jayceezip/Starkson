@@ -88,16 +88,6 @@ export default function Navbar() {
             </Link>
           )}
           
-          {/* IT Console - IT Support, Admin */}
-          {hasRole(user, 'it_support', 'admin') && (
-            <Link 
-              href="/staff" 
-              className="hover:text-gray-300 transition-colors px-2 py-1 rounded hover:bg-gray-700"
-            >
-              IT Console
-            </Link>
-          )}
-          
           {/* Incidents - Security Officer, Admin */}
           {hasRole(user, 'security_officer', 'admin') && (
             <Link 

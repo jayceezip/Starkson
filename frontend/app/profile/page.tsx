@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
-import { getStoredUser, setStoredAuth } from '@/lib/auth'
+import { getStoredUser } from '@/lib/auth'
 
 export default function ProfilePage() {
   const router = useRouter()
@@ -35,7 +35,16 @@ export default function ProfilePage() {
   }, [user, router, mounted])
 
   const formatRole = (role: string) => {
-    return role.replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase())
+    return role.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())
+  }
+
+  const getRoleBadgeClass = (role: string) => {
+    switch (role) {
+      case 'admin': return 'bg-red-100 text-red-800 border-red-200'
+      case 'security_officer': return 'bg-purple-100 text-purple-800 border-purple-200'
+      case 'it_support': return 'bg-blue-100 text-blue-800 border-blue-200'
+      default: return 'bg-slate-100 text-slate-800 border-slate-200'
+    }
   }
 
   const handleResetPassword = async (e: React.FormEvent) => {
@@ -69,7 +78,6 @@ export default function ProfilePage() {
       })
       setShowResetPassword(false)
       
-      // Clear success message after 3 seconds
       setTimeout(() => setSuccess(''), 3000)
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to reset password')
@@ -81,9 +89,9 @@ export default function ProfilePage() {
   if (!mounted || !user) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen bg-gray-50 pt-20 lg:pt-8 px-4 lg:px-8 pb-8 flex items-center justify-center">
+        <div className="panel-page flex items-center justify-center">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-600 mx-auto" />
             <p className="mt-4 text-gray-600">Loading...</p>
           </div>
         </div>
@@ -93,134 +101,106 @@ export default function ProfilePage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
-        <div className="max-w-5xl mx-auto">
-          <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-            <div className="flex flex-col md:flex-row">
-              {/* Left Side - Profile Icon */}
-              <div className="md:w-1/3 bg-gray-100 p-8 flex flex-col items-center justify-center border-r border-gray-200">
-                <div className="w-48 h-48 bg-gray-300 rounded-lg flex items-center justify-center mb-6 shadow-inner">
-                  <svg 
-                    xmlns="http://www.w3.org/2000/svg" 
-                    className="h-32 w-32 text-gray-500" 
-                    fill="none" 
-                    viewBox="0 0 24 24" 
-                    stroke="currentColor"
-                  >
-                    <path 
-                      strokeLinecap="round" 
-                      strokeLinejoin="round" 
-                      strokeWidth={1.5} 
-                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" 
-                    />
+      <div className="panel-page">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
+          <h1 className="text-3xl font-bold text-gray-900 mb-10">My Profile</h1>
+
+          <div className="panel-card overflow-hidden">
+            <div className="p-10 sm:p-12">
+              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-8 mb-10">
+                <div className="flex-shrink-0 w-28 h-28 sm:w-36 sm:h-36 rounded-full bg-sky-100 flex items-center justify-center ring-4 ring-sky-50">
+                  <svg className="w-14 h-14 sm:w-20 sm:h-20 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
                 </div>
-                <h2 className="text-2xl font-bold text-gray-800 mb-1">{user.name}</h2>
-                <p className="text-gray-500 text-sm">ID: {user.id}</p>
-              </div>
-
-              {/* Right Side - Profile Information */}
-              <div className="md:w-2/3 p-8">
-                <div className="space-y-6">
-                  <div>
-                    <h2 className="text-xl font-bold mb-6 border-b-2 border-gray-300 pb-2">About</h2>
-                  </div>
-
-                  {/* Role Section */}
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-500 uppercase mb-3">Role</h3>
-                    <div className="flex items-center">
-                      <span className="text-base text-gray-800">{formatRole(user.role)}</span>
-                      <span className={`ml-3 px-3 py-1 rounded-full text-xs font-semibold ${
-                        user.role === 'admin' ? 'bg-red-100 text-red-800' :
-                        user.role === 'security_officer' ? 'bg-purple-100 text-purple-800' :
-                        user.role === 'it_support' ? 'bg-blue-100 text-blue-800' :
-                        'bg-green-100 text-green-800'
-                      }`}>
-                        {user.role.toUpperCase().replace('_', ' ')}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Email Section */}
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-500 uppercase mb-3">Email</h3>
-                    <p className="text-base text-gray-800">{user.email}</p>
-                  </div>
-
-                  {/* Password Section */}
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-500 uppercase mb-3">Password</h3>
-                    <div className="flex items-center">
-                      <p className="text-base text-gray-800 font-mono">••••••••</p>
-                      <span className="ml-3 text-xs text-gray-500">(Hidden for security)</span>
-                    </div>
-                  </div>
-
-                  {/* Reset Password Button */}
-                  <div className="pt-4">
-                    <button
-                      onClick={() => setShowResetPassword(!showResetPassword)}
-                      className="bg-gray-800 text-white px-6 py-2 rounded-md hover:bg-gray-900 transition-colors"
-                    >
-                      {showResetPassword ? 'Cancel' : 'Reset Password'}
-                    </button>
-                  </div>
-
-                  {/* Reset Password Form */}
-                  {showResetPassword && (
-                    <div className="mt-4 p-6 bg-gray-50 rounded-lg border border-gray-200">
-                      <h3 className="text-lg font-semibold mb-4">Reset Password</h3>
-                      <form onSubmit={handleResetPassword} className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium mb-1">Current Password</label>
-                          <input
-                            type="password"
-                            value={passwordData.currentPassword}
-                            onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                            className="w-full px-3 py-2 border rounded-md"
-                            required
-                            placeholder="Enter current password"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium mb-1">New Password</label>
-                          <input
-                            type="password"
-                            value={passwordData.newPassword}
-                            onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                            className="w-full px-3 py-2 border rounded-md"
-                            required
-                            placeholder="Enter new password (min 6 characters)"
-                            minLength={6}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium mb-1">Confirm New Password</label>
-                          <input
-                            type="password"
-                            value={passwordData.confirmPassword}
-                            onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                            className="w-full px-3 py-2 border rounded-md"
-                            required
-                            placeholder="Re-enter new password"
-                            minLength={6}
-                          />
-                        </div>
-                        {error && <p className="text-red-500 text-sm">{error}</p>}
-                        {success && <p className="text-green-500 text-sm">{success}</p>}
-                        <button
-                          type="submit"
-                          disabled={loading}
-                          className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {loading ? 'Resetting...' : 'Reset Password'}
-                        </button>
-                      </form>
-                    </div>
-                  )}
+                <div className="text-center sm:text-left flex-1 min-w-0">
+                  <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 truncate">{user.name}</h2>
+                  <p className="text-base sm:text-lg text-gray-500 font-mono mt-1 truncate">{user.email}</p>
+                  <span className={`inline-block mt-3 px-4 py-1.5 rounded-full text-sm font-semibold border ${getRoleBadgeClass(user.role)}`}>
+                    {formatRole(user.role)}
+                  </span>
                 </div>
               </div>
+
+              <div className="border-t border-gray-200 pt-8">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-6">Account details</h3>
+                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500 mb-1.5">User ID</dt>
+                    <dd className="text-base text-gray-800 font-mono break-all">{user.id}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500 mb-1.5">Role</dt>
+                    <dd className="text-base text-gray-800">{formatRole(user.role)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500 mb-1.5">Password</dt>
+                    <dd className="text-base text-gray-500">•••••••• (hidden)</dd>
+                  </div>
+                </dl>
+              </div>
+
+              <div className="mt-10 pt-8 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setShowResetPassword(!showResetPassword)}
+                  className="px-6 py-3 rounded-xl text-base font-medium bg-gray-800 text-white hover:bg-gray-700 transition-colors shadow-sm"
+                >
+                  {showResetPassword ? 'Cancel' : 'Reset Password'}
+                </button>
+              </div>
+
+              {showResetPassword && (
+                <div className="mt-8 p-8 sm:p-10 bg-gray-50 rounded-2xl border border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-6">Reset Password</h3>
+                  <form onSubmit={handleResetPassword} className="space-y-5 max-w-md">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
+                      <input
+                        type="password"
+                        value={passwordData.currentPassword}
+                        onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                        className="w-full px-4 py-3 text-base border border-gray-200 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                        required
+                        placeholder="Enter current password"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">New Password</label>
+                      <input
+                        type="password"
+                        value={passwordData.newPassword}
+                        onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                        className="w-full px-4 py-3 text-base border border-gray-200 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                        required
+                        placeholder="Min 6 characters"
+                        minLength={6}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Confirm New Password</label>
+                      <input
+                        type="password"
+                        value={passwordData.confirmPassword}
+                        onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                        className="w-full px-4 py-3 text-base border border-gray-200 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                        required
+                        placeholder="Re-enter new password"
+                        minLength={6}
+                      />
+                    </div>
+                    {error && <p className="text-base text-red-600">{error}</p>}
+                    {success && <p className="text-base text-green-600">{success}</p>}
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="px-6 py-3 rounded-xl text-base font-medium bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {loading ? 'Resetting…' : 'Reset Password'}
+                    </button>
+                  </form>
+                </div>
+              )}
             </div>
           </div>
         </div>

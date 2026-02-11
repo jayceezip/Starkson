@@ -107,7 +107,7 @@ export default function TicketsPage() {
       <div className="panel-page">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-2xl font-bold text-gray-900">IT Support Tickets</h1>
-          {hasRole(user, 'user', 'admin') && (
+          {user?.role === 'user' && (
             <Link
               href="/tickets/create"
               className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"

@@ -328,7 +328,6 @@ export default function Sidebar() {
               type="button"
               onClick={(e) => {
                 e.stopPropagation()
-                // Just toggle the dropdown, don't mark as read
                 setNotifOpen((o) => !o)
               }}
               className="relative flex-shrink-0 p-1.5 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
@@ -337,14 +336,12 @@ export default function Sidebar() {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
-              {/* Show badge with unread count - never disappears automatically */}
               {unreadCount >= 0 && (
                 <span className={`absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full ${unreadCount > 0 ? 'bg-red-500 animate-pulse' : 'bg-gray-500'} text-white text-xs font-medium`}>
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
             </button>
-            {/* Dropdown: Notifications (scrollable) */}
             {notifOpen && (
               <div className="absolute left-0 right-0 top-full mt-1 mx-2 bg-gray-700 border border-gray-600 rounded-xl shadow-xl z-50 overflow-hidden flex flex-col max-h-[min(320px,60vh)]">
                 <div className="px-3 py-2 border-b border-gray-600 flex items-center justify-between flex-shrink-0">
@@ -381,19 +378,15 @@ export default function Sidebar() {
                       {notifications.slice(0, 10).map((notification) => {
                         const isUnread = !notification.isRead
                         return (
-                          <li 
-                            key={notification.id} 
+                          <li
+                            key={notification.id}
                             className={`px-3 py-2 hover:bg-gray-600/50 border-l-2 ${isUnread ? 'border-sky-500 bg-gray-600/30' : 'border-transparent'}`}
                           >
-                            <div 
+                            <div
                               className="flex items-start gap-2 cursor-pointer"
                               onClick={(e) => {
                                 e.preventDefault()
-                                // Only mark as read if it's unread
-                                if (isUnread) {
-                                  markAsRead(notification.id, e)
-                                }
-                                // Navigate if there's a link
+                                if (isUnread) markAsRead(notification.id, e)
                                 if (notification.link) {
                                   router.push(notification.link)
                                   setNotifOpen(false)
@@ -411,7 +404,7 @@ export default function Sidebar() {
                                 <p className="text-xs text-gray-500 mt-0.5">{timeAgo(notification.createdAt)}</p>
                               </div>
                               {isUnread && (
-                                <span className="flex-shrink-0 w-2 h-2 rounded-full bg-sky-500 mt-1.5"></span>
+                                <span className="flex-shrink-0 w-2 h-2 rounded-full bg-sky-500 mt-1.5" />
                               )}
                             </div>
                             {isUnread && (
@@ -502,26 +495,6 @@ export default function Sidebar() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                   <span className="font-medium">Tickets</span>
-                </Link>
-              )}
-
-              {/* IT Console - IT Support, Admin */}
-              {hasRole(user, 'it_support', 'admin') && (
-                <Link
-                  href="/staff"
-                  className={`
-                    flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
-                    ${isActive('/staff')
-                      ? 'bg-gray-700 text-white'
-                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                    }
-                  `}
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  <span className="font-medium">IT Console</span>
                 </Link>
               )}
 
