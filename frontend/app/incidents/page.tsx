@@ -16,6 +16,7 @@ interface Incident {
   status: string
   createdAt: string
   sourceTicketNumber?: string
+  sourceTicketId?: string | null
   affectedAsset?: string | null
   affectedUser?: string | null
 }
@@ -216,7 +217,7 @@ export default function IncidentsPage() {
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
                         {incident.sourceTicketNumber ? (
-                          <Link href={`/tickets/${incident.sourceTicketNumber}`} className="text-blue-600 hover:underline">
+                          <Link href={incident.sourceTicketId ? `/tickets/${incident.sourceTicketId}` : '#'} className="text-blue-600 hover:underline">
                             {incident.sourceTicketNumber}
                           </Link>
                         ) : (

@@ -13,7 +13,8 @@ export default function StaffDashboardPage() {
   const [stats, setStats] = useState({
     assignedTickets: 0,
     pendingTickets: 0,
-    resolvedToday: 0,
+    totalResolved: 0,
+    role: '' as string,
   })
 
   useEffect(() => {
@@ -66,14 +67,19 @@ export default function StaffDashboardPage() {
           <div className="panel-card">
             <h3 className="panel-card-title">Assigned Tickets</h3>
             <p className="panel-card-value">{stats.assignedTickets}</p>
+            {user?.role === 'admin' && (
+              <p className="text-xs text-gray-500 mt-1">Tickets + incidents assigned to staff</p>
+            )}
           </div>
           <div className="panel-card">
             <h3 className="panel-card-title">Pending Tickets</h3>
             <p className="panel-card-value">{stats.pendingTickets}</p>
           </div>
           <div className="panel-card">
-            <h3 className="panel-card-title">Resolved Today</h3>
-            <p className="panel-card-value">{stats.resolvedToday}</p>
+            <h3 className="panel-card-title">
+              {user?.role === 'admin' ? 'Total Resolved Tickets/Incidents' : 'Total Resolved Tickets'}
+            </h3>
+            <p className="panel-card-value">{stats.totalResolved}</p>
           </div>
         </div>
         <div className="panel-card">
@@ -82,10 +88,6 @@ export default function StaffDashboardPage() {
             <a href="/tickets" className="p-4 border border-gray-100 rounded-xl hover:bg-gray-50 transition-colors">
               <h3 className="font-semibold text-gray-900">View All Tickets</h3>
               <p className="text-sm text-gray-500">Manage ticket queue</p>
-            </a>
-            <a href="/tickets?status=new" className="p-4 border border-gray-100 rounded-xl hover:bg-gray-50 transition-colors">
-              <h3 className="font-semibold text-gray-900">Unassigned Tickets</h3>
-              <p className="text-sm text-gray-500">View new tickets</p>
             </a>
           </div>
         </div>

@@ -120,19 +120,42 @@ router.get('/', authenticate, async (req, res) => {
     if (req.user.role === 'user') {
       ticketsQuery = ticketsQuery.eq('created_by', req.user.id)
     } else if (req.user.role === 'it_support') {
-      // IT Support can see assigned tickets and unassigned tickets
+      // IT Support can see: assigned to them, unassigned, AND tickets they converted (so converted tickets never disappear)
       ticketsQuery = ticketsQuery.or(`assigned_to.eq.${req.user.id},assigned_to.is.null`)
     }
     // Admin and Security Officer can see all (no filter)
-    
-    const { data: tickets, error: ticketsError } = await ticketsQuery
-    
+
+    let { data: tickets, error: ticketsError } = await ticketsQuery
+
     if (ticketsError) {
       console.error('Error fetching tickets:', ticketsError)
       throw ticketsError
     }
-    
-    if (!tickets || tickets.length === 0) {
+    tickets = tickets || []
+
+    // IT Support: also include tickets they converted (incident created_by = them), so the ticket always shows in their list
+    if (req.user.role === 'it_support') {
+      const { data: myIncidents } = await supabase
+        .from('incidents')
+        .select('source_ticket_id')
+        .eq('created_by', req.user.id)
+        .not('source_ticket_id', 'is', null)
+      const convertedTicketIds = (myIncidents || []).map((i) => i.source_ticket_id).filter(Boolean)
+      const existingIds = new Set((tickets || []).map((t) => t.id))
+      const missingIds = convertedTicketIds.filter((id) => !existingIds.has(id))
+      if (missingIds.length > 0) {
+        const { data: extraTickets, error: extraErr } = await supabase
+          .from('tickets')
+          .select(selectQuery)
+          .in('id', missingIds)
+          .order('created_at', { ascending: false })
+        if (!extraErr && extraTickets && extraTickets.length > 0) {
+          tickets = [...tickets, ...extraTickets].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        }
+      }
+    }
+
+    if (tickets.length === 0) {
       return res.json([])
     }
     
@@ -183,6 +206,21 @@ router.get('/', authenticate, async (req, res) => {
           .single()
         createdByName = createdByUser?.name || 'Unknown'
       }
+
+      // If ticket was converted to incident, include link to incident
+      let convertedIncidentId = null
+      let convertedIncidentNumber = null
+      if (ticket.status === 'converted_to_incident') {
+        const { data: inc } = await supabase
+          .from('incidents')
+          .select('id, incident_number')
+          .eq('source_ticket_id', ticket.id)
+          .single()
+        if (inc) {
+          convertedIncidentId = inc.id
+          convertedIncidentNumber = inc.incident_number
+        }
+      }
       
       return {
         ...ticket,
@@ -204,7 +242,9 @@ router.get('/', authenticate, async (req, res) => {
         commentCount: commentCount.count || 0,
         attachmentCount: attachmentCount.count || 0,
         createdByName: createdByName,
-        assignedToName: assignedToName
+        assignedToName: assignedToName,
+        convertedIncidentId,
+        convertedIncidentNumber
       }
     }))
 
@@ -553,6 +593,42 @@ router.post('/', authenticate, authorize('user', 'admin'), async (req, res) => {
       // No need for separate timeline entry since we're using incident_timeline only
     }
 
+    // Notify all IT Staff and Admin: show in notifications and in Recent Activity (Ticket Actions)
+    const { data: itAndAdminUsers, error: roleError } = await supabase
+      .from('users')
+      .select('id')
+      .in('role', ['it_support', 'admin'])
+      .eq('status', 'active')
+    if (!roleError && itAndAdminUsers && itAndAdminUsers.length > 0) {
+      const creatorId = req.user.id
+      const details = { ticket_number: ticketNumber, request_type: requestType, priority }
+      for (const u of itAndAdminUsers) {
+        if (u.id === creatorId) continue // creator already has CREATE_TICKET
+        await query('audit_logs', 'insert', {
+          data: {
+            action: 'NEW_TICKET_CREATED',
+            user_id: u.id,
+            resource_type: 'ticket',
+            resource_id: result.id,
+            details
+          }
+        })
+        // Notification: skip assignee (they already got TICKET_ASSIGNED)
+        if (u.id !== assignedToId) {
+          await query('notifications', 'insert', {
+            data: {
+              user_id: u.id,
+              type: 'NEW_TICKET_CREATED',
+              title: 'New ticket created',
+              message: `New ticket ${ticketNumber}: ${title}`,
+              resource_type: 'ticket',
+              resource_id: result.id
+            }
+          })
+        }
+      }
+    }
+
     res.status(201).json({ 
       message: 'Ticket created', 
       ticketId: result.id, 
@@ -579,6 +655,10 @@ router.put('/:id', authenticate, async (req, res) => {
 
     if (!ticket) {
       return res.status(404).json({ message: 'Ticket not found' })
+    }
+
+    if (ticket.status === 'converted_to_incident') {
+      return res.status(400).json({ message: 'This ticket was converted to an incident and cannot be edited. View the linked incident for updates.' })
     }
 
     // RBAC: Users can only update their own tickets (limited fields)
@@ -646,6 +726,29 @@ router.put('/:id', authenticate, async (req, res) => {
         details: req.body
       }
     })
+
+    // Notify ticket creator when someone else updates the ticket (so it appears in their notifications/recent activity)
+    if (ticket.created_by && ticket.created_by !== req.user.id) {
+      await query('notifications', 'insert', {
+        data: {
+          user_id: ticket.created_by,
+          type: 'TICKET_UPDATED',
+          title: 'Ticket updated',
+          message: `Ticket ${ticket.ticket_number} was updated`,
+          resource_type: 'ticket',
+          resource_id: req.params.id
+        }
+      })
+      await query('audit_logs', 'insert', {
+        data: {
+          action: 'TICKET_UPDATED',
+          user_id: ticket.created_by,
+          resource_type: 'ticket',
+          resource_id: req.params.id,
+          details: { ticket_number: ticket.ticket_number }
+        }
+      })
+    }
 
     res.json({ message: 'Ticket updated' })
   } catch (error) {
@@ -838,55 +941,17 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
           })
         }
 
-        // Delete the ticket when converted to incident (as per user requirement)
-        // First, delete associated attachments
-        const attachments = await query('attachments', 'select', {
-          filters: [
-            { column: 'record_type', value: 'ticket' },
-            { column: 'record_id', value: req.params.id }
-          ]
-        })
-        
-        // Delete attachment files from Cloudinary if they exist
-        if (attachments && attachments.length > 0) {
-          const cloudinary = require('cloudinary').v2
-          for (const att of attachments) {
-            if (att.file_path && att.file_path.startsWith('http')) {
-              try {
-                const publicId = att.filename
-                await cloudinary.uploader.destroy(publicId)
-                console.log(`🗑️ Deleted Cloudinary file: ${publicId}`)
-              } catch (cloudinaryError) {
-                console.error('Error deleting Cloudinary file:', cloudinaryError)
-              }
-            }
-          }
-        }
-        
-        // Delete attachments from database
-        if (attachments && attachments.length > 0) {
-          await query('attachments', 'delete', {
-            filters: [
-              { column: 'record_type', value: 'ticket' },
-              { column: 'record_id', value: req.params.id }
-            ]
-          })
-        }
-        
-        // Before deleting comments, copy them to incident timeline so Security Officers can see user comments
+        // Copy ticket comments to incident timeline (keep ticket and comments)
         const retryTicketComments = await query('ticket_comments', 'select', {
           filters: [{ column: 'ticket_id', value: req.params.id }]
         })
-        
         if (retryTicketComments && retryTicketComments.length > 0) {
-          // Copy each ticket comment to incident timeline
           for (const comment of retryTicketComments) {
             const { data: commentUser } = await supabase
               .from('users')
               .select('name, role')
               .eq('id', comment.user_id)
               .single()
-            
             await query('incident_timeline', 'insert', {
               data: {
                 incident_id: result.id,
@@ -899,21 +964,44 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
           }
           console.log(`📋 Copied ${retryTicketComments.length} ticket comments to incident timeline (retry)`)
         }
-        
-        // Delete comments
-        await query('ticket_comments', 'delete', {
-          filters: [{ column: 'ticket_id', value: req.params.id }]
-        })
-        
-        // Delete the ticket itself
-        await query('tickets', 'delete', {
-          filters: [{ column: 'id', value: req.params.id }]
-        })
-        
-        console.log('✅ Ticket deleted after conversion to incident (retry):', {
-          ticketId: req.params.id,
-          ticketNumber: ticket.ticket_number
-        })
+
+        // Keep ticket: set status to converted_to_incident (never delete)
+        const { error: updateTicketErr } = await supabase
+          .from('tickets')
+          .update({ status: 'converted_to_incident', updated_at: new Date().toISOString() })
+          .eq('id', ticket.id)
+        if (updateTicketErr) {
+          console.error('Ticket status update failed (retry path):', updateTicketErr)
+          return res.status(500).json({
+            message: 'Incident was created but ticket status could not be updated. Please run the database migration to add status "converted_to_incident".',
+            incidentId: result.id,
+            incidentNumber: finalIncidentNumber
+          })
+        }
+        console.log('✅ Ticket kept with status converted_to_incident (retry):', { ticketId: ticket.id, ticketNumber: ticket.ticket_number })
+
+        // Notify ticket creator
+        if (ticket.created_by) {
+          await query('notifications', 'insert', {
+            data: {
+              user_id: ticket.created_by,
+              type: 'TICKET_CONVERTED_TO_INCIDENT',
+              title: 'Ticket converted to incident',
+              message: `Your ticket ${ticket.ticket_number} was converted to incident ${finalIncidentNumber}.`,
+              resource_type: 'incident',
+              resource_id: result.id
+            }
+          })
+          await query('audit_logs', 'insert', {
+            data: {
+              action: 'TICKET_CONVERTED_TO_INCIDENT',
+              user_id: ticket.created_by,
+              resource_type: 'ticket',
+              resource_id: ticket.id,
+              details: { ticket_number: ticket.ticket_number, incident_number: finalIncidentNumber, incident_id: result.id }
+            }
+          })
+        }
 
         // Add timeline entry for conversion
         await query('incident_timeline', 'insert', {
@@ -1001,97 +1089,67 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
       })
     }
 
-    // Delete the ticket when converted to incident (as per user requirement)
-    // First, delete associated attachments
-    const attachments = await query('attachments', 'select', {
-      filters: [
-        { column: 'record_type', value: 'ticket' },
-        { column: 'record_id', value: req.params.id }
-      ]
-    })
-    
-    // Delete attachment files from Cloudinary if they exist
-    if (attachments && attachments.length > 0) {
-      const cloudinary = require('cloudinary').v2
-      for (const att of attachments) {
-        if (att.file_path && att.file_path.startsWith('http')) {
-          try {
-            const publicId = att.filename
-            await cloudinary.uploader.destroy(publicId)
-            console.log(`🗑️ Deleted Cloudinary file: ${publicId}`)
-          } catch (cloudinaryError) {
-            console.error('Error deleting Cloudinary file:', cloudinaryError)
-          }
-        }
-      }
-    }
-    
-    // Delete attachments from database
-    if (attachments && attachments.length > 0) {
-      await query('attachments', 'delete', {
-        filters: [
-          { column: 'record_type', value: 'ticket' },
-          { column: 'record_id', value: req.params.id }
-        ]
-      })
-    }
-    
-    // Before deleting comments, copy them to incident timeline so Security Officers can see user comments
+    // Copy ticket comments to incident timeline so Security Officers can see user comments (keep ticket comments)
     const ticketComments = await query('ticket_comments', 'select', {
       filters: [{ column: 'ticket_id', value: req.params.id }]
     })
-    
     if (ticketComments && ticketComments.length > 0) {
-      // Copy each ticket comment to incident timeline
       for (const comment of ticketComments) {
-        // Get user info for the comment
         const { data: commentUser } = await supabase
           .from('users')
           .select('name, role')
           .eq('id', comment.user_id)
           .single()
-        
         await query('incident_timeline', 'insert', {
           data: {
             incident_id: result.id,
             user_id: comment.user_id,
             action: commentUser?.role === 'user' ? 'USER_COMMENT' : 'STAFF_COMMENT',
             description: `[From Ticket] ${comment.comment}`,
-            is_internal: false // Make visible to users so they can see their own comments
+            is_internal: false
           }
         })
       }
       console.log(`📋 Copied ${ticketComments.length} ticket comments to incident timeline`)
     }
-    
-    // Delete comments
-    await query('ticket_comments', 'delete', {
-      filters: [{ column: 'ticket_id', value: req.params.id }]
-    })
-    
-    // Delete ticket timeline entries (only if table exists)
-    try {
-      await query('ticket_timeline', 'delete', {
-        filters: [{ column: 'ticket_id', value: req.params.id }]
+
+    // Keep ticket: set status to converted_to_incident and link via incident.source_ticket_id (never delete)
+    const { error: updateTicketError } = await supabase
+      .from('tickets')
+      .update({ status: 'converted_to_incident', updated_at: new Date().toISOString() })
+      .eq('id', ticket.id)
+    if (updateTicketError) {
+      console.error('Ticket status update failed (run migration_ticket_converted_status.sql):', updateTicketError)
+      return res.status(500).json({
+        message: 'Incident was created but ticket status could not be updated. Please run the database migration to add status "converted_to_incident".',
+        incidentId: result.id,
+        incidentNumber
       })
-    } catch (timelineError) {
-      // If ticket_timeline table doesn't exist, just log and continue
-      if (timelineError.code === 'PGRST205' || timelineError.message?.includes('Could not find the table')) {
-        console.log('⚠️ ticket_timeline table does not exist. Skipping timeline deletion.')
-      } else {
-        console.error('Error deleting ticket timeline:', timelineError)
-      }
     }
-    
-    // Delete the ticket itself
-    await query('tickets', 'delete', {
-      filters: [{ column: 'id', value: req.params.id }]
-    })
-    
-    console.log('✅ Ticket deleted after conversion to incident:', {
-      ticketId: req.params.id,
-      ticketNumber: ticket.ticket_number
-    })
+    console.log('✅ Ticket kept with status converted_to_incident:', { ticketId: ticket.id, ticketNumber: ticket.ticket_number })
+
+    // Notify ticket creator that their ticket was converted to an incident
+    if (ticket.created_by) {
+      await query('notifications', 'insert', {
+        data: {
+          user_id: ticket.created_by,
+          type: 'TICKET_CONVERTED_TO_INCIDENT',
+          title: 'Ticket converted to incident',
+          message: `Your ticket ${ticket.ticket_number} was converted to incident ${incidentNumber}.`,
+          resource_type: 'incident',
+          resource_id: result.id
+        }
+      })
+      await query('audit_logs', 'insert', {
+        data: {
+          action: 'TICKET_CONVERTED_TO_INCIDENT',
+          user_id: ticket.created_by,
+          resource_type: 'ticket',
+          resource_id: ticket.id,
+          details: { ticket_number: ticket.ticket_number, incident_number: incidentNumber, incident_id: result.id }
+        }
+      })
+    }
 
     // Add timeline entry for conversion
     await query('incident_timeline', 'insert', {

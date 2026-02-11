@@ -14,6 +14,8 @@ type ActivityCategory = 'attachments' | 'ticket_actions' | 'comments'
 function getActivityCategory(action: string): ActivityCategory {
   if (action === 'UPLOAD_ATTACHMENT' || action === 'DELETE_ATTACHMENT') return 'attachments'
   if (action === 'ADD_COMMENT' || action === 'USER_COMMENT' || action === 'STAFF_COMMENT') return 'comments'
+  // Ticket actions: create/update/convert/delete ticket, and "ticket converted to incident" for the user
+  if (action === 'CREATE_TICKET' || action === 'UPDATE_TICKET' || action === 'NEW_TICKET_CREATED' || action === 'DELETE_TICKET' || action === 'CONVERT_TICKET' || action === 'TICKET_CONVERTED_TO_INCIDENT') return 'ticket_actions'
   return 'ticket_actions'
 }
 

@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   description TEXT NOT NULL,
   affected_system VARCHAR(255),
   priority VARCHAR(50) DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
-  status VARCHAR(50) DEFAULT 'new' CHECK (status IN ('new', 'assigned', 'in_progress', 'waiting_for_user', 'resolved', 'closed')),
+  status VARCHAR(50) DEFAULT 'new' CHECK (status IN ('new', 'assigned', 'in_progress', 'waiting_for_user', 'resolved', 'closed', 'converted_to_incident')),
   category VARCHAR(100),
   created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   assigned_to UUID REFERENCES users(id) ON DELETE SET NULL,

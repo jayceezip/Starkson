@@ -246,15 +246,9 @@ export default function TicketDetailsPage() {
     }
     
     try {
-      const response = await api.post(`/tickets/${params.id}/convert`, convertData)
-      // Refresh ticket data to show conversion status
+      await api.post(`/tickets/${params.id}/convert`, convertData)
+      // Refresh ticket data so it shows status "Converted to Incident" and link to incident (ticket remains visible)
       await fetchTicket()
-      // Redirect to the incident
-      if (response.data.incidentId) {
-        router.push(`/incidents/${response.data.incidentId}`)
-      } else {
-        router.push('/incidents')
-      }
     } catch (error: any) {
       console.error('Failed to convert ticket:', error)
       const errorMessage = error.response?.data?.message || 'Failed to convert ticket. It may have already been converted.'

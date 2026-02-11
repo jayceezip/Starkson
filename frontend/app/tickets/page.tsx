@@ -18,6 +18,8 @@ interface Ticket {
   createdByName?: string
   assignedToName?: string
   slaDue?: string
+  convertedIncidentId?: string | null
+  convertedIncidentNumber?: string | null
 }
 
 export default function TicketsPage() {
@@ -75,8 +77,14 @@ export default function TicketsPage() {
       waiting_for_user: 'bg-orange-100 text-orange-800',
       resolved: 'bg-green-100 text-green-800',
       closed: 'bg-gray-100 text-gray-800',
+      converted_to_incident: 'bg-indigo-100 text-indigo-800',
     }
     return colors[status] || 'bg-gray-100 text-gray-800'
+  }
+
+  const getStatusLabel = (status: string) => {
+    if (status === 'converted_to_incident') return 'Converted to Incident'
+    return status ? status.replace(/_/g, ' ') : 'new'
   }
 
   const getPriorityColor = (priority: string) => {
@@ -152,8 +160,15 @@ export default function TicketsPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs rounded ${getStatusColor(ticket.status || 'new')}`}>
-                        {ticket.status ? ticket.status.replace('_', ' ') : 'new'}
+                        {getStatusLabel(ticket.status || 'new')}
                       </span>
+                      {ticket.status === 'converted_to_incident' && ticket.convertedIncidentId && (
+                        <span className="ml-1 text-xs">
+                          <Link href={`/incidents/${ticket.convertedIncidentId}`} className="text-indigo-600 hover:underline">
+                            → {ticket.convertedIncidentNumber || 'View incident'}
+                          </Link>
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs rounded ${getPriorityColor(ticket.priority || 'medium')}`}>

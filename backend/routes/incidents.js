@@ -94,6 +94,7 @@ router.get('/', authenticate, authorize('security_officer', 'admin'), async (req
         createdByName: incident.created_by_user?.name,
         assignedToName: incident.assigned_to_user?.name,
         sourceTicketNumber: incident.source_ticket?.ticket_number,
+        sourceTicketId: incident.source_ticket_id ?? null,
         affectedAsset: affectedAsset ?? null,
         affectedUser: affectedUser ?? null
       }
@@ -217,6 +218,7 @@ router.get('/:id', authenticate, async (req, res) => {
       assignedToName: incident.assigned_to_user?.name,
       assignedToEmail: incident.assigned_to_user?.email,
       sourceTicketNumber: incident.source_ticket?.ticket_number,
+      sourceTicketId: incident.source_ticket_id ?? null,
       // Explicit camelCase so frontend always receives these
       affectedAsset: affectedAsset ?? null,
       affectedUser: affectedUser ?? null,
@@ -307,6 +309,39 @@ router.post('/', authenticate, authorize('security_officer', 'admin'), async (re
         details: { incident_number: incidentNumber, category, severity }
       }
     })
+
+    // Notify Security Officers and Admin: show in notifications and in Recent Activity (Ticket Actions)
+    const { data: secAndAdminUsers, error: roleError } = await supabase
+      .from('users')
+      .select('id')
+      .in('role', ['security_officer', 'admin'])
+      .eq('status', 'active')
+    if (!roleError && secAndAdminUsers && secAndAdminUsers.length > 0) {
+      const creatorId = req.user.id
+      const details = { incident_number: incidentNumber, category, severity }
+      for (const u of secAndAdminUsers) {
+        if (u.id === creatorId) continue // creator already has CREATE_INCIDENT
+        await query('audit_logs', 'insert', {
+          data: {
+            action: 'NEW_INCIDENT_CREATED',
+            user_id: u.id,
+            resource_type: 'incident',
+            resource_id: result.id,
+            details
+          }
+        })
+        await query('notifications', 'insert', {
+          data: {
+            user_id: u.id,
+            type: 'NEW_INCIDENT_CREATED',
+            title: 'New incident created',
+            message: `New incident ${incidentNumber}: ${title}`,
+            resource_type: 'incident',
+            resource_id: result.id
+          }
+        })
+      }
+    }
 
     res.status(201).json({ message: 'Incident created', incidentId: result.id, incidentNumber })
   } catch (error) {
@@ -415,6 +450,36 @@ router.put('/:id', authenticate, authorize('security_officer', 'admin'), async (
         details: req.body
       }
     })
+
+    // Notify ticket creator when their converted incident is updated (so it appears in notifications/recent activity)
+    if (incident.source_ticket_id) {
+      const { data: sourceTicket } = await supabase
+        .from('tickets')
+        .select('created_by')
+        .eq('id', incident.source_ticket_id)
+        .single()
+      if (sourceTicket?.created_by && sourceTicket.created_by !== req.user.id) {
+        await query('notifications', 'insert', {
+          data: {
+            user_id: sourceTicket.created_by,
+            type: 'INCIDENT_UPDATED',
+            title: 'Incident updated',
+            message: `Incident linked to your ticket was updated`,
+            resource_type: 'incident',
+            resource_id: req.params.id
+          }
+        })
+        await query('audit_logs', 'insert', {
+          data: {
+            action: 'INCIDENT_UPDATED',
+            user_id: sourceTicket.created_by,
+            resource_type: 'incident',
+            resource_id: req.params.id,
+            details: { incident_id: req.params.id }
+          }
+        })
+      }
+    }
 
     res.json({ message: 'Incident updated' })
   } catch (error) {

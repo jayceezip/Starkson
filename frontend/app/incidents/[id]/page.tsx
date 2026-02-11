@@ -25,6 +25,7 @@ interface Incident {
   assignedToName: string
   createdByName: string
   sourceTicketNumber: string
+  sourceTicketId?: string | null
   createdAt: string
   timeline: TimelineEntry[]
   attachments: Attachment[]
@@ -475,7 +476,7 @@ export default function IncidentDetailsPage() {
                     <div>
                       <span className="text-sm font-medium text-gray-600">Source Ticket</span>
                       <p className="mt-1">
-                        <a href={`/tickets/${incident.sourceTicketNumber}`} className="text-blue-600 hover:underline">
+                        <a href={incident.sourceTicketId ? `/tickets/${incident.sourceTicketId}` : '#'} className="text-blue-600 hover:underline">
                           {incident.sourceTicketNumber}
                         </a>
                       </p>
