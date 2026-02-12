@@ -110,64 +110,71 @@ export default function AdminAuditPage() {
   }
 
   const handleExportPdf = async () => {
-    try {
-      const allLogs = await fetchAllLogsForExport()
-      const [jsPDFModule, autoTableModule] = await Promise.all([
-        import('jspdf'),
-        import('jspdf-autotable')
-      ])
-      const jsPDF = jsPDFModule.default
-      const autoTable = (autoTableModule as any).default ?? (autoTableModule as any).autoTable
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+  try {
+    const allLogs = await fetchAllLogsForExport()
+    const [jsPDFModule, autoTableModule] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable')
+    ])
+    const jsPDF = jsPDFModule.default
+    const autoTable = (autoTableModule as any).default ?? (autoTableModule as any).autoTable
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
 
-      const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/STARKSON-LG.png` : ''
-      let startY = 14
-      if (logoUrl) {
-        try {
-          const imgResp = await fetch(logoUrl)
-          const imgBlob = await imgResp.blob()
-          const base64 = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader()
-            reader.onload = () => resolve(reader.result as string)
-            reader.onerror = reject
-            reader.readAsDataURL(imgBlob)
-          })
-          const imgW = 45
-          const imgH = 14
-          doc.addImage(base64, 'PNG', 14, 5, imgW, imgH)
-          startY = 24
-        } catch {
-          startY = 14
-        }
+    const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/STARKSON-LG.png` : ''
+    let startY = 14
+    let logoEndX = 14 // Default X position if no logo
+    
+    if (logoUrl) {
+      try {
+        const imgResp = await fetch(logoUrl)
+        const imgBlob = await imgResp.blob()
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = reject
+          reader.readAsDataURL(imgBlob)
+        })
+        const imgW = 45
+        const imgH = 45
+        doc.addImage(base64, 'PNG', 14, 2, imgW, imgH)
+        // Calculate where the logo ends (x + width) plus a margin
+        logoEndX = 14 + imgW + 5 // 5mm margin after logo
+        startY = 24
+      } catch {
+        startY = 14
+        logoEndX = 14
       }
-      doc.setFontSize(16)
-      doc.text('Audit Report (full report)', 14, startY)
-      doc.setFontSize(10)
-      doc.text(`Generated: ${new Date().toLocaleString()} | Total entries: ${allLogs.length}`, 14, startY + 7)
-      if (filters.startDate || filters.endDate) {
-        doc.text(`Period: ${filters.startDate || '—'} to ${filters.endDate || '—'}`, 14, startY + 14)
-      }
-      const tableStartY = startY + 18
-      const tableData = allLogs.map((log) => [
-        log.createdAt ? new Date(log.createdAt).toLocaleString() : '—',
-        log.action || '—',
-        log.userName || log.userEmail || '—',
-        (log.resourceType && log.resourceId) ? `${log.resourceType} / ${String(log.resourceId).slice(0, 8)}…` : '—',
-        log.details != null ? (typeof log.details === 'object' ? JSON.stringify(log.details) : String(log.details)).slice(0, 40) : '—'
-      ])
-      autoTable(doc, {
-        head: [['Time', 'Action', 'User', 'Resource', 'Details']],
-        body: tableData,
-        startY: tableStartY,
-        styles: { fontSize: 8 },
-        headStyles: { fillColor: [66, 66, 66] }
-      })
-      doc.save('audit-report.pdf')
-    } catch (e) {
-      console.error('PDF export failed:', e)
-      alert('Failed to generate PDF. Ensure jspdf is installed.')
     }
+    
+    doc.setFontSize(16)
+    // Position text to the right of the logo (or at default position if no logo)
+    doc.text('Audit Report (Full Report)', logoEndX, startY)
+    doc.setFontSize(10)
+    doc.text(`Generated: ${new Date().toLocaleString()} | Total entries: ${allLogs.length}`, logoEndX, startY + 7)
+    if (filters.startDate || filters.endDate) {
+      doc.text(`Period: ${filters.startDate || '—'} to ${filters.endDate || '—'}`, logoEndX, startY + 14)
+    }
+    const tableStartY = startY + 18
+    const tableData = allLogs.map((log) => [
+      log.createdAt ? new Date(log.createdAt).toLocaleString() : '—',
+      log.action || '—',
+      log.userName || log.userEmail || '—',
+      (log.resourceType && log.resourceId) ? `${log.resourceType} / ${String(log.resourceId).slice(0, 8)}…` : '—',
+      log.details != null ? (typeof log.details === 'object' ? JSON.stringify(log.details) : String(log.details)).slice(0, 40) : '—'
+    ])
+    autoTable(doc, {
+      head: [['Time', 'Action', 'User', 'Resource', 'Details']],
+      body: tableData,
+      startY: tableStartY,
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [66, 66, 66] }
+    })
+    doc.save('audit-report.pdf')
+  } catch (e) {
+    console.error('PDF export failed:', e)
+    alert('Failed to generate PDF. Ensure jspdf is installed.')
   }
+}
 
   if (!mounted || !user) {
     return (
@@ -234,10 +241,10 @@ export default function AdminAuditPage() {
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => handleExport('csv')} className="px-4 py-2 border rounded hover:bg-gray-50">
+            <button onClick={() => handleExport('csv')} className="px-4 py-2 border rounded hover:bg-gray-50 bg-green-50 text-green-800 border-green-200">
               Export CSV
             </button>
-            <button onClick={() => handleExport('json')} className="px-4 py-2 border rounded hover:bg-gray-50">
+            <button onClick={() => handleExport('json')} className="px-4 py-2 border rounded hover:bg-gray-50 bg-yellow-50 text-yellow-800 border-yellow-200">
               Export JSON
             </button>
             <button onClick={handleExportPdf} className="px-4 py-2 border rounded hover:bg-gray-50 bg-red-50 text-red-800 border-red-200">
