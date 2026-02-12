@@ -179,112 +179,235 @@ export default function AdminAuditPage() {
   if (!mounted || !user) {
     return (
       <ProtectedRoute allowedRoles={['admin']}>
-        <div className="panel-page flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto" />
+        <div className="min-h-screen bg-[#f5f5f7] pt-20 lg:pt-8 px-4 lg:px-8 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-2 border-gray-200 border-t-blue-600 rounded-full" />
         </div>
       </ProtectedRoute>
     )
   }
 
+  const getActionBadgeColor = (action: string) => {
+    if (action.includes('CREATE')) return 'bg-emerald-100 text-emerald-800 border-emerald-200'
+    if (action.includes('UPDATE') || action.includes('EDIT')) return 'bg-blue-100 text-blue-800 border-blue-200'
+    if (action.includes('DELETE')) return 'bg-red-100 text-red-800 border-red-200'
+    if (action.includes('CONVERT')) return 'bg-purple-100 text-purple-800 border-purple-200'
+    return 'bg-gray-100 text-gray-800 border-gray-200'
+  }
+
   return (
     <ProtectedRoute allowedRoles={['admin']}>
-      <div className="panel-page">
-        <div className="mb-6 flex items-center gap-4">
-          <Link href="/admin" className="text-gray-500 hover:text-gray-900">← Admin Panel</Link>
-          <h1 className="text-2xl font-bold text-gray-900">Audit Logs</h1>
+      <div className="min-h-screen bg-[#f5f5f7] pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
+        <div className="mb-8 flex items-center gap-4">
+          <Link href="/admin" className="inline-flex items-center gap-1.5 text-gray-500 hover:text-gray-900 transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Admin Panel
+          </Link>
+          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Audit Logs</h1>
         </div>
-        <p className="text-gray-500 mb-6">
-          Immutable activity logs — who, when, what. Record history and exportable audit reports (ISO 27001 / ISO 27035 alignment).
+        <p className="text-gray-600 mb-8 text-base">
+          Immutable activity logs — track who did what, when. Exportable audit reports for compliance (ISO 27001 / ISO 27035).
         </p>
 
-        <div className="panel-card mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+          <div className="flex items-center gap-2 mb-5">
+            <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            <p className="text-sm font-semibold text-gray-700">Filters & Export</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Resource type</label>
+              <label className="block text-xs font-semibold text-gray-600 mb-2 flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                </svg>
+                Resource Type
+              </label>
               <input
                 type="text"
                 value={filters.resourceType}
                 onChange={(e) => { setFilters({ ...filters, resourceType: e.target.value }); setPage(1) }}
                 placeholder="e.g. ticket, incident"
-                className="w-full border rounded px-3 py-2"
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm focus:shadow-md"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Action</label>
+              <label className="block text-xs font-semibold text-gray-600 mb-2 flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Action
+              </label>
               <input
                 type="text"
                 value={filters.action}
                 onChange={(e) => { setFilters({ ...filters, action: e.target.value }); setPage(1) }}
                 placeholder="e.g. CREATE_TICKET"
-                className="w-full border rounded px-3 py-2"
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm focus:shadow-md"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">From date</label>
+              <label className="block text-xs font-semibold text-gray-600 mb-2 flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                From Date
+              </label>
               <input
                 type="date"
                 value={filters.startDate}
                 max={new Date().toISOString().slice(0, 10)}
                 onChange={(e) => { setFilters({ ...filters, startDate: e.target.value }); setPage(1) }}
-                className="w-full border rounded px-3 py-2"
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm focus:shadow-md"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">To date</label>
+              <label className="block text-xs font-semibold text-gray-600 mb-2 flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                To Date
+              </label>
               <input
                 type="date"
                 value={filters.endDate}
                 max={new Date().toISOString().slice(0, 10)}
                 onChange={(e) => { setFilters({ ...filters, endDate: e.target.value }); setPage(1) }}
-                className="w-full border rounded px-3 py-2"
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm focus:shadow-md"
               />
             </div>
           </div>
-          <div className="flex gap-2">
-            <button onClick={() => handleExport('csv')} className="px-4 py-2 border rounded hover:bg-gray-50 bg-green-50 text-green-800 border-green-200">
+          <div className="flex flex-wrap gap-3 pt-4 border-t border-gray-200">
+            <button 
+              onClick={() => handleExport('csv')} 
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold bg-emerald-50 text-emerald-800 border-2 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 transition-all shadow-sm hover:shadow"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
               Export CSV
             </button>
-            <button onClick={() => handleExport('json')} className="px-4 py-2 border rounded hover:bg-gray-50 bg-yellow-50 text-yellow-800 border-yellow-200">
+            <button 
+              onClick={() => handleExport('json')} 
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold bg-amber-50 text-amber-800 border-2 border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition-all shadow-sm hover:shadow"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+              </svg>
               Export JSON
             </button>
-            <button onClick={handleExportPdf} className="px-4 py-2 border rounded hover:bg-gray-50 bg-red-50 text-red-800 border-red-200">
+            <button 
+              onClick={handleExportPdf} 
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold bg-red-50 text-red-800 border-2 border-red-200 hover:bg-red-100 hover:border-red-300 transition-all shadow-sm hover:shadow"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
               Export PDF
             </button>
           </div>
         </div>
 
-        <div className="panel-card overflow-hidden p-0">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 mb-1 flex items-center gap-2">
+                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Activity Logs
+                </h2>
+                <p className="text-sm text-gray-500">Complete audit trail of all system activities</p>
+              </div>
+              <div className="px-4 py-2 rounded-lg bg-blue-50 border border-blue-200">
+                <span className="text-sm font-semibold text-blue-800">{data.total} total entries</span>
+              </div>
+            </div>
+          </div>
           <div className="overflow-x-auto">
             {loading ? (
-              <div className="p-8 text-center text-gray-500">Loading...</div>
+              <div className="p-12 text-center">
+                <div className="flex flex-col items-center justify-center">
+                  <div className="animate-spin rounded-full h-10 w-10 border-2 border-gray-200 border-t-blue-600 mb-4" />
+                  <p className="text-gray-500 font-medium">Loading audit logs...</p>
+                </div>
+              </div>
+            ) : data.logs.length === 0 ? (
+              <div className="p-12 text-center">
+                <div className="flex flex-col items-center justify-center">
+                  <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <p className="text-gray-700 font-medium mb-1">No audit logs found</p>
+                  <p className="text-sm text-gray-500">Activity logs will appear here as users interact with the system.</p>
+                </div>
+              </div>
             ) : (
-              <table className="min-w-[800px] w-full">
-                <thead className="bg-gray-50">
+              <table className="min-w-[900px] w-full">
+                <thead className="bg-gradient-to-r from-gray-50 to-gray-50/50 border-b border-gray-200">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Resource</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Details</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Timestamp</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Action</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">User</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Resource</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Details</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {data.logs.map((log) => (
-                    <tr key={log.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                        {log.createdAt ? new Date(log.createdAt).toLocaleString() : '—'}
+                    <tr key={log.id} className="hover:bg-blue-50/30 transition-colors group">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span className="whitespace-nowrap">{log.createdAt ? new Date(log.createdAt).toLocaleString() : '—'}</span>
+                        </div>
                       </td>
-                      <td className="px-4 py-3 font-mono text-sm">{log.action}</td>
-                      <td className="px-4 py-3 text-sm">
-                        {log.userName || log.userEmail || '—'}
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-3 py-1 rounded-lg text-xs font-bold border font-mono ${getActionBadgeColor(log.action || '')}`}>
+                          {log.action || '—'}
+                        </span>
                       </td>
-                      <td className="px-4 py-3 text-sm">
-                        {log.resourceType && log.resourceId
-                          ? `${log.resourceType} / ${String(log.resourceId).slice(0, 8)}…`
-                          : '—'}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2 text-sm">
+                          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gray-400 to-gray-600 flex items-center justify-center text-white text-xs font-semibold">
+                            {(log.userName || log.userEmail || '?').charAt(0).toUpperCase()}
+                          </div>
+                          <span className="text-gray-700 font-medium">{log.userName || log.userEmail || 'System'}</span>
+                        </div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">
-                        {log.details != null ? (typeof log.details === 'object' ? JSON.stringify(log.details) : String(log.details)) : '—'}
+                      <td className="px-6 py-4">
+                        {log.resourceType && log.resourceId ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium px-2 py-1 rounded bg-gray-100 text-gray-700">{log.resourceType}</span>
+                            <span className="text-xs font-mono text-gray-500">{String(log.resourceId).slice(0, 8)}…</span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="max-w-xs">
+                          {log.details != null ? (
+                            <div className="group/expand relative">
+                              <p className="text-sm text-gray-600 truncate font-mono">
+                                {typeof log.details === 'object' ? JSON.stringify(log.details).slice(0, 50) : String(log.details).slice(0, 50)}
+                                {(typeof log.details === 'object' ? JSON.stringify(log.details).length : String(log.details).length) > 50 && '…'}
+                              </p>
+                              <div className="absolute left-0 top-full mt-1 z-10 hidden group-hover/expand:block bg-gray-900 text-white text-xs rounded-lg p-2 max-w-md break-words shadow-xl">
+                                {typeof log.details === 'object' ? JSON.stringify(log.details, null, 2) : String(log.details)}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -292,32 +415,32 @@ export default function AdminAuditPage() {
               </table>
             )}
           </div>
-          <div className="px-4 py-3 border-t flex flex-wrap items-center justify-between gap-2">
-            <span className="text-sm text-gray-500">
-              Showing {startRow}–{endRow} of {data.total} log entries
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1 || loading}
-                className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-              >
-                Previous
-              </button>
-              <span className="text-sm text-gray-600">
-                Page {page} of {totalPages}
+          {data.logs.length > 0 && (
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex flex-wrap items-center justify-between gap-3">
+              <span className="text-sm font-medium text-gray-700">
+                Showing <span className="font-bold text-gray-900">{startRow}</span>–<span className="font-bold text-gray-900">{endRow}</span> of <span className="font-bold text-gray-900">{data.total}</span> entries
               </span>
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages || loading}
-                className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-              >
-                Next
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1 || loading}
+                  className="min-w-[2.25rem] px-3 py-2 rounded-lg text-sm font-semibold border-2 border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300 disabled:opacity-40 disabled:pointer-events-none transition-all shadow-sm"
+                >
+                  Previous
+                </button>
+                <span className="text-sm font-medium text-gray-600 px-3">Page {page} of {totalPages}</span>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages || loading}
+                  className="min-w-[2.25rem] px-3 py-2 rounded-lg text-sm font-semibold border-2 border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300 disabled:opacity-40 disabled:pointer-events-none transition-all shadow-sm"
+                >
+                  Next
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </ProtectedRoute>

@@ -138,16 +138,16 @@ export default function CreateTicketPage() {
 
   return (
     <ProtectedRoute allowedRoles={['user', 'admin']}>
-      <div className="min-h-screen bg-gray-50 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
-        <h1 className="text-3xl font-bold mb-6">Create IT Support Ticket</h1>
-        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow max-w-3xl">
-          <div className="space-y-4">
+      <div className="panel-page">
+        <h1 className="text-2xl font-bold text-gray-900 tracking-tight mb-6">Create IT Support Ticket</h1>
+        <form onSubmit={handleSubmit} className="panel-card max-w-3xl">
+          <div className="space-y-5">
             <div>
-              <label className="block text-sm font-medium mb-1">Request Type *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Request Type *</label>
               <select
                 value={formData.requestType}
                 onChange={(e) => setFormData({ ...formData, requestType: e.target.value })}
-                className="w-full px-3 py-2 border rounded-md"
+                className="select-field-tickets"
                 required
               >
                 <option value="">Select request type</option>
@@ -160,23 +160,23 @@ export default function CreateTicketPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Title *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Title *</label>
               <input
                 type="text"
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="w-full px-3 py-2 border rounded-md"
+                className="input-field-tickets"
                 required
                 placeholder="Brief description of the issue"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Description *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Description *</label>
               <textarea
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-3 py-2 border rounded-md"
+                className="input-field-tickets min-h-[140px] resize-y"
                 rows={6}
                 required
                 placeholder="Detailed description of the issue, steps to reproduce, etc."
@@ -184,22 +184,22 @@ export default function CreateTicketPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Affected System</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Affected System</label>
               <input
                 type="text"
                 value={formData.affectedSystem}
                 onChange={(e) => setFormData({ ...formData, affectedSystem: e.target.value })}
-                className="w-full px-3 py-2 border rounded-md"
+                className="input-field-tickets"
                 placeholder="e.g., Windows 10, Outlook, Network"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Priority *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Priority *</label>
               <select
                 value={formData.priority}
                 onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                className="w-full px-3 py-2 border rounded-md"
+                className="select-field-tickets"
                 required
               >
                 {PRIORITIES.map((priority) => (
@@ -211,26 +211,26 @@ export default function CreateTicketPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Category</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Category</label>
               <input
                 type="text"
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="w-full px-3 py-2 border rounded-md"
+                className="input-field-tickets"
                 placeholder="Optional category"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Attachments</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Attachments</label>
               <input
                 type="file"
                 multiple
                 onChange={handleFileChange}
-                className="w-full px-3 py-2 border rounded-md"
+                className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 file:transition-colors"
                 accept="image/*,.pdf,.doc,.docx,.txt,.log,.csv"
               />
-              <p className="text-xs text-gray-500 mt-1">Accepted: Images, PDF, DOC, DOCX, TXT, LOG, CSV (Max 10MB per file)</p>
+              <p className="text-xs text-gray-500 mt-1.5">Images, PDF, DOC, DOCX, TXT, LOG, CSV (max 10MB per file)</p>
               
               {files.length > 0 && (
                 <div className="mt-2 space-y-2">
@@ -239,8 +239,8 @@ export default function CreateTicketPage() {
                     const isImage = file.type.startsWith('image/')
                     
                     return (
-                      <div key={index} className={`flex items-center justify-between p-2 rounded border ${
-                        fileStatus?.status === 'success' ? 'bg-green-50 border-green-200' :
+                      <div key={index} className={`flex items-center justify-between p-3 rounded-xl border ${
+                        fileStatus?.status === 'success' ? 'bg-emerald-50 border-emerald-200' :
                         fileStatus?.status === 'error' ? 'bg-red-50 border-red-200' :
                         fileStatus?.status === 'uploading' ? 'bg-blue-50 border-blue-200' :
                         'bg-gray-50 border-gray-200'
@@ -294,20 +294,20 @@ export default function CreateTicketPage() {
               )}
             </div>
 
-            {error && <p className="text-red-500 text-sm">{error}</p>}
+            {error && <p className="text-red-600 text-sm font-medium">{error}</p>}
 
-            <div className="flex gap-4">
+            <div className="flex flex-wrap gap-3 pt-2">
               <button
                 type="submit"
                 disabled={loading || uploading}
-                className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                className="btn-primary-tickets disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {uploading ? 'Uploading files...' : loading ? 'Creating...' : 'Create Ticket'}
               </button>
               <button
                 type="button"
                 onClick={() => router.back()}
-                className="bg-gray-300 text-gray-700 px-6 py-2 rounded-md hover:bg-gray-400"
+                className="btn-secondary"
               >
                 Cancel
               </button>
