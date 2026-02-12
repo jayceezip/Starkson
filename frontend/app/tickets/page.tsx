@@ -31,6 +31,7 @@ export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
+  const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     setMounted(true)
@@ -59,14 +60,35 @@ export default function TicketsPage() {
     fetchTickets()
   }, [user, router, mounted])
 
-  const totalPages = Math.max(1, Math.ceil(tickets.length / PAGE_SIZE))
-  const start = (page - 1) * PAGE_SIZE
-  const paginatedTickets = tickets.slice(start, start + PAGE_SIZE)
+  // Keyword search: split query into words, match any ticket field (case-insensitive)
+  const keywords = searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  const filteredTickets = keywords.length === 0
+    ? tickets
+    : tickets.filter((t) => {
+        const searchText = [
+          t.ticketNumber,
+          t.title,
+          t.requestType,
+          t.status,
+          t.priority,
+          t.createdByName,
+          t.assignedToName,
+          t.convertedIncidentNumber,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+        return keywords.every((kw) => searchText.includes(kw))
+      })
 
-  // Clamp page when list shrinks (e.g. after filter)
+  const totalPages = Math.max(1, Math.ceil(filteredTickets.length / PAGE_SIZE))
+  const start = (page - 1) * PAGE_SIZE
+  const paginatedTickets = filteredTickets.slice(start, start + PAGE_SIZE)
+
+  // Clamp page when list shrinks (e.g. after filter/search)
   useEffect(() => {
     if (page > totalPages && totalPages >= 1) setPage(totalPages)
-  }, [tickets.length, totalPages, page])
+  }, [filteredTickets.length, totalPages, page])
 
   if (!mounted || !user) {
     return (
@@ -129,10 +151,30 @@ export default function TicketsPage() {
           )}
         </div>
 
+        {/* Search */}
+        <div className="panel-card mb-6">
+          <label htmlFor="ticket-search" className="block text-sm font-medium text-gray-700 mb-2">Search tickets</label>
+          <input
+            id="ticket-search"
+            type="search"
+            placeholder="Search by ticket #, title, type, status, priority, assignee, creator..."
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setPage(1) }}
+            className="w-full max-w-xl px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+          {searchQuery.trim() && (
+            <p className="mt-2 text-sm text-gray-500">
+              {filteredTickets.length} ticket{filteredTickets.length !== 1 ? 's' : ''} match your search
+            </p>
+          )}
+        </div>
+
         {loading ? (
           <div className="text-center py-8 text-gray-500">Loading...</div>
         ) : tickets.length === 0 ? (
           <div className="panel-card text-center py-8 text-gray-500">No tickets found</div>
+        ) : filteredTickets.length === 0 ? (
+          <div className="panel-card text-center py-8 text-gray-500">No tickets match your search. Try different keywords.</div>
         ) : (
           <>
             <div className="panel-card overflow-hidden p-0 border border-gray-200 rounded-xl">
@@ -231,7 +273,8 @@ export default function TicketsPage() {
               </div>
               <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between flex-wrap gap-2">
                 <p className="text-sm text-gray-600">
-                  Showing {tickets.length === 0 ? 0 : start + 1}–{Math.min(start + PAGE_SIZE, tickets.length)} of {tickets.length} tickets
+                  Showing {filteredTickets.length === 0 ? 0 : start + 1}–{Math.min(start + PAGE_SIZE, filteredTickets.length)} of {filteredTickets.length} tickets
+                  {searchQuery.trim() ? ` (filtered from ${tickets.length})` : ''}
                 </p>
                 <div className="flex items-center gap-2">
                   <button
