@@ -421,8 +421,8 @@ export default function IncidentDetailsPage() {
                           className="flex-1 min-w-0 px-2 py-1 border rounded text-sm"
                           placeholder="e.g. Workstation, Server"
                         />
-                        <button type="button" onClick={() => handleSaveAffected('asset')} className="text-sm bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700">Save</button>
-                        <button type="button" onClick={() => { setEditingAffected(null) }} className="text-sm border px-2 py-1 rounded hover:bg-gray-50">Cancel</button>
+                        <button type="button" onClick={() => handleSaveAffected('asset')} className="btn-primary-tickets text-sm px-3 py-1.5">Save</button>
+                        <button type="button" onClick={() => { setEditingAffected(null) }} className="btn-secondary text-sm px-3 py-1.5">Cancel</button>
                       </div>
                     ) : (
                       <p className="mt-1">
@@ -447,8 +447,8 @@ export default function IncidentDetailsPage() {
                           className="flex-1 min-w-0 px-2 py-1 border rounded text-sm"
                           placeholder="Name of affected user"
                         />
-                        <button type="button" onClick={() => handleSaveAffected('user')} className="text-sm bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700">Save</button>
-                        <button type="button" onClick={() => { setEditingAffected(null) }} className="text-sm border px-2 py-1 rounded hover:bg-gray-50">Cancel</button>
+                        <button type="button" onClick={() => handleSaveAffected('user')} className="btn-primary-tickets text-sm px-3 py-1.5">Save</button>
+                        <button type="button" onClick={() => { setEditingAffected(null) }} className="btn-secondary text-sm px-3 py-1.5">Cancel</button>
                       </div>
                     ) : (
                       <p className="mt-1">
