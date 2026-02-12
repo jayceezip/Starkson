@@ -30,6 +30,7 @@ export default function IncidentsPage() {
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
+  const [searchQuery, setSearchQuery] = useState('')
   const [filters, setFilters] = useState({ status: '', severity: '', category: '' })
 
   useEffect(() => {
@@ -64,13 +65,34 @@ export default function IncidentsPage() {
     fetchIncidents()
   }, [user, router, filters, mounted])
 
-  const totalPages = Math.max(1, Math.ceil(incidents.length / PAGE_SIZE))
+  // Keyword search: match incident number, title, category, severity, status, affected asset/user, source ticket
+  const keywords = searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  const filteredIncidents = keywords.length === 0
+    ? incidents
+    : incidents.filter((inc) => {
+        const searchText = [
+          inc.incidentNumber,
+          inc.title,
+          inc.category,
+          inc.severity,
+          inc.status,
+          inc.affectedAsset,
+          inc.affectedUser,
+          inc.sourceTicketNumber,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+        return keywords.every((kw) => searchText.includes(kw))
+      })
+
+  const totalPages = Math.max(1, Math.ceil(filteredIncidents.length / PAGE_SIZE))
   const start = (page - 1) * PAGE_SIZE
-  const paginatedIncidents = incidents.slice(start, start + PAGE_SIZE)
+  const paginatedIncidents = filteredIncidents.slice(start, start + PAGE_SIZE)
 
   useEffect(() => {
     if (page > totalPages && totalPages >= 1) setPage(totalPages)
-  }, [incidents.length, totalPages, page])
+  }, [filteredIncidents.length, totalPages, page])
 
   if (!mounted || !user) {
     return (
@@ -119,6 +141,24 @@ export default function IncidentsPage() {
             >
               Create Incident
             </Link>
+          )}
+        </div>
+
+        {/* Search */}
+        <div className="panel-card mb-6">
+          <label htmlFor="incident-search" className="block text-sm font-medium text-gray-700 mb-2">Search incidents</label>
+          <input
+            id="incident-search"
+            type="search"
+            placeholder="Search by incident #, title, category, severity, status, affected asset/user, source ticket..."
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setPage(1) }}
+            className="w-full max-w-xl px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 mb-4"
+          />
+          {searchQuery.trim() && (
+            <p className="text-sm text-gray-500 mb-4">
+              {filteredIncidents.length} incident{filteredIncidents.length !== 1 ? 's' : ''} match your search
+            </p>
           )}
         </div>
 
@@ -177,6 +217,8 @@ export default function IncidentsPage() {
           <div className="text-center py-8 text-gray-500">Loading...</div>
         ) : incidents.length === 0 ? (
           <div className="panel-card text-center py-8 text-gray-500">No incidents found</div>
+        ) : filteredIncidents.length === 0 ? (
+          <div className="panel-card text-center py-8 text-gray-500">No incidents match your search. Try different keywords.</div>
         ) : (
           <>
             <div className="panel-card overflow-hidden p-0 border border-gray-200 rounded-xl">
@@ -257,7 +299,8 @@ export default function IncidentsPage() {
               </div>
               <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between flex-wrap gap-2">
                 <p className="text-sm text-gray-600">
-                  Showing {incidents.length === 0 ? 0 : start + 1}–{Math.min(start + PAGE_SIZE, incidents.length)} of {incidents.length} incidents
+                  Showing {filteredIncidents.length === 0 ? 0 : start + 1}–{Math.min(start + PAGE_SIZE, filteredIncidents.length)} of {filteredIncidents.length} incidents
+                  {searchQuery.trim() ? ` (filtered from ${incidents.length})` : ''}
                 </p>
                 <div className="flex items-center gap-2">
                   <button

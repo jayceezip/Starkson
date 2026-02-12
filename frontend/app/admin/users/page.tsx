@@ -29,6 +29,7 @@ export default function AdminUsersPage() {
   const [mounted, setMounted] = useState(false)
   const [users, setUsers] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
   const [editingRole, setEditingRole] = useState<string | null>(null)
   const [newRole, setNewRole] = useState<string>('')
 
@@ -56,6 +57,15 @@ export default function AdminUsersPage() {
     }
     fetchUsers()
   }, [mounted, user, router])
+
+  // Keyword search: match name, email, role (case-insensitive)
+  const keywords = searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  const filteredUsers = keywords.length === 0
+    ? users
+    : users.filter((u) => {
+        const searchText = [u.name, u.email, u.role, u.status].filter(Boolean).join(' ').toLowerCase()
+        return keywords.every((kw) => searchText.includes(kw))
+      })
 
   const handleUpdateRole = async (userId: string) => {
     if (!newRole) return
@@ -88,8 +98,30 @@ export default function AdminUsersPage() {
         </div>
         <p className="text-gray-500 mb-6">View all users and assign or update roles.</p>
 
+        {/* Search */}
+        <div className="panel-card mb-6">
+          <label htmlFor="user-search" className="block text-sm font-medium text-gray-700 mb-2">Search users</label>
+          <input
+            id="user-search"
+            type="search"
+            placeholder="Search by name, email, role, or status..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full max-w-xl px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+          {searchQuery.trim() && (
+            <p className="mt-2 text-sm text-gray-500">
+              {filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''} match your search
+            </p>
+          )}
+        </div>
+
         {loading ? (
           <div className="panel-card text-center py-12 text-gray-500">Loading...</div>
+        ) : users.length === 0 ? (
+          <div className="panel-card text-center py-12 text-gray-500">No users found</div>
+        ) : filteredUsers.length === 0 ? (
+          <div className="panel-card text-center py-12 text-gray-500">No users match your search. Try different keywords.</div>
         ) : (
           <div className="panel-card overflow-hidden p-0">
             <div className="overflow-x-auto">
@@ -104,7 +136,7 @@ export default function AdminUsersPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {users.map((u) => (
+                  {filteredUsers.map((u) => (
                     <tr key={u.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 font-medium">{u.name}</td>
                       <td className="px-4 py-3 text-gray-600">{u.email}</td>
@@ -157,6 +189,11 @@ export default function AdminUsersPage() {
                 </tbody>
               </table>
             </div>
+            {searchQuery.trim() && (
+              <div className="px-4 py-2 border-t border-gray-200 bg-gray-50 text-sm text-gray-600">
+                Showing {filteredUsers.length} of {users.length} users
+              </div>
+            )}
           </div>
         )}
       </div>
