@@ -71,7 +71,7 @@ interface Attachment {
   created_at?: string
 }
 
-const STATUS_OPTIONS = ['new', 'assigned', 'in_progress', 'waiting_for_user', 'resolved', 'closed']
+const STATUS_OPTIONS = ['new', 'assigned', 'in_progress', 'waiting for user', 'resolved', 'closed']
 
 export default function TicketDetailsPage() {
   const params = useParams()
