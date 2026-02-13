@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef, Fragment } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { Listbox, Transition } from '@headlessui/react'
 import api, { getApiBaseUrl } from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser, hasRole } from '@/lib/auth'
@@ -71,7 +72,103 @@ interface Attachment {
   created_at?: string
 }
 
-const STATUS_OPTIONS = ['new', 'assigned', 'in_progress', 'waiting for user', 'resolved', 'closed']
+const STATUS_OPTIONS = ['new', 'assigned', 'in_progress', 'waiting_for_user', 'resolved', 'closed']
+
+// Modern Status Select Component
+const ModernStatusSelect = ({ 
+  value, 
+  onChange, 
+  disabled 
+}: { 
+  value: string; 
+  onChange: (value: string) => void; 
+  disabled?: boolean;
+}) => {
+  const getStatusColor = (status: string) => {
+    const colors: Record<string, { bg: string; text: string; dot: string; ring: string }> = {
+      'new': { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500', ring: 'ring-blue-500' },
+      'assigned': { bg: 'bg-purple-50', text: 'text-purple-700', dot: 'bg-purple-500', ring: 'ring-purple-500' },
+      'in_progress': { bg: 'bg-yellow-50', text: 'text-yellow-700', dot: 'bg-yellow-500', ring: 'ring-yellow-500' },
+      'waiting_for_user': { bg: 'bg-orange-50', text: 'text-orange-700', dot: 'bg-orange-500', ring: 'ring-orange-500' },
+      'resolved': { bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500', ring: 'ring-green-500' },
+      'closed': { bg: 'bg-gray-50', text: 'text-gray-700', dot: 'bg-gray-500', ring: 'ring-gray-500' },
+      'converted_to_incident': { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500', ring: 'ring-red-500' },
+    };
+    return colors[status] || { bg: 'bg-gray-50', text: 'text-gray-700', dot: 'bg-gray-500', ring: 'ring-gray-500' };
+  };
+
+  const currentStatus = getStatusColor(value);
+
+  return (
+    <Listbox value={value} onChange={onChange} disabled={disabled}>
+      <div className="relative mt-1">
+        <Listbox.Button className={`
+          relative w-full flex items-center justify-between gap-2 px-4 py-2.5
+          ${currentStatus.bg} ${currentStatus.text}
+          rounded-xl border border-transparent
+          hover:border-gray-200 hover:shadow-md
+          focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
+          transition-all duration-200 ease-in-out
+          ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+          font-medium text-left
+        `}>
+          <div className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${currentStatus.dot}`} />
+            <span>{value.replace(/_/g, ' ')}</span>
+          </div>
+          <svg
+            className="w-4 h-4 transition-transform duration-200 ui-open:rotate-180"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </Listbox.Button>
+        
+        <Transition
+          as={Fragment}
+          leave="transition ease-in duration-100"
+          leaveFrom="opacity-100"
+          leaveTo="opacity-0"
+        >
+          <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-60 overflow-auto focus:outline-none">
+            {STATUS_OPTIONS.map((status) => {
+              const colors = getStatusColor(status);
+              return (
+                <Listbox.Option
+                  key={status}
+                  value={status}
+                  className={({ active }) => `
+                    relative cursor-pointer select-none py-2.5 px-4
+                    ${active ? 'bg-gray-50' : ''}
+                    transition-colors duration-150
+                  `}
+                >
+                  {({ selected }) => (
+                    <div className="flex items-center gap-3">
+                      <span className={`w-2 h-2 rounded-full ${colors.dot}`} />
+                      <span className={`flex-1 text-sm font-medium ${
+                        selected ? colors.text : 'text-gray-700'
+                      }`}>
+                        {status.replace(/_/g, ' ')}
+                      </span>
+                      {selected && (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                  )}
+                </Listbox.Option>
+              );
+            })}
+          </Listbox.Options>
+        </Transition>
+      </div>
+    </Listbox>
+  );
+};
 
 export default function TicketDetailsPage() {
   const params = useParams()
@@ -80,6 +177,9 @@ export default function TicketDetailsPage() {
   const [mounted, setMounted] = useState(false)
   const [ticket, setTicket] = useState<Ticket | null>(null)
   const [loading, setLoading] = useState(true)
+  const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null)
+  const [showStatusConfirmModal, setShowStatusConfirmModal] = useState(false)
   const [comment, setComment] = useState('')
   const [isInternal, setIsInternal] = useState(false)
   const [showConvertModal, setShowConvertModal] = useState(false)
@@ -102,12 +202,6 @@ export default function TicketDetailsPage() {
   const fetchTicket = useCallback(async () => {
     try {
       const response = await api.get(`/tickets/${params.id}`)
-      console.log('Ticket data received:', {
-        id: response.data.id,
-        isConverted: response.data.isConverted,
-        convertedIncidentId: response.data.convertedIncidentId,
-        convertedIncidentNumber: response.data.convertedIncidentNumber
-      })
       setTicket(response.data)
     } catch (error) {
       console.error('Failed to fetch ticket:', error)
@@ -161,14 +255,12 @@ export default function TicketDetailsPage() {
     if (!comment.trim() && selectedFiles.length === 0) return
 
     try {
-      // Add comment if there's text
       if (comment.trim()) {
         await api.post(`/tickets/${params.id}/comments`, { comment, isInternal })
         setComment('')
         setIsInternal(false)
       }
 
-      // Upload files if any
       if (selectedFiles.length > 0) {
         setUploadingFiles(true)
         const uploadPromises = selectedFiles.map(async (file, index) => {
@@ -206,7 +298,6 @@ export default function TicketDetailsPage() {
           console.error('Some file uploads failed:', err)
         }
         
-        // Clear files and status after a short delay to show success messages
         setTimeout(() => {
           setSelectedFiles([])
           setFileUploadStatus({})
@@ -222,12 +313,47 @@ export default function TicketDetailsPage() {
   }
 
   const handleStatusChange = async (newStatus: string) => {
+    if (!ticket || updatingStatus) return;
+    
+    // Show confirmation modal for resolved and closed statuses
+    if (newStatus === 'resolved' || newStatus === 'closed') {
+      setPendingStatus(newStatus);
+      setShowStatusConfirmModal(true);
+    } else {
+      await executeStatusChange(newStatus);
+    }
+  }
+
+  const executeStatusChange = async (newStatus: string) => {
+    if (!ticket || updatingStatus) return;
+    
+    setUpdatingStatus(true);
     try {
       await api.put(`/tickets/${params.id}`, { status: newStatus })
+      // Optimistically update the UI
+      setTicket(prev => prev ? { ...prev, status: newStatus } : null)
+      // Fetch in background to sync with server
       fetchTicket()
     } catch (error) {
       console.error('Failed to update status:', error)
+      // Revert optimistic update on error
+      fetchTicket()
+    } finally {
+      setUpdatingStatus(false);
+      setPendingStatus(null);
+      setShowStatusConfirmModal(false);
     }
+  }
+
+  const handleStatusConfirm = () => {
+    if (pendingStatus) {
+      executeStatusChange(pendingStatus);
+    }
+  }
+
+  const handleStatusCancel = () => {
+    setPendingStatus(null);
+    setShowStatusConfirmModal(false);
   }
 
   const handleConvertToIncident = async (e: React.FormEvent) => {
@@ -248,7 +374,6 @@ export default function TicketDetailsPage() {
     try {
       const response = await api.post(`/tickets/${params.id}/convert`, convertData)
       const { incidentId, incidentNumber } = response.data || {}
-      // Update ticket state immediately so the page shows "Converted to Incident" without waiting for a full refetch
       setTicket((prev) => (prev ? {
         ...prev,
         status: 'converted_to_incident',
@@ -257,7 +382,6 @@ export default function TicketDetailsPage() {
         convertedIncidentNumber: incidentNumber ?? prev.convertedIncidentNumber,
       } : prev))
       setShowConvertModal(false)
-      // Refetch in background to load incident timeline etc.; do not block the UI
       fetchTicket()
     } catch (error: any) {
       console.error('Failed to convert ticket:', error)
@@ -303,7 +427,6 @@ export default function TicketDetailsPage() {
     setDeleting(true)
     try {
       await api.delete(`/tickets/${params.id}`)
-      alert('Ticket deleted successfully')
       router.push('/tickets')
     } catch (error: any) {
       console.error('Failed to delete ticket:', error)
@@ -311,6 +434,24 @@ export default function TicketDetailsPage() {
       setDeleting(false)
     }
   }
+
+  const getStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      'new': 'bg-blue-500',
+      'assigned': 'bg-purple-500',
+      'in_progress': 'bg-yellow-500',
+      'waiting for user': 'bg-orange-500',
+      'waiting_for_user': 'bg-orange-500',
+      'resolved': 'bg-green-500',
+      'closed': 'bg-gray-500',
+      'converted_to_incident': 'bg-red-500',
+    };
+    return colors[status] || 'bg-gray-500';
+  };
+
+  const normalizeStatus = (status: string) => {
+    return status.replace(/ /g, '_');
+  };
 
   if (!mounted || !user || loading || !ticket) {
     return (
@@ -331,6 +472,10 @@ export default function TicketDetailsPage() {
                     (hasRole(user, 'it_support', 'admin') || (user?.id === ticket.createdBy))
   const canModify = canEdit && !ticket.isConverted && !ticket.convertedIncidentId && 
                     !['resolved', 'closed'].includes(ticket.status)
+  const canConvert = hasRole(user, 'it_support', 'admin') && 
+                     !ticket.isConverted && 
+                     !ticket.convertedIncidentId && 
+                     !['resolved', 'closed'].includes(ticket.status)
 
   return (
     <ProtectedRoute>
@@ -346,6 +491,7 @@ export default function TicketDetailsPage() {
                 <button
                   onClick={() => setShowEditModal(true)}
                   className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition-colors"
+                  disabled={updatingStatus}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -357,6 +503,7 @@ export default function TicketDetailsPage() {
                 <button
                   onClick={() => setShowDeleteConfirm(true)}
                   className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-white bg-red-600 hover:bg-red-700 shadow-sm transition-colors"
+                  disabled={updatingStatus}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -366,16 +513,17 @@ export default function TicketDetailsPage() {
               )}
               {hasRole(user, 'it_support', 'admin') && (
                 <>
-                  {(!ticket.isConverted && !ticket.convertedIncidentId) ? (
+                  {canConvert ? (
                     <button
                       onClick={() => setShowConvertModal(true)}
                       className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-white bg-red-600 hover:bg-red-700 shadow-sm transition-colors"
+                      disabled={updatingStatus}
                     >
                       Convert to Incident
                     </button>
-                  ) : (
+                  ) : ticket.isConverted || ticket.convertedIncidentId ? (
                     <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 rounded-xl border border-gray-200">
-                      <span className="text-gray-600">Already converted to:</span>
+                      <span className="text-gray-600">Converted to:</span>
                       {ticket.convertedIncidentId ? (
                         <Link 
                           href={`/incidents/${ticket.convertedIncidentId}`}
@@ -389,7 +537,7 @@ export default function TicketDetailsPage() {
                         </span>
                       )}
                     </div>
-                  )}
+                  ) : null}
                 </>
               )}
             </div>
@@ -402,7 +550,6 @@ export default function TicketDetailsPage() {
                 <p className="text-gray-700 whitespace-pre-wrap text-sm leading-relaxed">{ticket.description || 'No description provided'}</p>
               </div>
 
-              {/* Timeline Section - Show if ticket is converted or has timeline entries */}
               {(ticket.isConverted || (ticket.incidentTimeline && ticket.incidentTimeline.length > 0)) ? (
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                   <h2 className="text-xl font-bold mb-4">
@@ -414,7 +561,6 @@ export default function TicketDetailsPage() {
                     )}
                   </h2>
                   <div className="space-y-4">
-                    {/* Incident Timeline (for users when ticket is converted) */}
                     {ticket.incidentTimeline && ticket.incidentTimeline.length > 0 ? (
                       ticket.incidentTimeline.map((t: any) => {
                       const timelineDate = t.created_at || t.createdAt
@@ -469,11 +615,9 @@ export default function TicketDetailsPage() {
 
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <h2 className="text-lg font-bold text-gray-900 mb-4">Comments</h2>
-                {/* Scrollable comments thread */}
                 <div className="max-h-96 overflow-y-auto space-y-4 mb-4 pr-2 border-b border-gray-200 pb-4">
                   {ticket.comments && ticket.comments.length > 0 ? (
                     ticket.comments.map((c: any) => {
-                      // Handle both created_at (from DB) and createdAt (camelCase)
                       const commentDate = c.created_at || c.createdAt
                       let formattedDate = 'Invalid Date'
                       
@@ -526,7 +670,6 @@ export default function TicketDetailsPage() {
                     placeholder="Add a comment..."
                   />
                   
-                  {/* File upload */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Attach Files</label>
                     <input
@@ -630,7 +773,6 @@ export default function TicketDetailsPage() {
                       const originalName = att.originalName || att.original_name || 'Unknown'
                       const size = att.size || 0
                       const token = localStorage.getItem('token')
-                      // Use Cloudinary URL directly if available, otherwise use API endpoint
                       const cloudinaryPath = att.filePath || att.file_path
                       const isCloudinaryUrl = cloudinaryPath && cloudinaryPath.startsWith('http')
                       const viewUrl = isCloudinaryUrl 
@@ -641,8 +783,6 @@ export default function TicketDetailsPage() {
                       const handleDownload = async (e: React.MouseEvent) => {
                         e.preventDefault()
                         
-                        // Always use the backend download endpoint for security and proper authentication
-                        // This ensures RBAC checks and handles both Cloudinary and local files
                         try {
                           const response = await fetch(downloadUrl, {
                             headers: { 'Authorization': `Bearer ${token}` }
@@ -681,7 +821,6 @@ export default function TicketDetailsPage() {
                                   className="w-full h-full object-cover"
                                   loading="lazy"
                                   onError={(e) => {
-                                    // Fallback if image fails to load
                                     const target = e.target as HTMLImageElement
                                     target.style.display = 'none'
                                     const parent = target.parentElement
@@ -730,26 +869,27 @@ export default function TicketDetailsPage() {
                   <div>
                     <span className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Status</span>
                     {canModify && hasRole(user, 'it_support', 'admin') ? (
-                      <select
+                      <ModernStatusSelect
                         value={ticket.status}
-                        onChange={(e) => handleStatusChange(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mt-1 cursor-pointer transition-shadow"
-                      >
-                        {STATUS_OPTIONS.map((s) => (
-                          <option key={s} value={s}>{s.replace('_', ' ')}</option>
-                        ))}
-                      </select>
+                        onChange={handleStatusChange}
+                        disabled={updatingStatus}
+                      />
                     ) : (
-                      <p className="mt-1 text-gray-900 font-medium">{ticket.status ? ticket.status.replace(/_/g, ' ') : 'new'}</p>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className={`w-2.5 h-2.5 rounded-full ${getStatusColor(ticket.status)}`} />
+                        <p className="text-gray-900 font-medium capitalize">
+                          {ticket.status ? ticket.status.replace(/_/g, ' ') : 'New'}
+                        </p>
+                      </div>
                     )}
                   </div>
                   <div>
                     <span className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Priority</span>
-                    <p className="mt-1 text-gray-900">{ticket.priority || 'medium'}</p>
+                    <p className="mt-1 text-gray-900 capitalize">{ticket.priority || 'medium'}</p>
                   </div>
                   <div>
                     <span className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Request Type</span>
-                    <p className="mt-1 text-gray-900">
+                    <p className="mt-1 text-gray-900 capitalize">
                       {(ticket.request_type || ticket.requestType)
                         ? (ticket.request_type || ticket.requestType || '').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
                         : 'N/A'}
@@ -804,6 +944,61 @@ export default function TicketDetailsPage() {
             </div>
           </div>
         </div>
+
+        {/* Status Change Confirmation Modal */}
+        {showStatusConfirmModal && pendingStatus && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-xl shadow-xl max-w-md w-full border border-gray-100">
+              <div className="flex items-center gap-3 mb-4">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                  pendingStatus === 'resolved' ? 'bg-green-100' : 'bg-gray-100'
+                }`}>
+                  {pendingStatus === 'resolved' ? (
+                    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  )}
+                </div>
+                <h2 className="text-xl font-bold text-gray-900">
+                  {pendingStatus === 'resolved' ? 'Resolve Ticket' : 'Close Ticket'}
+                </h2>
+              </div>
+              
+              <div className="space-y-4">
+                <p className="text-gray-600">
+                  {pendingStatus === 'resolved' 
+                    ? 'Are you sure you want to mark this ticket as resolved? This will indicate that the issue has been fixed.'
+                    : 'Are you sure you want to close this ticket? Closed tickets cannot be edited or reopened.'}
+                </p>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={handleStatusConfirm}
+                    disabled={updatingStatus}
+                    className={`inline-flex items-center justify-center px-5 py-2.5 rounded-xl font-medium text-white shadow-sm transition-colors ${
+                      pendingStatus === 'resolved' 
+                        ? 'bg-green-600 hover:bg-green-700' 
+                        : 'bg-gray-600 hover:bg-gray-700'
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    {updatingStatus ? 'Updating...' : `Yes, ${pendingStatus === 'resolved' ? 'Resolve' : 'Close'} Ticket`}
+                  </button>
+                  <button
+                    onClick={handleStatusCancel}
+                    disabled={updatingStatus}
+                    className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl font-medium border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Edit Modal */}
         {showEditModal && (
@@ -884,11 +1079,11 @@ export default function TicketDetailsPage() {
         {/* Convert Modal */}
         {showConvertModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded-lg max-w-md w-full">
-              <h2 className="text-xl font-bold mb-4">Convert Ticket to Incident</h2>
+            <div className="bg-white p-6 rounded-xl shadow-xl max-w-md w-full border border-gray-100">
+              <h2 className="text-xl font-bold mb-4 text-red-600">Convert Ticket to Incident</h2>
               <form onSubmit={handleConvertToIncident} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Incident Category *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Incident Category *</label>
                   <select
                     value={convertData.category}
                     onChange={(e) => setConvertData({ ...convertData, category: e.target.value })}
@@ -906,7 +1101,7 @@ export default function TicketDetailsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Severity *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Severity *</label>
                   <select
                     value={convertData.severity}
                     onChange={(e) => setConvertData({ ...convertData, severity: e.target.value })}
@@ -920,7 +1115,7 @@ export default function TicketDetailsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Description</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
                   <textarea
                     value={convertData.description}
                     onChange={(e) => setConvertData({ ...convertData, description: e.target.value })}

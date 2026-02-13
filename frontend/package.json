@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.9",
     "@supabase/supabase-js": "^2.95.3",
     "axios": "^1.6.0",
     "jspdf": "^4.1.0",

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { getStoredUser, clearStoredAuth, hasRole } from '@/lib/auth'
-import api from '@/lib/api' // Add this import
+import api from '@/lib/api'
 import { formatActionLabel, getActionIcon, timeAgo } from '@/lib/activity'
 import { useNotifications } from '@/context/NotificationContext'
 import type { ActivityItem } from '@/lib/activity'
@@ -394,30 +394,6 @@ export default function Sidebar({
                 {!collapsed && <span className="font-medium">Dashboard</span>}
               </Link>
 
-              {/* Notifications - all roles (own activity) */}
-              <Link
-                href="/notifications"
-                title="Notifications"
-                className={`
-                  flex items-center rounded-lg transition-colors relative
-                  ${collapsed ? 'justify-center p-3' : 'gap-3 px-4 py-3'}
-                  ${isActive('/notifications')
-                    ? 'bg-gray-700 text-white'
-                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                  }
-                `}
-              >
-                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
-                {!collapsed && <span className="font-medium">Notifications</span>}
-                {unreadCount >= 0 && (
-                  <span className={`absolute flex items-center justify-center rounded-full text-white text-xs font-medium min-w-[18px] h-[18px] px-1 ${collapsed ? 'top-1.5 right-1.5' : 'left-8 top-2.5'} ${unreadCount > 0 ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`}>
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
-                )}
-              </Link>
-
               {/* Tickets - User, IT Support, Admin */}
               {hasRole(user, 'user', 'it_support', 'admin') && (
                 <Link
@@ -499,42 +475,25 @@ export default function Sidebar({
             </div>
           </nav>
 
-          {/* User Info and Actions */}
+          {/* User Info and Actions - Clickable user info */}
           <div className={`border-t border-gray-700 space-y-3 ${collapsed ? 'p-2' : 'p-4'}`}>
-            {/* User Info */}
-            <div className={collapsed ? 'flex justify-center' : 'px-4 py-2'}>
-              <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'} mb-2`}>
-                <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center flex-shrink-0" title={collapsed ? `${user.name} · ${formatRole(user.role)}` : undefined}>
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                </div>
-                {!collapsed && (
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">{user.name}</p>
-                    <p className="text-xs text-gray-400 truncate">{formatRole(user.role)}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Profile Button */}
+            {/* Clickable User Info - redirects to profile */}
             <Link
               href="/profile"
-              title="Profile"
-              className={`
-                flex items-center rounded-lg transition-colors w-full
-                ${collapsed ? 'justify-center p-2' : 'gap-3 px-4 py-2'}
-                ${isActive('/profile')
-                  ? 'bg-gray-700 text-white'
-                  : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                }
-              `}
+              className={`flex items-center rounded-lg transition-colors hover:bg-gray-700 ${collapsed ? 'justify-center p-2' : 'gap-3 px-4 py-3'}`}
+              title={collapsed ? `${user.name} · ${formatRole(user.role)}` : undefined}
             >
-              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-              {!collapsed && <span className="font-medium">Profile</span>}
+              <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center flex-shrink-0">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </div>
+              {!collapsed && (
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-white truncate">{user.name}</p>
+                  <p className="text-xs text-gray-400 truncate">{formatRole(user.role)}</p>
+                </div>
+              )}
             </Link>
 
             {/* Logout Button */}

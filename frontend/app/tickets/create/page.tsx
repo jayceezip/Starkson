@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback,  useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import api, { getApiBaseUrl } from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 
@@ -15,11 +16,177 @@ const REQUEST_TYPES = [
 ]
 
 const PRIORITIES = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'urgent', label: 'Urgent' },
+  { value: 'low', label: 'Low', color: 'bg-gray-100 text-gray-700 border-gray-200', dot: 'bg-gray-500' },
+  { value: 'medium', label: 'Medium', color: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-500' },
+  { value: 'high', label: 'High', color: 'bg-orange-50 text-orange-700 border-orange-200', dot: 'bg-orange-500' },
+  { value: 'urgent', label: 'Urgent', color: 'bg-red-50 text-red-700 border-red-200', dot: 'bg-red-500' },
 ]
+
+// Modern Priority Select Component - FIXED
+const PrioritySelect = ({ value, onChange }: { value: string; onChange: (value: string) => void }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const selectedPriority = PRIORITIES.find(p => p.value === value) || PRIORITIES[1];
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={`
+          w-full flex items-center justify-between gap-2 px-4 py-2.5
+          ${selectedPriority.color}
+          rounded-xl border
+          hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+          transition-all duration-200
+          font-medium text-left
+        `}
+      >
+        <div className="flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full ${selectedPriority.dot}`} />
+          <span>{selectedPriority.label}</span>
+        </div>
+        <svg
+          className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className="absolute z-40 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-60 overflow-auto animate-in fade-in slide-in-from-top-2 duration-200">
+          {PRIORITIES.map((priority) => (
+            <button
+              key={priority.value}
+              type="button"
+              onClick={() => {
+                onChange(priority.value);
+                setIsOpen(false);
+              }}
+              className={`
+                w-full flex items-center gap-3 px-4 py-2.5
+                text-sm font-medium
+                hover:bg-gray-50
+                transition-colors duration-150
+                ${value === priority.value ? priority.color : 'text-gray-700'}
+              `}
+            >
+              <span className={`w-2 h-2 rounded-full ${priority.dot}`} />
+              <span className="flex-1 text-left">{priority.label}</span>
+              {value === priority.value && (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Modern File Attachment Component
+const FileAttachment = ({ file, index, onRemove, status, isUploading }: {
+  file: File;
+  index: number;
+  onRemove: () => void;
+  status?: { status: string; message?: string };
+  isUploading: boolean;
+}) => {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const isImage = file.type.startsWith('image/');
+
+  // Create preview for images
+  useState(() => {
+    if (isImage) {
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+      return () => URL.revokeObjectURL(url);
+    }
+  });
+
+  const getStatusConfig = () => {
+    switch (status?.status) {
+      case 'success':
+        return { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-600' };
+      case 'error':
+        return { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-600' };
+      case 'uploading':
+        return { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-600' };
+      default:
+        return { bg: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-600' };
+    }
+  };
+
+  const config = getStatusConfig();
+
+  return (
+    <div className={`group relative flex items-start gap-3 p-3 rounded-xl border ${config.bg} ${config.border} transition-all hover:shadow-md`}>
+      {/* File Icon/Preview */}
+      <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-white border border-gray-200 flex items-center justify-center overflow-hidden">
+        {isImage && previewUrl ? (
+          <img src={previewUrl} alt={file.name} className="w-full h-full object-cover" />
+        ) : (
+          <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+          </svg>
+        )}
+      </div>
+
+      {/* File Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-medium text-gray-900 truncate max-w-[200px] sm:max-w-xs">
+              {file.name}
+            </p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-xs text-gray-500">{(file.size / 1024).toFixed(2)} KB</span>
+              {status && (
+                <span className={`text-xs ${config.text} flex items-center gap-0.5`}>
+                  <span>
+                    {status.status === 'uploading' && 'Uploading...'}
+                    {status.status === 'success' && 'Uploaded'}
+                    {status.status === 'error' && (status.message || 'Failed')}
+                  </span>
+                </span>
+              )}
+            </div>
+          </div>
+          
+          {/* Remove Button */}
+          {!isUploading && (
+            <button
+              type="button"
+              onClick={onRemove}
+              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-200 rounded-full"
+              aria-label="Remove file"
+            >
+              <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function CreateTicketPage() {
   const router = useRouter()
@@ -36,11 +203,39 @@ export default function CreateTicketPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [dragActive, setDragActive] = useState(false)
+
+  const handleDrag = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true)
+    } else if (e.type === "dragleave") {
+      setDragActive(false)
+    }
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragActive(false)
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const droppedFiles = Array.from(e.dataTransfer.files)
+      const validFiles = droppedFiles.filter(file => {
+        if (file.size > 10 * 1024 * 1024) {
+          setError(`${file.name} is too large. Maximum size is 10MB.`)
+          return false
+        }
+        return true
+      })
+      setFiles(prev => [...prev, ...validFiles])
+    }
+  }, [])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const selectedFiles = Array.from(e.target.files)
-      // Validate file sizes (10MB limit)
       const validFiles = selectedFiles.filter(file => {
         if (file.size > 10 * 1024 * 1024) {
           setError(`${file.name} is too large. Maximum size is 10MB.`)
@@ -54,6 +249,11 @@ export default function CreateTicketPage() {
 
   const removeFile = (index: number) => {
     setFiles(prev => prev.filter((_, i) => i !== index))
+    setUploadStatus(prev => {
+      const newStatus = { ...prev }
+      delete newStatus[index]
+      return newStatus
+    })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -68,21 +268,12 @@ export default function CreateTicketPage() {
     }
 
     try {
-      // Create ticket first
       const response = await api.post('/tickets', formData)
       const ticketId = response.data.ticketId
-      console.log('✅ Ticket created:', { 
-        ticketId, 
-        ticketNumber: response.data.ticketNumber,
-        assignedTo: response.data.assignedTo,
-        assigned: response.data.assigned
-      })
 
-      // Upload files if any
       if (files.length > 0) {
         setUploading(true)
         const uploadPromises = files.map(async (file, index) => {
-          // Set status to uploading
           setUploadStatus(prev => ({ ...prev, [index]: { status: 'uploading' } }))
           
           try {
@@ -90,31 +281,21 @@ export default function CreateTicketPage() {
             uploadFormData.append('file', file)
             
             const token = localStorage.getItem('token')
-            const uploadUrl = `${getApiBaseUrl()}/attachments/ticket/${ticketId}`
-            console.log(`📤 Uploading ${file.name} to: ${uploadUrl}`)
-            const response = await fetch(uploadUrl, {
+            const response = await fetch(`${getApiBaseUrl()}/attachments/ticket/${ticketId}`, {
               method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${token}`
-              },
+              headers: { 'Authorization': `Bearer ${token}` },
               body: uploadFormData
             })
             
             if (response.ok) {
-              const result = await response.json().catch(() => ({}))
               setUploadStatus(prev => ({ ...prev, [index]: { status: 'success', message: 'Uploaded successfully' } }))
-              console.log(`✅ File uploaded: ${file.name}`, result)
             } else {
               const errorData = await response.json().catch(() => ({}))
-              const errorMessage = errorData.error || errorData.message || `Upload failed (${response.status})`
-              console.error(`❌ Upload failed for ${file.name}:`, errorData)
-              setUploadStatus(prev => ({ ...prev, [index]: { status: 'error', message: errorMessage } }))
-              throw new Error(errorMessage)
+              setUploadStatus(prev => ({ ...prev, [index]: { status: 'error', message: errorData.message || 'Upload failed' } }))
+              throw new Error(errorData.message || 'Upload failed')
             }
           } catch (err: any) {
-            const errorMessage = err.message || 'Upload failed'
-            console.error(`❌ Upload error for ${file.name}:`, err)
-            setUploadStatus(prev => ({ ...prev, [index]: { status: 'error', message: errorMessage } }))
+            setUploadStatus(prev => ({ ...prev, [index]: { status: 'error', message: err.message || 'Upload failed' } }))
             throw err
           }
         })
@@ -122,7 +303,6 @@ export default function CreateTicketPage() {
         try {
           await Promise.all(uploadPromises)
         } catch (err) {
-          // Some uploads may have failed, but continue
           console.error('Some file uploads failed:', err)
         }
         setUploading(false)
@@ -138,182 +318,290 @@ export default function CreateTicketPage() {
 
   return (
     <ProtectedRoute allowedRoles={['user', 'admin']}>
-      <div className="panel-page">
-        <h1 className="text-2xl font-bold text-gray-900 tracking-tight mb-6">Create IT Support Ticket</h1>
-        <form onSubmit={handleSubmit} className="panel-card max-w-3xl">
-          <div className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Request Type *</label>
-              <select
-                value={formData.requestType}
-                onChange={(e) => setFormData({ ...formData, requestType: e.target.value })}
-                className="select-field-tickets"
-                required
-              >
-                <option value="">Select request type</option>
-                {REQUEST_TYPES.map((type) => (
-                  <option key={type.value} value={type.value}>
-                    {type.label}
-                  </option>
-                ))}
-              </select>
+      <div className="min-h-screen bg-[#f5f5f7] pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
+        <div className="max-w-4xl mx-auto">
+          {/* Header with breadcrumb */}
+          <div className="mb-6">
+            <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
+              <Link href="/tickets" className="hover:text-blue-600 transition-colors">
+                Tickets
+              </Link>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              <span className="text-gray-900 font-medium">Create New Ticket</span>
             </div>
+            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
+              Create IT Support Ticket
+            </h1>
+            <p className="text-gray-500 mt-1">
+              Please provide detailed information about your issue to help us resolve it faster.
+            </p>
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Title *</label>
-              <input
-                type="text"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="input-field-tickets"
-                required
-                placeholder="Brief description of the issue"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Description *</label>
-              <textarea
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="input-field-tickets min-h-[140px] resize-y"
-                rows={6}
-                required
-                placeholder="Detailed description of the issue, steps to reproduce, etc."
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Affected System</label>
-              <input
-                type="text"
-                value={formData.affectedSystem}
-                onChange={(e) => setFormData({ ...formData, affectedSystem: e.target.value })}
-                className="input-field-tickets"
-                placeholder="e.g., Windows 10, Outlook, Network"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Priority *</label>
-              <select
-                value={formData.priority}
-                onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                className="select-field-tickets"
-                required
-              >
-                {PRIORITIES.map((priority) => (
-                  <option key={priority.value} value={priority.value}>
-                    {priority.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Category</label>
-              <input
-                type="text"
-                value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="input-field-tickets"
-                placeholder="Optional category"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Attachments</label>
-              <input
-                type="file"
-                multiple
-                onChange={handleFileChange}
-                className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 file:transition-colors"
-                accept="image/*,.pdf,.doc,.docx,.txt,.log,.csv"
-              />
-              <p className="text-xs text-gray-500 mt-1.5">Images, PDF, DOC, DOCX, TXT, LOG, CSV (max 10MB per file)</p>
-              
-              {files.length > 0 && (
-                <div className="mt-2 space-y-2">
-                  {files.map((file, index) => {
-                    const fileStatus = uploadStatus[index]
-                    const isImage = file.type.startsWith('image/')
-                    
-                    return (
-                      <div key={index} className={`flex items-center justify-between p-3 rounded-xl border ${
-                        fileStatus?.status === 'success' ? 'bg-emerald-50 border-emerald-200' :
-                        fileStatus?.status === 'error' ? 'bg-red-50 border-red-200' :
-                        fileStatus?.status === 'uploading' ? 'bg-blue-50 border-blue-200' :
-                        'bg-gray-50 border-gray-200'
-                      }`}>
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          {isImage && (
-                            <img
-                              src={URL.createObjectURL(file)}
-                              alt={file.name}
-                              className="w-10 h-10 object-cover rounded"
-                            />
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <span className="text-sm text-gray-700 truncate block">{file.name}</span>
-                            {fileStatus && (
-                              <span className={`text-xs ${
-                                fileStatus.status === 'success' ? 'text-green-600' :
-                                fileStatus.status === 'error' ? 'text-red-600' :
-                                'text-blue-600'
-                              }`}>
-                                {fileStatus.status === 'uploading' && '⏳ Uploading...'}
-                                {fileStatus.status === 'success' && '✅ Uploaded successfully'}
-                                {fileStatus.status === 'error' && `❌ ${fileStatus.message || 'Upload failed'}`}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">{(file.size / 1024).toFixed(2)} KB</span>
-                          {!uploading && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                removeFile(index)
-                                setUploadStatus(prev => {
-                                  const newStatus = { ...prev }
-                                  delete newStatus[index]
-                                  return newStatus
-                                })
-                              }}
-                              className="text-red-600 hover:text-red-800 text-sm"
-                            >
-                              Remove
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
+          {/* Main Form */}
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Request Type Card */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+              <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                <h2 className="font-semibold text-gray-900">Request Details</h2>
+              </div>
+              <div className="p-6 space-y-5">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Request Type <span className="text-red-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {REQUEST_TYPES.map((type) => (
+                      <button
+                        key={type.value}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, requestType: type.value })}
+                        className={`
+                          flex items-center justify-between p-3 rounded-xl border-2 transition-all
+                          ${formData.requestType === type.value
+                            ? 'border-blue-500 bg-blue-50/50 ring-2 ring-blue-500/20'
+                            : 'border-gray-200 hover:border-blue-200 hover:bg-gray-50'
+                          }
+                        `}
+                      >
+                        <span className="text-sm font-medium text-left text-gray-900">
+                          {type.label}
+                        </span>
+                        {formData.requestType === type.value && (
+                          <svg className="w-5 h-5 text-blue-600 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Title <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.title}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow"
+                    placeholder="e.g., Cannot access email, Laptop not turning on..."
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Description <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y min-h-[120px]"
+                    rows={6}
+                    placeholder="Please provide detailed information about the issue..."
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Affected System
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.affectedSystem}
+                      onChange={(e) => setFormData({ ...formData, affectedSystem: e.target.value })}
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow"
+                      placeholder="e.g., Windows 10, Outlook, VPN"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Category (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.category}
+                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow"
+                      placeholder="e.g., Hardware, Software"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {error && <p className="text-red-600 text-sm font-medium">{error}</p>}
+            {/* Priority Card */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+              <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                <h2 className="font-semibold text-gray-900">Priority Level</h2>
+              </div>
+              <div className="p-6">
+                <div className="max-w-xs">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select Priority <span className="text-red-500">*</span>
+                  </label>
+                  <PrioritySelect
+                    value={formData.priority}
+                    onChange={(value) => setFormData({ ...formData, priority: value })}
+                  />
+                  <p className="text-xs text-gray-500 mt-4">
+                    {formData.priority === 'urgent' && 'Critical issue affecting business operations'}
+                    {formData.priority === 'high' && 'Important issue needing quick resolution'}
+                    {formData.priority === 'medium' && 'Standard priority for most issues'}
+                    {formData.priority === 'low' && 'Non-urgent issue, can be scheduled'}
+                  </p>
+                </div>
+              </div>
+            </div>
 
-            <div className="flex flex-wrap gap-3 pt-2">
-              <button
-                type="submit"
-                disabled={loading || uploading}
-                className="btn-primary-tickets disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {uploading ? 'Uploading files...' : loading ? 'Creating...' : 'Create Ticket'}
-              </button>
+            {/* Attachments Card */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+              <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                <h2 className="font-semibold text-gray-900">Attachments</h2>
+              </div>
+              <div className="p-6">
+                {/* Drag & Drop Zone */}
+                <div
+                  onDragEnter={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDragOver={handleDrag}
+                  onDrop={handleDrop}
+                  className={`
+                    relative border-2 border-dashed rounded-xl p-8
+                    transition-all duration-200
+                    ${dragActive 
+                      ? 'border-blue-500 bg-blue-50/50' 
+                      : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50/50'
+                    }
+                  `}
+                >
+                  <input
+                    type="file"
+                    multiple
+                    onChange={handleFileChange}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    accept="image/*,.pdf,.doc,.docx,.txt,.log,.csv"
+                    id="file-upload"
+                  />
+                  <div className="text-center">
+                    <svg className="mx-auto h-12 w-12 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    <p className="text-sm font-medium text-gray-700 mb-1">
+                      Drag & drop files here, or click to select
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Images, PDF, DOC, DOCX, TXT, LOG, CSV (max 10MB per file)
+                    </p>
+                  </div>
+                </div>
+
+                {/* File List */}
+                {files.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-gray-700">
+                        Selected Files ({files.length})
+                      </h3>
+                      {!uploading && files.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFiles([]);
+                            setUploadStatus({});
+                          }}
+                          className="text-xs text-red-600 hover:text-red-700 font-medium hover:underline"
+                        >
+                          Remove all
+                        </button>
+                      )}
+                    </div>
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                      {files.map((file, index) => (
+                        <FileAttachment
+                          key={index}
+                          file={file}
+                          index={index}
+                          onRemove={() => removeFile(index)}
+                          status={uploadStatus[index]}
+                          isUploading={uploading}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Error Message */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
+
+            {/* Form Actions */}
+            <div className="flex flex-wrap items-center justify-end gap-3 pt-4">
               <button
                 type="button"
                 onClick={() => router.back()}
-                className="btn-secondary"
+                className="px-6 py-2.5 rounded-xl font-medium border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
+                disabled={loading || uploading}
               >
                 Cancel
               </button>
+              <button
+                type="submit"
+                disabled={loading || uploading}
+                className={`
+                  inline-flex items-center gap-2 px-6 py-2.5 rounded-xl font-medium text-white
+                  bg-gradient-to-r from-blue-600 to-blue-700
+                  hover:from-blue-700 hover:to-blue-800
+                  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+                  disabled:opacity-50 disabled:cursor-not-allowed
+                  shadow-sm hover:shadow-md
+                  transition-all duration-200
+                `}
+              >
+                {uploading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    <span>Uploading files...</span>
+                  </>
+                ) : loading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    <span>Creating ticket...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span>Create Ticket</span>
+                  </>
+                )}
+              </button>
             </div>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
     </ProtectedRoute>
   )
