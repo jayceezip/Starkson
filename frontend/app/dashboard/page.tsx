@@ -61,8 +61,8 @@ function ActivityColumn({
                   ) : (
                     <span className="text-sm font-medium text-gray-900 line-clamp-2">{label}</span>
                   )}
-                  {typeof item.details === 'object' && item.details !== null && (item.details as Record<string, unknown>)?.message && (
-                    <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{(item.details as Record<string, unknown>).message as string}</p>
+                  {typeof item.details === 'object' && item.details !== null && (item.details as Record<string, unknown>)?.message != null && (
+                    <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{String((item.details as Record<string, unknown>).message)}</p>
                   )}
                   <p className="text-xs text-gray-500 mt-0.5">{timeAgo(item.createdAt)}</p>
                 </div>
