@@ -161,7 +161,7 @@ export default function ProfilePage() {
                           ? user.branchAcronyms.includes(ALL_BRANCHES_ACRONYM)
                             ? 'All Branches'
                             : user.branchAcronyms
-                                .map((a) => BRANCHES.find((b) => b.acronym === a)?.name || a)
+                                .map((a: string) => BRANCHES.find((b) => b.acronym === a)?.name || a)
                                 .join(', ')
                           : '—'}
                     </dd>

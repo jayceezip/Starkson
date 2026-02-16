@@ -217,7 +217,7 @@ export default function CreateTicketPage() {
 
   const userBranchList = user?.branchAcronyms && user.branchAcronyms.length > 0 ? user.branchAcronyms : []
   const hasAllBranches = userBranchList.includes(ALL_BRANCHES_ACRONYM)
-  const realUserBranches = userBranchList.filter((a) => a !== ALL_BRANCHES_ACRONYM)
+  const realUserBranches = userBranchList.filter((a: string) => a !== ALL_BRANCHES_ACRONYM)
   const ticketBranchOptions = user?.role === 'admin'
     ? REAL_BRANCHES
     : hasAllBranches
