@@ -14,6 +14,7 @@ interface UserRow {
   role: string
   status: string
   createdAt?: string
+  branchAcronyms?: string[]
 }
 
 const ROLES = [
@@ -63,7 +64,7 @@ export default function AdminUsersPage() {
   const filteredUsers = keywords.length === 0
     ? users
     : users.filter((u) => {
-        const searchText = [u.name, u.email, u.role, u.status].filter(Boolean).join(' ').toLowerCase()
+        const searchText = [u.name, u.email, u.role, u.status, (u.branchAcronyms || []).join(' ')].filter(Boolean).join(' ').toLowerCase()
         return keywords.every((kw) => searchText.includes(kw))
       })
 
@@ -108,14 +109,25 @@ export default function AdminUsersPage() {
   return (
     <ProtectedRoute allowedRoles={['admin']}>
       <div className="min-h-screen bg-[#f5f5f7] pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
-        <div className="mb-8 flex items-center gap-4">
-          <Link href="/admin" className="inline-flex items-center gap-1.5 text-gray-500 hover:text-gray-900 transition-colors">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Link href="/admin" className="inline-flex items-center gap-1.5 text-gray-500 hover:text-gray-900 transition-colors">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Admin Panel
+            </Link>
+            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">User Management</h1>
+          </div>
+          <Link
+            href="/admin/users/create"
+            className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-3.5 text-base font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors shadow-sm"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            Admin Panel
+            Create an account
           </Link>
-          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">User Management</h1>
         </div>
         <p className="text-gray-600 mb-8 text-base">Manage user accounts, assign roles, and monitor account status across the platform.</p>
 
@@ -207,6 +219,7 @@ export default function AdminUsersPage() {
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">User</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Email</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Role</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Branches</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Status</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
                   </tr>
@@ -246,6 +259,17 @@ export default function AdminUsersPage() {
                             {u.role?.replace('_', ' ') || 'user'}
                           </span>
                         )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-sm text-gray-600">
+                          {u.role === 'admin'
+                            ? '—'
+                            : u.branchAcronyms && u.branchAcronyms.length > 0
+                              ? u.branchAcronyms.includes('ALL')
+                                ? 'All Branches'
+                                : u.branchAcronyms.join(', ')
+                              : '—'}
+                        </span>
                       </td>
                       <td className="px-6 py-4">
                         <span className={`inline-flex items-center px-3 py-1 rounded-lg text-xs font-semibold border ${getStatusBadgeColor(u.status || 'active')}`}>

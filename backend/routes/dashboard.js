@@ -122,26 +122,26 @@ router.get('/stats', authenticate, async (req, res) => {
   }
 })
 
-// Get recent activity for the current user (role-based: actions they performed)
+// Get recent activity from notifications table (ticket/incident actions relevant to this user) — for dashboard
 router.get('/activity', authenticate, async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit, 10) || 25, 50)
-    const { data: logs, error } = await supabase
-      .from('audit_logs')
-      .select('id, action, resource_type, resource_id, details, created_at')
+    const { data: rows, error } = await supabase
+      .from('notifications')
+      .select('id, type, title, message, resource_type, resource_id, created_at')
       .eq('user_id', req.user.id)
       .order('created_at', { ascending: false })
       .limit(limit)
 
     if (error) throw error
 
-    const list = (logs || []).map((l) => ({
-      id: l.id,
-      action: l.action,
-      resourceType: l.resource_type,
-      resourceId: l.resource_id,
-      details: l.details,
-      createdAt: l.created_at,
+    const list = (rows || []).map((n) => ({
+      id: n.id,
+      action: n.type,
+      resourceType: n.resource_type,
+      resourceId: n.resource_id,
+      details: { title: n.title, message: n.message },
+      createdAt: n.created_at,
     }))
 
     res.json({ activity: list })

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import api from '@/lib/api'
@@ -14,8 +14,10 @@ type ActivityCategory = 'attachments' | 'ticket_actions' | 'comments'
 function getActivityCategory(action: string): ActivityCategory {
   if (action === 'UPLOAD_ATTACHMENT' || action === 'DELETE_ATTACHMENT') return 'attachments'
   if (action === 'ADD_COMMENT' || action === 'USER_COMMENT' || action === 'STAFF_COMMENT') return 'comments'
-  // Ticket actions: create/update/convert/delete ticket, and "ticket converted to incident" for the user
-  if (action === 'CREATE_TICKET' || action === 'UPDATE_TICKET' || action === 'NEW_TICKET_CREATED' || action === 'DELETE_TICKET' || action === 'CONVERT_TICKET' || action === 'TICKET_CONVERTED_TO_INCIDENT') return 'ticket_actions'
+  // Ticket/incident actions (from notifications or audit)
+  if (action === 'CREATE_TICKET' || action === 'UPDATE_TICKET' || action === 'TICKET_UPDATED' || action === 'NEW_TICKET_CREATED' ||
+      action === 'TICKET_ASSIGNED' || action === 'DELETE_TICKET' || action === 'CONVERT_TICKET' || action === 'TICKET_CONVERTED_TO_INCIDENT' ||
+      action === 'CREATE_INCIDENT' || action === 'NEW_INCIDENT_CREATED' || action === 'UPDATE_INCIDENT' || action === 'INCIDENT_UPDATED' || action === 'INCIDENT_ASSIGNED') return 'ticket_actions'
   return 'ticket_actions'
 }
 
@@ -58,6 +60,9 @@ function ActivityColumn({
                     </Link>
                   ) : (
                     <span className="text-sm font-medium text-gray-900 line-clamp-2">{label}</span>
+                  )}
+                  {typeof item.details === 'object' && item.details !== null && (item.details as Record<string, unknown>)?.message && (
+                    <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{(item.details as Record<string, unknown>).message as string}</p>
                   )}
                   <p className="text-xs text-gray-500 mt-0.5">{timeAgo(item.createdAt)}</p>
                 </div>
@@ -111,22 +116,40 @@ export default function DashboardPage() {
     return () => clearInterval(interval)
   }, [user, router, mounted])
 
+  const fetchActivity = useCallback(async () => {
+    if (!user) return
+    try {
+      const res = await api.get('/dashboard/activity?limit=25')
+      setActivity(res.data?.activity ?? [])
+    } catch (e) {
+      console.error('Failed to fetch activity:', e)
+      setActivity([])
+    } finally {
+      setActivityLoading(false)
+    }
+  }, [user])
+
   useEffect(() => {
     if (!mounted || !user) return
-    const fetchActivity = async () => {
-      setActivityLoading(true)
-      try {
-        const res = await api.get('/dashboard/activity?limit=25')
-        setActivity(res.data?.activity ?? [])
-      } catch (e) {
-        console.error('Failed to fetch activity:', e)
-        setActivity([])
-      } finally {
-        setActivityLoading(false)
-      }
-    }
+    setActivityLoading(true)
     fetchActivity()
-  }, [user, mounted])
+  }, [user, mounted, fetchActivity])
+
+  // Real-time: poll every 5s and refetch when tab becomes visible so new notifications appear without refresh
+  useEffect(() => {
+    if (!mounted || !user) return
+    const interval = setInterval(() => {
+      fetchActivity()
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [mounted, user, fetchActivity])
+
+  useEffect(() => {
+    if (!mounted || !user) return
+    const onFocus = () => fetchActivity()
+    window.addEventListener('visibilitychange', onFocus)
+    return () => window.removeEventListener('visibilitychange', onFocus)
+  }, [mounted, user, fetchActivity])
 
   if (!mounted || !user) {
     return (

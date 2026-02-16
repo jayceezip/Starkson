@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useCallback,  useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import api, { getApiBaseUrl } from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
+import { getStoredUser, setStoredAuth } from '@/lib/auth'
+import { BRANCHES, REAL_BRANCHES, ALL_BRANCHES_ACRONYM } from '@/lib/branches'
 
 const REQUEST_TYPES = [
   { value: 'account_password', label: 'Account & Password Issues' },
@@ -190,6 +192,46 @@ const FileAttachment = ({ file, index, onRemove, status, isUploading }: {
 
 export default function CreateTicketPage() {
   const router = useRouter()
+  const [user, setUser] = useState<any>(getStoredUser())
+  const [userLoaded, setUserLoaded] = useState(false)
+
+  useEffect(() => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+    if (!token) return
+    api.get('/auth/me')
+      .then((res) => {
+        const fresh = res.data
+        const userData = {
+          id: fresh.id,
+          email: fresh.email,
+          name: fresh.name,
+          role: fresh.role,
+          branchAcronyms: fresh.branchAcronyms ?? []
+        }
+        setUser(userData)
+        setStoredAuth(token, userData)
+      })
+      .catch(() => {})
+      .finally(() => setUserLoaded(true))
+  }, [])
+
+  const userBranchList = user?.branchAcronyms && user.branchAcronyms.length > 0 ? user.branchAcronyms : []
+  const hasAllBranches = userBranchList.includes(ALL_BRANCHES_ACRONYM)
+  const realUserBranches = userBranchList.filter((a) => a !== ALL_BRANCHES_ACRONYM)
+  const ticketBranchOptions = user?.role === 'admin'
+    ? REAL_BRANCHES
+    : hasAllBranches
+      ? REAL_BRANCHES
+      : REAL_BRANCHES.filter((b) => realUserBranches.includes(b.acronym))
+  const singleBranchAuto = realUserBranches.length === 1 && !hasAllBranches && user?.role !== 'admin'
+  const noBranchesAssigned = userLoaded && user?.role !== 'admin' && !hasAllBranches && realUserBranches.length === 0
+  const defaultBranch = singleBranchAuto
+    ? realUserBranches[0]
+    : user?.role === 'admin' && REAL_BRANCHES.length > 0
+      ? REAL_BRANCHES[0].acronym
+      : ticketBranchOptions.length > 0
+        ? ticketBranchOptions[0].acronym
+        : ''
   const [formData, setFormData] = useState({
     requestType: '',
     title: '',
@@ -197,6 +239,7 @@ export default function CreateTicketPage() {
     affectedSystem: '',
     priority: 'medium',
     category: '',
+    branchAcronym: defaultBranch,
   })
   const [files, setFiles] = useState<File[]>([])
   const [uploadStatus, setUploadStatus] = useState<Record<number, { status: 'pending' | 'uploading' | 'success' | 'error', message?: string }>>({})
@@ -258,6 +301,7 @@ export default function CreateTicketPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (noBranchesAssigned) return
     setError('')
     setLoading(true)
 
@@ -266,9 +310,16 @@ export default function CreateTicketPage() {
       setLoading(false)
       return
     }
+    const branchToSend = singleBranchAuto ? realUserBranches[0] : formData.branchAcronym
+    if (!branchToSend) {
+      setError('Please select a branch for this ticket.')
+      setLoading(false)
+      return
+    }
 
     try {
-      const response = await api.post('/tickets', formData)
+      const payload = { ...formData, branchAcronym: branchToSend }
+      const response = await api.post('/tickets', payload)
       const ticketId = response.data.ticketId
 
       if (files.length > 0) {
@@ -339,8 +390,50 @@ export default function CreateTicketPage() {
             </p>
           </div>
 
+          {/* No branches assigned: show message and block ticket creation */}
+          {userLoaded && noBranchesAssigned && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 mb-6">
+              <p className="font-medium text-amber-800">No branches assigned</p>
+              <p className="text-sm text-amber-700 mt-1">
+                Your account does not have any branch assigned yet. Contact your administrator to assign you to a branch so you can create tickets.
+              </p>
+            </div>
+          )}
+
           {/* Main Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Branch: only show when user has 2+ branches or All Branches (single-branch users are auto-assigned) */}
+            {userLoaded && !noBranchesAssigned && !singleBranchAuto && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+                <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                  <h2 className="font-semibold text-gray-900">Branch</h2>
+                </div>
+                <div className="p-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Branch <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formData.branchAcronym}
+                    onChange={(e) => setFormData({ ...formData, branchAcronym: e.target.value })}
+                    className="w-full max-w-md px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  >
+                    <option value="">Select branch</option>
+                    {ticketBranchOptions.map((b) => (
+                      <option key={b.acronym} value={b.acronym}>
+                        {b.acronym} – {b.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500">Ticket will be numbered for this branch (e.g. {formData.branchAcronym || 'D01'}-000001).</p>
+                </div>
+              </div>
+            )}
+
+            {singleBranchAuto && (
+              <input type="hidden" name="branchAcronym" value={formData.branchAcronym} />
+            )}
+
             {/* Request Type Card */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
               <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
@@ -563,7 +656,7 @@ export default function CreateTicketPage() {
               </button>
               <button
                 type="submit"
-                disabled={loading || uploading}
+                disabled={loading || uploading || noBranchesAssigned}
                 className={`
                   inline-flex items-center gap-2 px-6 py-2.5 rounded-xl font-medium text-white
                   bg-gradient-to-r from-blue-600 to-blue-700

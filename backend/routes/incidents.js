@@ -2,27 +2,24 @@ const express = require('express')
 const router = express.Router()
 const { query, supabase } = require('../config/database')
 const { authenticate, authorize } = require('../middleware/auth')
+const { BRANCHES } = require('../constants/branches')
 
-// Generate incident number - use max existing number to avoid duplicates
-const generateIncidentNumber = async () => {
-  const year = new Date().getFullYear()
-  const { data: existingIncidents, error: countError } = await supabase
+const VALID_ACRONYMS = new Set(BRANCHES.map(b => b.acronym))
+
+// Generate incident number by branch: INC-D01-000001
+const generateIncidentNumber = async (branchAcronym) => {
+  const { data: lastIncidents, error } = await supabase
     .from('incidents')
     .select('incident_number')
-    .gte('created_at', `${year}-01-01T00:00:00Z`)
-    .order('incident_number', { ascending: false })
+    .eq('branch_acronym', branchAcronym)
+    .order('created_at', { ascending: false })
     .limit(1)
-  
-  let nextNumber = 1
-  if (existingIncidents && existingIncidents.length > 0) {
-    const lastNumber = existingIncidents[0].incident_number
-    const match = lastNumber.match(/INC-\d{4}-(\d+)/)
-    if (match) {
-      nextNumber = parseInt(match[1], 10) + 1
-    }
+  let nextSeq = 1
+  if (!error && lastIncidents && lastIncidents.length > 0) {
+    const match = (lastIncidents[0].incident_number || '').match(/^INC-[A-Z0-9]+-(\d+)$/i)
+    if (match) nextSeq = parseInt(match[1], 10) + 1
   }
-  
-  return `INC-${year}-${String(nextNumber).padStart(6, '0')}`
+  return `INC-${branchAcronym}-${String(nextSeq).padStart(6, '0')}`
 }
 
 // Get all incidents (Security Officer and Admin only)
@@ -261,18 +258,21 @@ router.post('/', authenticate, authorize('security_officer', 'admin'), async (re
       impactAvailability,
       affectedAsset,
       affectedUser,
-      sourceTicketId
+      sourceTicketId,
+      branchAcronym
     } = req.body
 
     if (!category || !title || !description) {
       return res.status(400).json({ message: 'Missing required fields' })
     }
 
-    const incidentNumber = await generateIncidentNumber()
+    const branch = branchAcronym && VALID_ACRONYMS.has(branchAcronym) ? branchAcronym : 'SPI'
+    const incidentNumber = await generateIncidentNumber(branch)
 
     const result = await query('incidents', 'insert', {
       data: {
         incident_number: incidentNumber,
+        branch_acronym: branch,
         source_ticket_id: sourceTicketId || null,
         detection_method: detectionMethod || 'user_reported',
         category,
@@ -310,7 +310,7 @@ router.post('/', authenticate, authorize('security_officer', 'admin'), async (re
       }
     })
 
-    // Notify Security Officers and Admin: show in notifications and in Recent Activity (Ticket Actions)
+    // Notify Security Officers and Admin (notifications only — audit has one entry: CREATE_INCIDENT above)
     const { data: secAndAdminUsers, error: roleError } = await supabase
       .from('users')
       .select('id')
@@ -318,18 +318,8 @@ router.post('/', authenticate, authorize('security_officer', 'admin'), async (re
       .eq('status', 'active')
     if (!roleError && secAndAdminUsers && secAndAdminUsers.length > 0) {
       const creatorId = req.user.id
-      const details = { incident_number: incidentNumber, category, severity }
       for (const u of secAndAdminUsers) {
-        if (u.id === creatorId) continue // creator already has CREATE_INCIDENT
-        await query('audit_logs', 'insert', {
-          data: {
-            action: 'NEW_INCIDENT_CREATED',
-            user_id: u.id,
-            resource_type: 'incident',
-            resource_id: result.id,
-            details
-          }
-        })
+        if (u.id === creatorId) continue
         await query('notifications', 'insert', {
           data: {
             user_id: u.id,

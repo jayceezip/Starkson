@@ -6,6 +6,7 @@ import Link from 'next/link'
 import api, { getApiBaseUrl } from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser } from '@/lib/auth'
+import { formatPinoyDateTime, todayPinoy } from '@/lib/date'
 
 interface AuditLog {
   id: string
@@ -27,6 +28,55 @@ export default function AdminAuditPage() {
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [filters, setFilters] = useState({ resourceType: '', action: '', startDate: '', endDate: '' })
+
+  const toYmdManila = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' })
+  const setDatePreset = (preset: 'today' | 'this_week' | 'this_month' | 'last_month' | 'last_3_months' | 'all') => {
+    const todayManila = todayPinoy()
+    if (preset === 'today') {
+      setFilters((f) => ({ ...f, startDate: todayManila, endDate: todayManila }))
+      setPage(1)
+      return
+    }
+    if (preset === 'all') {
+      setFilters((f) => ({ ...f, startDate: '', endDate: '' }))
+      setPage(1)
+      return
+    }
+    let startYmd: string
+    const endYmd = todayManila
+    switch (preset) {
+      case 'this_week': {
+        const weekAgo = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000)
+        startYmd = toYmdManila(weekAgo)
+        break
+      }
+      case 'this_month':
+        startYmd = todayManila.slice(0, 7) + '-01'
+        break
+      case 'last_month': {
+        const d = new Date(todayManila + 'T12:00:00+08:00')
+        d.setMonth(d.getMonth() - 1)
+        d.setDate(1)
+        startYmd = toYmdManila(d)
+        const endOfLast = new Date(d)
+        endOfLast.setMonth(endOfLast.getMonth() + 1)
+        endOfLast.setDate(0)
+        setFilters((f) => ({ ...f, startDate: startYmd, endDate: toYmdManila(endOfLast) }))
+        setPage(1)
+        return
+      }
+      case 'last_3_months': {
+        const d = new Date(todayManila + 'T12:00:00+08:00')
+        d.setMonth(d.getMonth() - 3)
+        startYmd = toYmdManila(d)
+        break
+      }
+      default:
+        return
+    }
+    setFilters((f) => ({ ...f, startDate: startYmd, endDate: endYmd }))
+    setPage(1)
+  }
 
   useEffect(() => {
     setMounted(true)
@@ -150,13 +200,13 @@ export default function AdminAuditPage() {
     // Position text to the right of the logo (or at default position if no logo)
     doc.text('Audit Report (Full Report)', logoEndX, startY)
     doc.setFontSize(10)
-    doc.text(`Generated: ${new Date().toLocaleString()} | Total entries: ${allLogs.length}`, logoEndX, startY + 7)
+    doc.text(`Generated: ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })} (PH time) | Total entries: ${allLogs.length}`, logoEndX, startY + 7)
     if (filters.startDate || filters.endDate) {
       doc.text(`Period: ${filters.startDate || '—'} to ${filters.endDate || '—'}`, logoEndX, startY + 14)
     }
     const tableStartY = startY + 18
     const tableData = allLogs.map((log) => [
-      log.createdAt ? new Date(log.createdAt).toLocaleString() : '—',
+      log.createdAt ? new Date(log.createdAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'short', timeStyle: 'medium' }) : '—',
       log.action || '—',
       log.userName || log.userEmail || '—',
       (log.resourceType && log.resourceId) ? `${log.resourceType} / ${String(log.resourceId).slice(0, 8)}…` : '—',
@@ -217,6 +267,16 @@ export default function AdminAuditPage() {
             </svg>
             <p className="text-sm font-semibold text-gray-700">Filters & Export</p>
           </div>
+          <p className="text-xs text-gray-500 mb-2">Date range is in <strong>Philippine time (PHT)</strong> and applies to both the list and export (CSV, JSON, PDF).</p>
+          <div className="flex flex-wrap gap-2 mb-4">
+            <span className="text-xs font-medium text-gray-600 self-center mr-1">Quick range:</span>
+            <button type="button" onClick={() => setDatePreset('today')} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200">Today</button>
+            <button type="button" onClick={() => setDatePreset('this_week')} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200">This week</button>
+            <button type="button" onClick={() => setDatePreset('this_month')} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200">This month</button>
+            <button type="button" onClick={() => setDatePreset('last_month')} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200">Last month</button>
+            <button type="button" onClick={() => setDatePreset('last_3_months')} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200">Last 3 months</button>
+            <button type="button" onClick={() => setDatePreset('all')} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200">All time</button>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-2 flex items-center gap-1.5">
@@ -258,7 +318,7 @@ export default function AdminAuditPage() {
               <input
                 type="date"
                 value={filters.startDate}
-                max={new Date().toISOString().slice(0, 10)}
+                max={todayPinoy()}
                 onChange={(e) => { setFilters({ ...filters, startDate: e.target.value }); setPage(1) }}
                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm focus:shadow-md"
               />
@@ -273,7 +333,7 @@ export default function AdminAuditPage() {
               <input
                 type="date"
                 value={filters.endDate}
-                max={new Date().toISOString().slice(0, 10)}
+                max={todayPinoy()}
                 onChange={(e) => { setFilters({ ...filters, endDate: e.target.value }); setPage(1) }}
                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm focus:shadow-md"
               />
@@ -366,7 +426,7 @@ export default function AdminAuditPage() {
                           <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
-                          <span className="whitespace-nowrap">{log.createdAt ? new Date(log.createdAt).toLocaleString() : '—'}</span>
+                          <span className="whitespace-nowrap">{formatPinoyDateTime(log.createdAt)}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">

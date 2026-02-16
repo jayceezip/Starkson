@@ -42,6 +42,14 @@ export function formatActionLabel(item: ActivityItem): { label: string; href: st
       return { label: `Ticket converted to incident ${ref || ''}`.trim(), href: item.resourceType === 'incident' && rid ? `/incidents/${rid}` : item.resourceType === 'ticket' && rid ? `/tickets/${rid}` : null }
     case 'NEW_INCIDENT_CREATED':
       return { label: `New incident created ${ref || ''}`.trim(), href: item.resourceType === 'incident' && rid ? `/incidents/${rid}` : null }
+    case 'TICKET_ASSIGNED':
+      return { label: (item.details as Record<string, unknown>)?.title || `Ticket assigned ${ref || ''}`.trim(), href: item.resourceType === 'ticket' && rid ? `/tickets/${rid}` : null }
+    case 'TICKET_UPDATED':
+      return { label: (item.details as Record<string, unknown>)?.title || `Ticket updated ${ref || ''}`.trim(), href: item.resourceType === 'ticket' && rid ? `/tickets/${rid}` : null }
+    case 'INCIDENT_ASSIGNED':
+      return { label: (item.details as Record<string, unknown>)?.title || `Incident assigned ${ref || ''}`.trim(), href: item.resourceType === 'incident' && rid ? `/incidents/${rid}` : null }
+    case 'INCIDENT_UPDATED':
+      return { label: (item.details as Record<string, unknown>)?.title || `Incident updated ${ref || ''}`.trim(), href: item.resourceType === 'incident' && rid ? `/incidents/${rid}` : null }
     case 'UPDATE_INCIDENT':
       return { label: `Updated incident ${ref || ''}`.trim(), href: item.resourceType === 'incident' && rid ? `/incidents/${rid}` : null }
     case 'ADD_TIMELINE_ENTRY':

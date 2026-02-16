@@ -2,6 +2,9 @@ const express = require('express')
 const router = express.Router()
 const { query, supabase } = require('../config/database')
 const { authenticate, authorize } = require('../middleware/auth')
+const { BRANCHES } = require('../constants/branches')
+
+const VALID_ACRONYMS = new Set(BRANCHES.map(b => b.acronym))
 
 // Helper function to find IT Support user for ticket assignment
 const findITSupportUser = async () => {
@@ -59,13 +62,20 @@ const findSecurityOfficer = async () => {
   }
 }
 
-// Generate ticket number
-const generateTicketNumber = async () => {
-  const year = new Date().getFullYear()
-  const { count } = await query('tickets', 'count', {
-    filters: [{ column: 'created_at', operator: 'gte', value: `${year}-01-01` }]
-  })
-  return `TKT-${year}-${String((count || 0) + 1).padStart(6, '0')}`
+// Generate ticket number by branch: e.g. D01-000001
+const generateTicketNumber = async (branchAcronym) => {
+  const { data: lastTickets, error } = await supabase
+    .from('tickets')
+    .select('ticket_number')
+    .eq('branch_acronym', branchAcronym)
+    .order('created_at', { ascending: false })
+    .limit(1)
+  let nextSeq = 1
+  if (!error && lastTickets && lastTickets.length > 0) {
+    const match = (lastTickets[0].ticket_number || '').match(/^[A-Z0-9]+-(\d+)$/i)
+    if (match) nextSeq = parseInt(match[1], 10) + 1
+  }
+  return `${branchAcronym}-${String(nextSeq).padStart(6, '0')}`
 }
 
 // Calculate SLA due date
@@ -87,43 +97,48 @@ const calculateSLADue = async (priority) => {
 // Get all tickets
 router.get('/', authenticate, async (req, res) => {
   try {
-    let filters = []
     let selectQuery = `
       *,
       created_by_user:users!tickets_created_by_fkey(id, name, email),
       assigned_to_user:users!tickets_assigned_to_fkey(id, name)
     `
 
-    // RBAC: Users can only see their own tickets
-    if (req.user.role === 'user') {
-      filters.push({ column: 'created_by', value: req.user.id })
-    } else if (req.user.role === 'it_support') {
-      // IT Support can see assigned tickets and unassigned tickets
-      filters.push({
-        column: 'assigned_to',
-        operator: 'or',
-        value: [
-          { column: 'assigned_to', operator: 'eq', value: req.user.id },
-          { column: 'assigned_to', operator: 'is', value: null }
-        ]
-      })
+    // Fetch current user's branch_acronyms for filtering (user/it_support/security_officer see by branch)
+    let userBranchAcronyms = []
+    if (!['admin'].includes(req.user.role)) {
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('branch_acronyms')
+        .eq('id', req.user.id)
+        .single()
+      userBranchAcronyms = Array.isArray(userRow?.branch_acronyms) ? userRow.branch_acronyms : []
     }
-    // Admin and Security Officer can see all
 
     // Use Supabase directly for better foreign key relationship handling
     let ticketsQuery = supabase
       .from('tickets')
       .select(selectQuery)
       .order('created_at', { ascending: false })
-    
-    // Apply filters using Supabase directly
+
+    const hasAllBranches = userBranchAcronyms.includes('ALL')
+    // PostgREST .in() requires double-quoted string values: branch_acronym.in.("D01","D02")
+    const branchFilter = userBranchAcronyms.length > 0
+      ? `branch_acronym.in.("${userBranchAcronyms.join('","')}"),branch_acronym.is.null`
+      : null
     if (req.user.role === 'user') {
       ticketsQuery = ticketsQuery.eq('created_by', req.user.id)
+      if (!hasAllBranches && branchFilter) {
+        ticketsQuery = ticketsQuery.or(branchFilter)
+      }
     } else if (req.user.role === 'it_support') {
-      // IT Support can see: assigned to them, unassigned, AND tickets they converted (so converted tickets never disappear)
       ticketsQuery = ticketsQuery.or(`assigned_to.eq.${req.user.id},assigned_to.is.null`)
+      if (!hasAllBranches && branchFilter) {
+        ticketsQuery = ticketsQuery.or(branchFilter)
+      }
+    } else if (req.user.role === 'security_officer' && !hasAllBranches && branchFilter) {
+      ticketsQuery = ticketsQuery.or(branchFilter)
     }
-    // Admin and Security Officer can see all (no filter)
+    // Admin or user with ALL branches: no branch filter
 
     let { data: tickets, error: ticketsError } = await ticketsQuery
 
@@ -286,9 +301,15 @@ router.get('/:id', authenticate, async (req, res) => {
       console.log(`🔍 Manually fetched assigned user for ticket ${ticket.ticket_number}:`, assignedToName)
     }
 
-    // RBAC: Users can only access their own tickets
-    if (req.user.role === 'user' && ticket.created_by !== req.user.id) {
-      return res.status(403).json({ message: 'Forbidden' })
+    // RBAC: Users can only access their own tickets and only for their assigned branches (or ALL)
+    if (req.user.role === 'user') {
+      if (ticket.created_by !== req.user.id) return res.status(403).json({ message: 'Forbidden' })
+      const { data: userRow } = await supabase.from('users').select('branch_acronyms').eq('id', req.user.id).single()
+      const userBranches = Array.isArray(userRow?.branch_acronyms) ? userRow.branch_acronyms : []
+      const hasAllBranches = userBranches.includes('ALL')
+      if (!hasAllBranches && userBranches.length > 0 && ticket.branch_acronym && !userBranches.includes(ticket.branch_acronym)) {
+        return res.status(403).json({ message: 'Forbidden' })
+      }
     }
 
     // Check if ticket has already been converted to an incident (must be done first)
@@ -494,24 +515,42 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 })
 
-// Create ticket (users only)
+// Create ticket (users only; admin can create for any branch)
 router.post('/', authenticate, authorize('user', 'admin'), async (req, res) => {
   try {
-    const { requestType, title, description, affectedSystem, priority, category } = req.body
+    const { requestType, title, description, affectedSystem, priority, category, branchAcronym } = req.body
 
     if (!requestType || !title || !description) {
       return res.status(400).json({ message: 'Missing required fields' })
     }
 
-    const ticketNumber = await generateTicketNumber()
+    if (!branchAcronym || !VALID_ACRONYMS.has(branchAcronym) || branchAcronym === 'ALL') {
+      return res.status(400).json({ message: 'Valid branch is required (ticket must be for a specific branch)' })
+    }
+
+    if (req.user.role === 'user') {
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('branch_acronyms')
+        .eq('id', req.user.id)
+        .single()
+      const userBranches = Array.isArray(userRow?.branch_acronyms) ? userRow.branch_acronyms : []
+      const hasAllBranches = userBranches.includes('ALL')
+      const canUseBranch = hasAllBranches || userBranches.includes(branchAcronym)
+      if (userBranches.length > 0 && !canUseBranch) {
+        return res.status(403).json({ message: 'You can only create tickets for your assigned branch(es)' })
+      }
+    }
+
+    const ticketNumber = await generateTicketNumber(branchAcronym)
     const slaDue = await calculateSLADue(priority || 'medium')
 
-    // Assign ticket to IT Staff (if available)
     const assignedToId = await findITSupportUser()
     console.log('🔍 Assignment check:', { assignedToId, ticketNumber })
 
     const ticketData = {
       ticket_number: ticketNumber,
+      branch_acronym: branchAcronym,
       request_type: requestType,
       title,
       description,
@@ -565,16 +604,32 @@ router.post('/', authenticate, authorize('user', 'admin'), async (req, res) => {
       }
     }
 
-    // Log audit
-    await query('audit_logs', 'insert', {
-      data: {
-        action: 'CREATE_TICKET',
-        user_id: req.user.id,
-        resource_type: 'ticket',
-        resource_id: result.id,
-        details: { ticket_number: ticketNumber, request_type: requestType, priority, assigned_to: assignedToId }
+    // Log audit (created tickets must appear in audit logs). Do NOT set created_at — DB sets it via DEFAULT NOW() + trigger (real-time).
+    const auditPayload = {
+      action: 'CREATE_TICKET',
+      user_id: req.user.id,
+      resource_type: 'ticket',
+      resource_id: result.id,
+      details: {
+        ticket_number: ticketNumber,
+        title,
+        request_type: requestType,
+        priority,
+        branch_acronym: branchAcronym,
+        assigned_to: assignedToId
       }
-    })
+    }
+    try {
+      await query('audit_logs', 'insert', { data: auditPayload })
+    } catch (auditErr) {
+      console.error('Audit log CREATE_TICKET failed:', auditErr?.message || auditErr)
+      try {
+        const { error: directErr } = await supabase.from('audit_logs').insert(auditPayload)
+        if (directErr) console.error('Audit fallback insert failed:', directErr.message)
+      } catch (e2) {
+        console.error('Audit fallback also failed:', e2?.message || e2)
+      }
+    }
 
     // Create notification for assigned IT support staff
     if (assignedToId) {
@@ -593,7 +648,7 @@ router.post('/', authenticate, authorize('user', 'admin'), async (req, res) => {
       // No need for separate timeline entry since we're using incident_timeline only
     }
 
-    // Notify all IT Staff and Admin: show in notifications and in Recent Activity (Ticket Actions)
+    // Notify all IT Staff and Admin (notifications only — audit log has one entry: CREATE_TICKET above)
     const { data: itAndAdminUsers, error: roleError } = await supabase
       .from('users')
       .select('id')
@@ -601,19 +656,9 @@ router.post('/', authenticate, authorize('user', 'admin'), async (req, res) => {
       .eq('status', 'active')
     if (!roleError && itAndAdminUsers && itAndAdminUsers.length > 0) {
       const creatorId = req.user.id
-      const details = { ticket_number: ticketNumber, request_type: requestType, priority }
       for (const u of itAndAdminUsers) {
-        if (u.id === creatorId) continue // creator already has CREATE_TICKET
-        await query('audit_logs', 'insert', {
-          data: {
-            action: 'NEW_TICKET_CREATED',
-            user_id: u.id,
-            resource_type: 'ticket',
-            resource_id: result.id,
-            details
-          }
-        })
-        // Notification: skip assignee (they already got TICKET_ASSIGNED)
+        if (u.id === creatorId) continue
+        // Notification only; do not write NEW_TICKET_CREATED to audit (one ticket = one audit entry)
         if (u.id !== assignedToId) {
           await query('notifications', 'insert', {
             data: {
@@ -838,26 +883,22 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
       })
     }
 
-    // Generate incident number - use max existing number to avoid duplicates
-    const year = new Date().getFullYear()
-    const { data: existingIncidents, error: countError } = await supabase
+    const branchAcronym = ticket.branch_acronym && VALID_ACRONYMS.has(ticket.branch_acronym)
+      ? ticket.branch_acronym
+      : 'SPI'
+    const { data: lastIncidents, error: countErr } = await supabase
       .from('incidents')
       .select('incident_number')
-      .gte('created_at', `${year}-01-01T00:00:00Z`)
-      .order('incident_number', { ascending: false })
+      .eq('branch_acronym', branchAcronym)
+      .order('created_at', { ascending: false })
       .limit(1)
-    
-    let nextNumber = 1
-    if (existingIncidents && existingIncidents.length > 0) {
-      const lastNumber = existingIncidents[0].incident_number
-      const match = lastNumber.match(/INC-\d{4}-(\d+)/)
-      if (match) {
-        nextNumber = parseInt(match[1], 10) + 1
-      }
+    let nextSeq = 1
+    if (!countErr && lastIncidents && lastIncidents.length > 0) {
+      const match = (lastIncidents[0].incident_number || '').match(/^INC-[A-Z0-9]+-(\d+)$/i)
+      if (match) nextSeq = parseInt(match[1], 10) + 1
     }
-    
-    const incidentNumber = `INC-${year}-${String(nextNumber).padStart(6, '0')}`
-    console.log('🔢 Generated incident number:', incidentNumber, 'from existing count:', existingIncidents?.length || 0)
+    const incidentNumber = `INC-${branchAcronym}-${String(nextSeq).padStart(6, '0')}`
+    console.log('🔢 Generated incident number:', incidentNumber)
 
     // Assign incident to Security Officer (if available)
     const assignedToId = await findSecurityOfficer()
@@ -871,6 +912,7 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
 
     const incidentData = {
       incident_number: incidentNumber,
+      branch_acronym: branchAcronym,
       source_ticket_id: ticket.id,
       detection_method: 'it_found',
       category: category || 'other',

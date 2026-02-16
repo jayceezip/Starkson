@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import api from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser, hasRole } from '@/lib/auth'
+import { formatPinoyDateTime } from '@/lib/date'
 
 interface Ticket {
   id: number
@@ -39,26 +40,35 @@ export default function TicketsPage() {
     setUser(currentUser)
   }, [])
 
+  const fetchTickets = useCallback(async () => {
+    if (!user) return
+    try {
+      setLoading(true)
+      const response = await api.get('/tickets')
+      const list = Array.isArray(response.data) ? response.data : []
+      setTickets(list.sort((a, b) => new Date((b as Ticket).createdAt || 0).getTime() - new Date((a as Ticket).createdAt || 0).getTime()))
+    } catch (error) {
+      console.error('Failed to fetch tickets:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [user])
+
   useEffect(() => {
     if (!mounted) return
-
     if (!user) {
       router.push('/login')
       return
     }
-
-    const fetchTickets = async () => {
-      try {
-        const response = await api.get('/tickets')
-        setTickets(response.data)
-      } catch (error) {
-        console.error('Failed to fetch tickets:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
     fetchTickets()
-  }, [user, router, mounted])
+  }, [user, router, mounted, fetchTickets])
+
+  useEffect(() => {
+    if (!mounted || !user) return
+    const onFocus = () => fetchTickets()
+    window.addEventListener('visibilitychange', onFocus)
+    return () => window.removeEventListener('visibilitychange', onFocus)
+  }, [mounted, user, fetchTickets])
 
   // Keyword search: split query into words, match any ticket field (case-insensitive)
   const keywords = searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean)
@@ -155,7 +165,21 @@ export default function TicketsPage() {
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">IT Support Tickets</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-gray-900 tracking-tight">IT Support Tickets</h1>
+              <button
+                type="button"
+                onClick={() => fetchTickets()}
+                disabled={loading}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                title="Refresh list"
+              >
+                <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </button>
+            </div>
             {user?.role === 'user' && (
               <Link href="/tickets/create" className="btn-primary-tickets shrink-0">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -285,30 +309,14 @@ export default function TicketsPage() {
                                 </td>
                               )}
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                {ticket.createdAt
-                                  ? new Date(ticket.createdAt).toLocaleString('en-US', {
-                                      year: 'numeric',
-                                      month: 'short',
-                                      day: 'numeric',
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                      hour12: true
-                                    })
-                                  : 'N/A'}
+                                {formatPinoyDateTime(ticket.createdAt) || 'N/A'}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 {ticket.slaDue ? (
                                   <span className={`text-xs font-medium ${isSLABreached(ticket.slaDue) ? 'text-red-600' : 'text-gray-600'}`}>
                                     {isSLABreached(ticket.slaDue)
                                       ? '⚠ Breached'
-                                      : new Date(ticket.slaDue).toLocaleString('en-US', {
-                                          year: 'numeric',
-                                          month: 'short',
-                                          day: 'numeric',
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                          hour12: true
-                                        })}
+                                      : formatPinoyDateTime(ticket.slaDue)}
                                   </span>
                                 ) : (
                                   <span className="text-xs text-gray-400">—</span>

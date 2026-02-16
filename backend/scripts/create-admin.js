@@ -30,13 +30,9 @@ async function createAdmin() {
     })
 
     if (existingAdmins.length > 0) {
-      console.log('⚠️  Admin accounts already exist in the system.')
-      const proceed = await question('Do you want to create another admin? (y/n): ')
-      if (proceed.toLowerCase() !== 'y') {
-        console.log('Cancelled.')
-        readline.close()
-        process.exit(0)
-      }
+      console.log('⚠️  Only one admin is allowed. An admin account already exists.')
+      readline.close()
+      process.exit(0)
     }
 
     const name = await question('Enter admin name: ')
@@ -70,14 +66,15 @@ async function createAdmin() {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10)
 
-    // Create admin user
+    // Create admin user (only one admin; no branch assignment)
     const result = await query('users', 'insert', {
       data: {
         email,
         password: hashedPassword,
         name,
         role: 'admin',
-        status: 'active'
+        status: 'active',
+        branch_acronyms: []
       }
     })
 

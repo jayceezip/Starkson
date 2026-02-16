@@ -7,6 +7,7 @@ import { Listbox, Transition } from '@headlessui/react'
 import api, { getApiBaseUrl } from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser } from '@/lib/auth'
+import { formatPinoyDateTime } from '@/lib/date'
 
 interface Incident {
   id: number
@@ -350,16 +351,7 @@ export default function IncidentDetailsPage() {
                   {incident.timeline && incident.timeline.length > 0 ? (
                     incident.timeline.map((entry: any) => {
                       const entryDate = entry.created_at || entry.createdAt
-                      const formattedDate = entryDate 
-                        ? new Date(entryDate).toLocaleString('en-US', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: true
-                          })
-                        : 'Invalid Date'
+                      const formattedDate = formatPinoyDateTime(entryDate)
                       
                       return (
                         <div key={entry.id} className="flex gap-4 pb-4 border-b border-gray-200 last:border-0">
@@ -611,16 +603,7 @@ export default function IncidentDetailsPage() {
                   <div>
                     <span className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Created</span>
                     <p className="mt-1 text-gray-900">
-                      {incident.createdAt 
-                        ? new Date(incident.createdAt).toLocaleString('en-US', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: true
-                          })
-                        : 'N/A'}
+                      {formatPinoyDateTime(incident.createdAt) || 'N/A'}
                     </p>
                   </div>
                 </div>

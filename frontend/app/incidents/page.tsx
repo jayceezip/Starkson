@@ -7,6 +7,7 @@ import { Listbox, Transition } from '@headlessui/react'
 import api from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser } from '@/lib/auth'
+import { formatPinoyDateTime } from '@/lib/date'
 
 interface Incident {
   id: number
@@ -592,16 +593,7 @@ export default function IncidentsPage() {
                                 )}
                               </td>
                               <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
-                                {incident.createdAt
-                                  ? new Date(incident.createdAt).toLocaleString('en-US', {
-                                      year: 'numeric',
-                                      month: 'short',
-                                      day: 'numeric',
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                      hour12: true
-                                    })
-                                  : '—'}
+                                {formatPinoyDateTime(incident.createdAt)}
                               </td>
                             </tr>
                           );

@@ -7,6 +7,7 @@ export interface User {
   email: string
   name: string
   role: UserRole
+  branchAcronyms?: string[]
 }
 
 export const getStoredUser = (): User | null => {

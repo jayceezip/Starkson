@@ -7,6 +7,7 @@ import { Listbox, Transition } from '@headlessui/react'
 import api, { getApiBaseUrl } from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser, hasRole } from '@/lib/auth'
+import { formatPinoyDateTime } from '@/lib/date'
 
 interface TimelineEntry {
   id: string
@@ -564,25 +565,7 @@ export default function TicketDetailsPage() {
                     {ticket.incidentTimeline && ticket.incidentTimeline.length > 0 ? (
                       ticket.incidentTimeline.map((t: any) => {
                       const timelineDate = t.created_at || t.createdAt
-                      let formattedDate = 'Invalid Date'
-                      
-                      if (timelineDate) {
-                        try {
-                          const date = new Date(timelineDate)
-                          if (!isNaN(date.getTime())) {
-                            formattedDate = date.toLocaleString('en-US', {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              hour12: true
-                            })
-                          }
-                        } catch (e) {
-                          console.error('Date formatting error:', e)
-                        }
-                      }
+                      const formattedDate = formatPinoyDateTime(timelineDate)
                       
                       const userName = t.userName || t.user?.name || 'System'
                       const action = t.action || 'UPDATE'
@@ -619,25 +602,7 @@ export default function TicketDetailsPage() {
                   {ticket.comments && ticket.comments.length > 0 ? (
                     ticket.comments.map((c: any) => {
                       const commentDate = c.created_at || c.createdAt
-                      let formattedDate = 'Invalid Date'
-                      
-                      if (commentDate) {
-                        try {
-                          const date = new Date(commentDate)
-                          if (!isNaN(date.getTime())) {
-                            formattedDate = date.toLocaleString('en-US', {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              hour12: true
-                            })
-                          }
-                        } catch (e) {
-                          console.error('Date formatting error:', e)
-                        }
-                      }
+                      const formattedDate = formatPinoyDateTime(commentDate)
                       
                       const isInternal = c.is_internal || c.isInternal
                       const userName = c.userName || c.user?.name || 'Unknown User'
@@ -913,30 +878,14 @@ export default function TicketDetailsPage() {
                     <div>
                       <span className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">SLA Due</span>
                       <p className={`mt-1 ${(ticket.sla_due || ticket.slaDue) && new Date(ticket.sla_due || ticket.slaDue || '') < new Date() ? 'text-red-600 font-semibold' : 'text-gray-900'}`}>
-                        {(ticket.sla_due || ticket.slaDue) && new Date(ticket.sla_due || ticket.slaDue || '').toLocaleString('en-US', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          hour12: true
-                        })}
+                        {formatPinoyDateTime(ticket.sla_due || ticket.slaDue || undefined)}
                       </p>
                     </div>
                   ) : null}
                   <div>
                     <span className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Created</span>
                     <p className="mt-1 text-gray-900">
-                      {(ticket.created_at || ticket.createdAt) 
-                        ? new Date(ticket.created_at || ticket.createdAt || '').toLocaleString('en-US', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: true
-                          })
-                        : 'N/A'}
+                      {formatPinoyDateTime(ticket.created_at || ticket.createdAt || undefined) || 'N/A'}
                     </p>
                   </div>
                 </div>

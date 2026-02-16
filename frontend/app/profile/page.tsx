@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
-import { getStoredUser } from '@/lib/auth'
+import { getStoredUser, setStoredAuth } from '@/lib/auth'
+import { BRANCHES, ALL_BRANCHES_ACRONYM } from '@/lib/branches'
 
 export default function ProfilePage() {
   const router = useRouter()
@@ -24,6 +25,24 @@ export default function ProfilePage() {
     setMounted(true)
     const currentUser = getStoredUser()
     setUser(currentUser)
+    // Fetch fresh user from server so Branch(es) reflects current DB (branch_acronyms)
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+    if (token) {
+      api.get('/auth/me')
+        .then((res) => {
+          const fresh = res.data
+          const userData = {
+            id: fresh.id,
+            email: fresh.email,
+            name: fresh.name,
+            role: fresh.role,
+            branchAcronyms: fresh.branchAcronyms ?? []
+          }
+          setUser(userData)
+          setStoredAuth(token, userData)
+        })
+        .catch(() => {})
+    }
   }, [])
 
   useEffect(() => {
@@ -132,6 +151,20 @@ export default function ProfilePage() {
                   <div>
                     <dt className="text-sm font-medium text-gray-500 mb-1.5">Role</dt>
                     <dd className="text-base text-gray-800">{formatRole(user.role)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500 mb-1.5">Branch(es)</dt>
+                    <dd className="text-base text-gray-800">
+                      {user.role === 'admin'
+                        ? '—'
+                        : user.branchAcronyms && user.branchAcronyms.length > 0
+                          ? user.branchAcronyms.includes(ALL_BRANCHES_ACRONYM)
+                            ? 'All Branches'
+                            : user.branchAcronyms
+                                .map((a) => BRANCHES.find((b) => b.acronym === a)?.name || a)
+                                .join(', ')
+                          : '—'}
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-sm font-medium text-gray-500 mb-1.5">Password</dt>

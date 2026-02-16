@@ -3,6 +3,18 @@ const router = express.Router()
 const { supabase } = require('../config/database')
 const { authenticate, authorize } = require('../middleware/auth')
 
+// audit_logs.created_at: set ONLY by the database (DEFAULT NOW() + trigger). Never send created_at on insert. Real-time.
+
+// Philippine time (UTC+8): treat date-only YYYY-MM-DD as that day in Manila for filtering
+function startOfDayPHT(ymd) {
+  if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null
+  return new Date(ymd + 'T00:00:00+08:00').toISOString()
+}
+function endOfDayPHT(ymd) {
+  if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null
+  return new Date(ymd + 'T23:59:59.999+08:00').toISOString()
+}
+
 // Export audit reports (must be before /:param routes)
 const EXPORT_PAGE_SIZE = 1000
 
@@ -26,8 +38,10 @@ router.get('/export', authenticate, authorize('admin'), async (req, res) => {
 
       if (resourceType) q = q.eq('resource_type', resourceType)
       if (action) q = q.eq('action', action)
-      if (startDate) q = q.gte('created_at', startDate)
-      if (endDate) q = q.lte('created_at', endDate)
+      const startISO = startOfDayPHT(startDate)
+      const endISO = endOfDayPHT(endDate)
+      if (startISO) q = q.gte('created_at', startISO)
+      if (endISO) q = q.lte('created_at', endISO)
 
       const { data: page, error } = await q
 
@@ -87,8 +101,10 @@ router.get('/', authenticate, authorize('admin'), async (req, res) => {
     if (resourceType) q = q.eq('resource_type', resourceType)
     if (resourceId) q = q.eq('resource_id', resourceId)
     if (action) q = q.eq('action', action)
-    if (startDate) q = q.gte('created_at', startDate)
-    if (endDate) q = q.lte('created_at', endDate)
+    const startISO = startOfDayPHT(startDate)
+    const endISO = endOfDayPHT(endDate)
+    if (startISO) q = q.gte('created_at', startISO)
+    if (endISO) q = q.lte('created_at', endISO)
 
     const { data: logs, error, count } = await q
 
