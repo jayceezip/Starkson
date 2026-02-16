@@ -1,12 +1,14 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { Listbox, Transition } from '@headlessui/react'
 import api from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser, hasRole } from '@/lib/auth'
 import { formatPinoyDateTime } from '@/lib/date'
+import { REAL_BRANCHES } from '@/lib/branches'
 
 interface Ticket {
   id: number
@@ -25,6 +27,25 @@ interface Ticket {
 
 const PAGE_SIZE = 10
 
+const TICKET_STATUS_OPTIONS = [
+  { value: '', label: 'All statuses' },
+  { value: 'new', label: 'New' },
+  { value: 'assigned', label: 'Assigned' },
+  { value: 'in_progress', label: 'In progress' },
+  { value: 'waiting_for_user', label: 'Waiting for user' },
+  { value: 'resolved', label: 'Resolved' },
+  { value: 'closed', label: 'Closed' },
+  { value: 'converted_to_incident', label: 'Converted to incident' },
+]
+
+const TICKET_PRIORITY_OPTIONS = [
+  { value: '', label: 'All priorities' },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'urgent', label: 'Urgent' },
+]
+
 export default function TicketsPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
@@ -33,6 +54,7 @@ export default function TicketsPage() {
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
+  const [filters, setFilters] = useState({ status: '', priority: '', branch: '' })
 
   useEffect(() => {
     setMounted(true)
@@ -44,7 +66,11 @@ export default function TicketsPage() {
     if (!user) return
     try {
       setLoading(true)
-      const response = await api.get('/tickets')
+      const params = new URLSearchParams()
+      if (filters.status) params.append('status', filters.status)
+      if (filters.priority) params.append('priority', filters.priority)
+      if (filters.branch) params.append('branch_acronym', filters.branch)
+      const response = await api.get(`/tickets?${params.toString()}`)
       const list = Array.isArray(response.data) ? response.data : []
       setTickets(list.sort((a, b) => new Date((b as Ticket).createdAt || 0).getTime() - new Date((a as Ticket).createdAt || 0).getTime()))
     } catch (error) {
@@ -52,7 +78,7 @@ export default function TicketsPage() {
     } finally {
       setLoading(false)
     }
-  }, [user])
+  }, [user, filters.status, filters.priority, filters.branch])
 
   useEffect(() => {
     if (!mounted) return
@@ -188,6 +214,74 @@ export default function TicketsPage() {
                 Create Ticket
               </Link>
             )}
+          </div>
+
+          {/* Filters - same style as incidents */}
+          <div className="panel-card border border-gray-200">
+            <p className="text-sm font-medium text-gray-700 mb-3">Filter tickets</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
+                <Listbox value={filters.status} onChange={(value) => { setFilters((f) => ({ ...f, status: value })); setPage(1) }}>
+                  <div className="relative">
+                    <Listbox.Button className="relative w-full flex items-center justify-between gap-2 px-4 py-2.5 bg-white text-gray-900 rounded-xl border border-gray-200 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-medium text-left">
+                      <span>{TICKET_STATUS_OPTIONS.find((o) => o.value === filters.status)?.label ?? 'All statuses'}</span>
+                      <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </Listbox.Button>
+                    <Transition as={Fragment} leave="transition ease-in duration-100" leaveFrom="opacity-100" leaveTo="opacity-0">
+                      <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-60 overflow-auto">
+                        {TICKET_STATUS_OPTIONS.map((opt) => (
+                          <Listbox.Option key={opt.value || 'all'} value={opt.value} className={({ active }) => `cursor-pointer py-2.5 px-4 ${active ? 'bg-gray-50' : ''}`}>
+                            {opt.label}
+                          </Listbox.Option>
+                        ))}
+                      </Listbox.Options>
+                    </Transition>
+                  </div>
+                </Listbox>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Priority</label>
+                <Listbox value={filters.priority} onChange={(value) => { setFilters((f) => ({ ...f, priority: value })); setPage(1) }}>
+                  <div className="relative">
+                    <Listbox.Button className="relative w-full flex items-center justify-between gap-2 px-4 py-2.5 bg-white text-gray-900 rounded-xl border border-gray-200 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-medium text-left">
+                      <span>{TICKET_PRIORITY_OPTIONS.find((o) => o.value === filters.priority)?.label ?? 'All priorities'}</span>
+                      <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </Listbox.Button>
+                    <Transition as={Fragment} leave="transition ease-in duration-100" leaveFrom="opacity-100" leaveTo="opacity-0">
+                      <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-60 overflow-auto">
+                        {TICKET_PRIORITY_OPTIONS.map((opt) => (
+                          <Listbox.Option key={opt.value || 'all'} value={opt.value} className={({ active }) => `cursor-pointer py-2.5 px-4 ${active ? 'bg-gray-50' : ''}`}>
+                            {opt.label}
+                          </Listbox.Option>
+                        ))}
+                      </Listbox.Options>
+                    </Transition>
+                  </div>
+                </Listbox>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Branch</label>
+                <Listbox value={filters.branch} onChange={(value) => { setFilters((f) => ({ ...f, branch: value })); setPage(1) }}>
+                  <div className="relative">
+                    <Listbox.Button className="relative w-full flex items-center justify-between gap-2 px-4 py-2.5 bg-white text-gray-900 rounded-xl border border-gray-200 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-medium text-left">
+                      <span>{filters.branch ? REAL_BRANCHES.find((b) => b.acronym === filters.branch)?.name ?? filters.branch : 'All branches'}</span>
+                      <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </Listbox.Button>
+                    <Transition as={Fragment} leave="transition ease-in duration-100" leaveFrom="opacity-100" leaveTo="opacity-0">
+                      <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-60 overflow-auto">
+                        <Listbox.Option value="" className={({ active }) => `cursor-pointer py-2.5 px-4 ${active ? 'bg-gray-50' : ''}`}>All branches</Listbox.Option>
+                        {REAL_BRANCHES.map((b) => (
+                          <Listbox.Option key={b.acronym} value={b.acronym} className={({ active }) => `cursor-pointer py-2.5 px-4 ${active ? 'bg-gray-50' : ''}`}>
+                            {b.name}
+                          </Listbox.Option>
+                        ))}
+                      </Listbox.Options>
+                    </Transition>
+                  </div>
+                </Listbox>
+              </div>
+            </div>
           </div>
 
           {loading ? (

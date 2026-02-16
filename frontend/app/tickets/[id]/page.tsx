@@ -185,7 +185,9 @@ export default function TicketDetailsPage() {
   const [isInternal, setIsInternal] = useState(false)
   const [showConvertModal, setShowConvertModal] = useState(false)
   const [converting, setConverting] = useState(false)
-  const [convertData, setConvertData] = useState({ category: '', severity: 'medium', description: '' })
+  const [convertData, setConvertData] = useState({ category: '', severity: 'medium', description: '', assignedTo: '' })
+  const [securityOfficers, setSecurityOfficers] = useState<{ id: string; name: string; email: string }[]>([])
+  const [securityOfficersLoading, setSecurityOfficersLoading] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [uploadingFiles, setUploadingFiles] = useState(false)
   const [fileUploadStatus, setFileUploadStatus] = useState<Record<number, { status: 'pending' | 'uploading' | 'success' | 'error', message?: string }>>({})
@@ -199,6 +201,15 @@ export default function TicketDetailsPage() {
     const currentUser = getStoredUser()
     setUser(currentUser)
   }, [])
+
+  useEffect(() => {
+    if (!showConvertModal) return
+    setSecurityOfficersLoading(true)
+    api.get('/users/security-officers')
+      .then((res) => setSecurityOfficers(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setSecurityOfficers([]))
+      .finally(() => setSecurityOfficersLoading(false))
+  }, [showConvertModal])
 
   const fetchTicket = useCallback(async () => {
     try {
@@ -373,7 +384,9 @@ export default function TicketDetailsPage() {
 
     setConverting(true)
     try {
-      const response = await api.post(`/tickets/${params.id}/convert`, convertData)
+      const payload: Record<string, string> = { category: convertData.category, severity: convertData.severity, description: convertData.description || '' }
+      if (convertData.assignedTo) payload.assignedTo = convertData.assignedTo
+      const response = await api.post(`/tickets/${params.id}/convert`, payload)
       const { incidentId, incidentNumber } = response.data || {}
       setTicket((prev) => (prev ? {
         ...prev,
@@ -1028,9 +1041,29 @@ export default function TicketDetailsPage() {
         {/* Convert Modal */}
         {showConvertModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded-xl shadow-xl max-w-md w-full border border-gray-100">
+            <div className="bg-white p-6 rounded-xl shadow-xl max-w-md w-full border border-gray-100 max-h-[90vh] overflow-y-auto">
               <h2 className="text-xl font-bold mb-4 text-red-600">Convert Ticket to Incident</h2>
               <form onSubmit={handleConvertToIncident} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Assign to Security Officer *</label>
+                  <select
+                    value={convertData.assignedTo}
+                    onChange={(e) => setConvertData({ ...convertData, assignedTo: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    required={securityOfficers.length > 0}
+                    disabled={securityOfficersLoading}
+                  >
+                    <option value="">
+                      {securityOfficersLoading ? 'Loading…' : 'Select Security Officer'}
+                    </option>
+                    {securityOfficers.map((so) => (
+                      <option key={so.id} value={so.id}>{so.name} {so.email ? `(${so.email})` : ''}</option>
+                    ))}
+                  </select>
+                  {!securityOfficersLoading && securityOfficers.length === 0 && (
+                    <p className="text-xs text-amber-600 mt-1">No active Security Officers found. Add one in User Management.</p>
+                  )}
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Incident Category *</label>
                   <select

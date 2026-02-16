@@ -6,6 +6,23 @@ const { BRANCHES } = require('../constants/branches')
 
 const VALID_ACRONYMS = new Set(BRANCHES.map(b => b.acronym))
 
+// Get security officers only (for convert-to-incident assignment; it_support and admin)
+router.get('/security-officers', authenticate, authorize('it_support', 'security_officer', 'admin'), async (req, res) => {
+  try {
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('id, name, email')
+      .eq('role', 'security_officer')
+      .eq('status', 'active')
+      .order('name', { ascending: true })
+    if (error) throw error
+    res.json(users || [])
+  } catch (error) {
+    console.error('Get security officers error:', error)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
 // Get all users (admin only)
 router.get('/', authenticate, authorize('admin'), async (req, res) => {
   try {

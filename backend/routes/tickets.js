@@ -125,13 +125,17 @@ router.get('/', authenticate, async (req, res) => {
     const branchFilter = userBranchAcronyms.length > 0
       ? `branch_acronym.in.("${userBranchAcronyms.join('","')}"),branch_acronym.is.null`
       : null
+    const { status, priority, branch_acronym: queryBranch } = req.query
+    if (status) ticketsQuery = ticketsQuery.eq('status', status)
+    if (priority) ticketsQuery = ticketsQuery.eq('priority', priority)
+    if (queryBranch) ticketsQuery = ticketsQuery.eq('branch_acronym', queryBranch)
     if (req.user.role === 'user') {
       ticketsQuery = ticketsQuery.eq('created_by', req.user.id)
       if (!hasAllBranches && branchFilter) {
         ticketsQuery = ticketsQuery.or(branchFilter)
       }
     } else if (req.user.role === 'it_support') {
-      ticketsQuery = ticketsQuery.or(`assigned_to.eq.${req.user.id},assigned_to.is.null`)
+      // IT Support sees all tickets (in their branch(s)) so past tickets show in the list
       if (!hasAllBranches && branchFilter) {
         ticketsQuery = ticketsQuery.or(branchFilter)
       }
@@ -848,6 +852,33 @@ router.post('/:id/comments', authenticate, async (req, res) => {
       }
     })
 
+    // Notify the other party so it shows on their dashboard
+    const isStaff = ['it_support', 'admin'].includes(req.user.role)
+    if (isStaff && ticket.created_by && ticket.created_by !== req.user.id) {
+      await query('notifications', 'insert', {
+        data: {
+          user_id: ticket.created_by,
+          type: 'TICKET_COMMENT',
+          title: 'New comment on your ticket',
+          message: `IT Support commented on ticket ${ticket.ticket_number}`,
+          resource_type: 'ticket',
+          resource_id: ticket.id
+        }
+      })
+    }
+    if (req.user.role === 'user' && ticket.assigned_to && ticket.assigned_to !== req.user.id) {
+      await query('notifications', 'insert', {
+        data: {
+          user_id: ticket.assigned_to,
+          type: 'TICKET_COMMENT',
+          title: 'User commented on ticket',
+          message: `A user commented on ticket ${ticket.ticket_number}`,
+          resource_type: 'ticket',
+          resource_id: ticket.id
+        }
+      })
+    }
+
     res.status(201).json({ message: 'Comment added', commentId: result.id })
   } catch (error) {
     console.error('Add comment error:', error)
@@ -858,7 +889,7 @@ router.post('/:id/comments', authenticate, async (req, res) => {
 // Convert ticket to incident
 router.post('/:id/convert', authenticate, authorize('it_support', 'security_officer', 'admin'), async (req, res) => {
   try {
-    const { category, severity, description } = req.body
+    const { category, severity, description, assignedTo: requestedAssignedTo } = req.body
 
     const ticket = await query('tickets', 'select', {
       filters: [{ column: 'id', value: req.params.id }],
@@ -901,7 +932,12 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
     console.log('🔢 Generated incident number:', incidentNumber)
 
     // Assign incident to Security Officer (if available)
-    const assignedToId = await findSecurityOfficer()
+    let assignedToId = null
+    if (requestedAssignedTo) {
+      const { data: so } = await supabase.from('users').select('id').eq('id', requestedAssignedTo).eq('role', 'security_officer').eq('status', 'active').single()
+      if (so) assignedToId = so.id
+    }
+    if (!assignedToId) assignedToId = await findSecurityOfficer()
     console.log('🔍 Incident assignment check:', { assignedToId, ticketNumber: ticket.ticket_number })
 
     // From database: Affected Asset = ticket.affected_system; Affected User = link to ticket creator by id

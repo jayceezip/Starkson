@@ -150,14 +150,14 @@ export default function AdminPanelPage() {
         {/* System Metrics - chart style cards (no Uptime per user request) */}
         <h2 className="panel-section-title">System Metrics</h2>
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          {/* Tickets this week - simple bar chart */}
+          {/* Tickets this week - bar resets each week; list below = last week's tickets */}
           <div className="panel-card">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">
                   Tickets by weekday
                 </h3>
-                <span className="text-xs text-gray-500">All time (by created date)</span>
+                <span className="text-xs text-gray-500">This week only (resets each week)</span>
               </div>
               <div className="text-right">
                 <p className="text-2xl font-bold text-gray-900">
@@ -171,7 +171,7 @@ export default function AdminPanelPage() {
                 <p className="text-sm text-gray-500">No ticket data for this week.</p>
               ) : (
                 (() => {
-                  const max = Math.max(...metrics.ticketsThisWeek.map((d) => d.count))
+                  const max = Math.max(...metrics.ticketsThisWeek.map((d) => d.count), 1)
                   return metrics.ticketsThisWeek.map((d) => {
                     const height = max ? (d.count / max) * 100 : 0
                     return (
@@ -200,11 +200,11 @@ export default function AdminPanelPage() {
               )}
             </div>
             <p className="text-xs text-gray-500">
-              Visual overview of ticket volume across the current week.
+              Bar shows current week only (resets each week).
             </p>
           </div>
 
-          {/* Incidents by status - centered donut + legend */}
+          {/* Incidents by status - pie chart + legend */}
           <div className="panel-card">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">
@@ -212,65 +212,54 @@ export default function AdminPanelPage() {
               </h3>
               <span className="text-xs text-gray-500">Distribution</span>
             </div>
-            <div className="flex flex-col items-center gap-4">
-              {/* Larger, centered ring chart */}
-              <div className="relative w-48 h-48">
-                <div className="w-full h-full rounded-full bg-gradient-to-tr from-sky-500 via-amber-400 to-emerald-500 opacity-90" />
-                <div className="absolute inset-3 rounded-full bg-white" />
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-2xl font-bold text-gray-900">
-                    {metrics.incidentStatus.reduce((sum, s) => sum + s.count, 0)}
-                  </span>
-                  <span className="text-[11px] text-gray-500">Incidents</span>
-                </div>
-              </div>
-              {/* Legend under the circle */}
-              <div className="w-full max-w-xs space-y-2">
-                {metrics.incidentStatus.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center">
-                    No incidents recorded.
-                  </p>
-                ) : (
-                  (() => {
-                    const total = metrics.incidentStatus.reduce(
-                      (sum, s) => sum + s.count,
-                      0
-                    )
-                    const colors = [
-                      'bg-blue-500',
-                      'bg-yellow-400',
-                      'bg-orange-500',
-                      'bg-emerald-500',
-                      'bg-purple-500',
-                      'bg-pink-500',
-                    ]
-                    return metrics.incidentStatus.map((s, idx) => {
-                      const pct =
-                        total > 0 ? Math.round((s.count / total) * 100) : 0
-                      return (
-                        <div
-                          key={s.status}
-                          className="flex items-center justify-between text-sm"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`w-3 h-3 rounded-full ${
-                                colors[idx % colors.length]
-                              }`}
-                            />
-                            <span className="text-gray-700">
-                              {s.status.replace(/_/g, ' ')}
-                            </span>
+            <div className="flex flex-col md:flex-row items-center gap-6">
+              {metrics.incidentStatus.length === 0 ? (
+                <p className="text-sm text-gray-500 py-8">No incidents recorded.</p>
+              ) : (
+                (() => {
+                  const total = metrics.incidentStatus.reduce((sum, s) => sum + s.count, 0)
+                  const colors = ['#3b82f6', '#eab308', '#f97316', '#10b981', '#a855f7', '#ec4899']
+                  const cx = 50
+                  const cy = 50
+                  const r = 40
+                  let acc = 0
+                  const slices = metrics.incidentStatus.map((s, idx) => {
+                    const pct = total > 0 ? s.count / total : 0
+                    const startAngle = (acc * 360 - 90) * (Math.PI / 180)
+                    acc += pct
+                    const endAngle = (acc * 360 - 90) * (Math.PI / 180)
+                    const x1 = cx + r * Math.cos(startAngle)
+                    const y1 = cy + r * Math.sin(startAngle)
+                    const x2 = cx + r * Math.cos(endAngle)
+                    const y2 = cy + r * Math.sin(endAngle)
+                    const large = pct > 0.5 ? 1 : 0
+                    const d = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`
+                    return { d, fill: colors[idx % colors.length], status: s.status, count: s.count, pct: total > 0 ? Math.round(pct * 100) : 0 }
+                  })
+                  return (
+                    <>
+                      <div className="flex-shrink-0 w-48 h-48">
+                        <svg viewBox="0 0 100 100" className="w-full h-full">
+                          {slices.map((sl, i) => (
+                            <path key={i} d={sl.d} fill={sl.fill} stroke="#fff" strokeWidth={1.5} />
+                          ))}
+                        </svg>
+                      </div>
+                      <div className="flex-1 w-full max-w-xs space-y-2">
+                        {slices.map((sl, i) => (
+                          <div key={sl.status} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: sl.fill }} />
+                              <span className="text-gray-700">{sl.status.replace(/_/g, ' ')}</span>
+                            </div>
+                            <span className="text-gray-500 font-medium">{sl.pct}%</span>
                           </div>
-                          <span className="text-gray-500 font-medium">
-                            {pct}%
-                          </span>
-                        </div>
-                      )
-                    })
-                  })()
-                )}
-              </div>
+                        ))}
+                      </div>
+                    </>
+                  )
+                })()
+              )}
             </div>
           </div>
 

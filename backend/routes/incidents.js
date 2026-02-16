@@ -25,12 +25,16 @@ const generateIncidentNumber = async (branchAcronym) => {
 // Get all incidents (Security Officer and Admin only)
 router.get('/', authenticate, authorize('security_officer', 'admin'), async (req, res) => {
   try {
-    const { status, severity, category } = req.query
+    const { status, severity, category, branch_acronym } = req.query
     let filters = []
 
+    if (req.user.role === 'security_officer') {
+      filters.push({ column: 'assigned_to', value: req.user.id })
+    }
     if (status) filters.push({ column: 'status', value: status })
     if (severity) filters.push({ column: 'severity', value: severity })
     if (category) filters.push({ column: 'category', value: category })
+    if (branch_acronym) filters.push({ column: 'branch_acronym', value: branch_acronym })
 
     const selectWithAffectedUser = `
       *,
@@ -126,19 +130,18 @@ router.get('/:id', authenticate, async (req, res) => {
       return res.status(404).json({ message: 'Incident not found' })
     }
 
-    // RBAC: IT Support can view incidents converted from tickets (all IT Support can view converted incidents)
-    if (req.user.role === 'it_support') {
-      if (!incident.source_ticket_id) {
-        // If incident has no source ticket, IT Support cannot view it
+    // RBAC: Security Officer only sees incidents assigned to them; Admin sees all
+    if (req.user.role === 'security_officer') {
+      if (incident.assigned_to !== req.user.id) {
         return res.status(403).json({ message: 'Forbidden' })
       }
-      // All IT Support users can view incidents converted from tickets
-      // No need to check ticket assignment - any IT Support can view converted incidents
+    } else if (req.user.role === 'it_support') {
+      if (!incident.source_ticket_id) {
+        return res.status(403).json({ message: 'Forbidden' })
+      }
     } else if (req.user.role === 'user') {
-      // Regular users cannot view incidents
       return res.status(403).json({ message: 'Forbidden' })
-    } else if (!['security_officer', 'admin'].includes(req.user.role)) {
-      // Only security_officer, admin, and it_support (with conditions) can view incidents
+    } else if (req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Forbidden' })
     }
 
@@ -515,6 +518,28 @@ router.post('/:id/timeline', authenticate, authorize('security_officer', 'admin'
         resource_id: req.params.id
       }
     })
+
+    // When Security Officer (or admin) adds a timeline update visible to the user, notify the ticket creator
+    const isStaff = ['security_officer', 'admin'].includes(req.user.role)
+    if (isStaff && !isInternal && incident.source_ticket_id) {
+      const { data: sourceTicket } = await supabase
+        .from('tickets')
+        .select('created_by')
+        .eq('id', incident.source_ticket_id)
+        .single()
+      if (sourceTicket?.created_by && sourceTicket.created_by !== req.user.id) {
+        await query('notifications', 'insert', {
+          data: {
+            user_id: sourceTicket.created_by,
+            type: 'INCIDENT_TIMELINE_UPDATE',
+            title: 'Update on your incident',
+            message: `Security Officer added an update to incident ${incident.incident_number || ''}`,
+            resource_type: 'incident',
+            resource_id: req.params.id
+          }
+        })
+      }
+    }
 
     res.status(201).json({ message: 'Timeline entry added', entryId: result.id })
   } catch (error) {

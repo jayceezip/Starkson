@@ -32,7 +32,10 @@ export function formatActionLabel(item: ActivityItem): { label: string; href: st
     case 'ADD_COMMENT':
     case 'USER_COMMENT':
     case 'STAFF_COMMENT':
-      return { label: `Commented on ticket ${ref || ''}`.trim(), href: item.resourceType === 'ticket' && rid ? `/tickets/${rid}` : null }
+    case 'TICKET_COMMENT': {
+      const title = (item.details as Record<string, unknown>)?.title
+      return { label: typeof title === 'string' ? title : `Comment on ticket ${ref || ''}`.trim(), href: item.resourceType === 'ticket' && rid ? `/tickets/${rid}` : null }
+    }
     case 'DELETE_TICKET':
       return { label: `Deleted ticket ${ref || ''}`.trim(), href: null }
     case 'CREATE_INCIDENT':
@@ -61,7 +64,10 @@ export function formatActionLabel(item: ActivityItem): { label: string; href: st
     case 'UPDATE_INCIDENT':
       return { label: `Updated incident ${ref || ''}`.trim(), href: item.resourceType === 'incident' && rid ? `/incidents/${rid}` : null }
     case 'ADD_TIMELINE_ENTRY':
-      return { label: `Added timeline entry to incident ${ref || ''}`.trim(), href: item.resourceType === 'incident' && rid ? `/incidents/${rid}` : null }
+    case 'INCIDENT_TIMELINE_UPDATE': {
+      const title = (item.details as Record<string, unknown>)?.title
+      return { label: typeof title === 'string' ? title : `Update on incident ${ref || ''}`.trim(), href: item.resourceType === 'incident' && rid ? `/incidents/${rid}` : null }
+    }
     case 'UPLOAD_ATTACHMENT':
       return { label: `Uploaded attachment${ref ? ` (${item.resourceType})` : ''}`.trim(), href: item.resourceType === 'ticket' && rid ? `/tickets/${rid}` : item.resourceType === 'incident' && rid ? `/incidents/${rid}` : null }
     case 'DELETE_ATTACHMENT':

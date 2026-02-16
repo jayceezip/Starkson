@@ -8,6 +8,7 @@ import api from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser } from '@/lib/auth'
 import { formatPinoyDateTime } from '@/lib/date'
+import { REAL_BRANCHES } from '@/lib/branches'
 
 interface Incident {
   id: number
@@ -326,7 +327,7 @@ export default function IncidentsPage() {
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
-  const [filters, setFilters] = useState({ status: '', severity: '', category: '' })
+  const [filters, setFilters] = useState({ status: '', severity: '', category: '', branch: '' })
 
   useEffect(() => {
     setMounted(true)
@@ -348,6 +349,7 @@ export default function IncidentsPage() {
         if (filters.status) params.append('status', filters.status)
         if (filters.severity) params.append('severity', filters.severity)
         if (filters.category) params.append('category', filters.category)
+        if (filters.branch) params.append('branch_acronym', filters.branch)
         
         const response = await api.get(`/incidents?${params.toString()}`)
         setIncidents(response.data)
@@ -453,7 +455,7 @@ export default function IncidentsPage() {
           {/* Filters Card */}
           <div className="panel-card border border-gray-200">
             <p className="text-sm font-medium text-gray-700 mb-3">Filter incidents</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
                 <ModernStatusFilterSelect
@@ -474,6 +476,27 @@ export default function IncidentsPage() {
                   value={filters.category}
                   onChange={(value) => setFilters({ ...filters, category: value })}
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Branch</label>
+                <Listbox value={filters.branch} onChange={(value) => setFilters({ ...filters, branch: value })}>
+                  <div className="relative">
+                    <Listbox.Button className="relative w-full flex items-center justify-between gap-2 px-4 py-2.5 bg-white text-gray-900 rounded-xl border border-gray-200 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer font-medium text-left">
+                      <span>{filters.branch ? REAL_BRANCHES.find((b) => b.acronym === filters.branch)?.name ?? filters.branch : 'All branches'}</span>
+                      <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </Listbox.Button>
+                    <Transition as={Fragment} leave="transition ease-in duration-100" leaveFrom="opacity-100" leaveTo="opacity-0">
+                      <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-60 overflow-auto">
+                        <Listbox.Option value="" className={({ active }) => `cursor-pointer py-2.5 px-4 ${active ? 'bg-gray-50' : ''}`}>All branches</Listbox.Option>
+                        {REAL_BRANCHES.map((b) => (
+                          <Listbox.Option key={b.acronym} value={b.acronym} className={({ active }) => `cursor-pointer py-2.5 px-4 ${active ? 'bg-gray-50' : ''}`}>
+                            {b.name}
+                          </Listbox.Option>
+                        ))}
+                      </Listbox.Options>
+                    </Transition>
+                  </div>
+                </Listbox>
               </div>
             </div>
           </div>

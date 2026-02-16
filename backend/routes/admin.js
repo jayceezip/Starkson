@@ -48,27 +48,44 @@ router.get('/stats', authenticate, authorize('admin'), async (req, res) => {
   }
 })
 
+// Week bounds: Monday 00:00 UTC to next Monday 00:00 UTC (bar resets each week)
+function getWeekStartEnd(weeksAgo = 0) {
+  const now = new Date()
+  const day = now.getUTCDay()
+  const mondayOffset = day === 0 ? -6 : 1 - day
+  const thisMonday = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate() + mondayOffset - 7 * weeksAgo,
+    0, 0, 0, 0
+  ))
+  const nextMonday = new Date(thisMonday.getTime() + 7 * 24 * 60 * 60 * 1000)
+  return { start: thisMonday.toISOString(), end: nextMonday.toISOString() }
+}
+
 // Get admin system metrics for charts
 router.get('/metrics', authenticate, authorize('admin'), async (req, res) => {
   try {
-    // Tickets grouped by weekday (all time, based on created_at)
-    const { data: ticketsWeekData, error: ticketsWeekError } = await supabase
+    const { start: weekStartISO, end: weekEndISO } = getWeekStartEnd(0)
+
+    // Tickets this week only (bar resets when week changes)
+    const { data: ticketsThisWeekData, error: ticketsWeekError } = await supabase
       .from('tickets')
       .select('id, created_at')
+      .gte('created_at', weekStartISO)
+      .lt('created_at', weekEndISO)
 
     if (ticketsWeekError) {
       console.error('Tickets by weekday error:', ticketsWeekError)
       throw ticketsWeekError
     }
 
-    const countsByWeekday = [0, 0, 0, 0, 0, 0, 0] // 0=Sun ... 6=Sat
-    ;(ticketsWeekData || []).forEach((t) => {
+    const countsByWeekday = [0, 0, 0, 0, 0, 0, 0]
+    ;(ticketsThisWeekData || []).forEach((t) => {
       if (!t.created_at) return
       const d = new Date(t.created_at)
-      const idx = d.getDay()
-      if (!Number.isNaN(idx) && idx >= 0 && idx <= 6) {
-        countsByWeekday[idx] += 1
-      }
+      const idx = d.getUTCDay()
+      if (!Number.isNaN(idx) && idx >= 0 && idx <= 6) countsByWeekday[idx] += 1
     })
 
     const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']

@@ -13,11 +13,11 @@ type ActivityCategory = 'attachments' | 'ticket_actions' | 'comments'
 
 function getActivityCategory(action: string): ActivityCategory {
   if (action === 'UPLOAD_ATTACHMENT' || action === 'DELETE_ATTACHMENT') return 'attachments'
-  if (action === 'ADD_COMMENT' || action === 'USER_COMMENT' || action === 'STAFF_COMMENT') return 'comments'
+  if (action === 'ADD_COMMENT' || action === 'USER_COMMENT' || action === 'STAFF_COMMENT' || action === 'TICKET_COMMENT') return 'comments'
   // Ticket/incident actions (from notifications or audit)
   if (action === 'CREATE_TICKET' || action === 'UPDATE_TICKET' || action === 'TICKET_UPDATED' || action === 'NEW_TICKET_CREATED' ||
       action === 'TICKET_ASSIGNED' || action === 'DELETE_TICKET' || action === 'CONVERT_TICKET' || action === 'TICKET_CONVERTED_TO_INCIDENT' ||
-      action === 'CREATE_INCIDENT' || action === 'NEW_INCIDENT_CREATED' || action === 'UPDATE_INCIDENT' || action === 'INCIDENT_UPDATED' || action === 'INCIDENT_ASSIGNED') return 'ticket_actions'
+      action === 'CREATE_INCIDENT' || action === 'NEW_INCIDENT_CREATED' || action === 'UPDATE_INCIDENT' || action === 'INCIDENT_UPDATED' || action === 'INCIDENT_ASSIGNED' || action === 'INCIDENT_TIMELINE_UPDATE') return 'ticket_actions'
   return 'ticket_actions'
 }
 
