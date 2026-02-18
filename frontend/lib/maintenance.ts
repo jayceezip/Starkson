@@ -17,8 +17,19 @@ const CATEGORIES_DEFAULT = [
   'Peripheral',
 ]
 
+const INCIDENT_CATEGORIES_DEFAULT = [
+  'Phishing',
+  'Malware',
+  'Unauthorized Access',
+  'Data Exposure',
+  'Policy Violation',
+  'System Compromise',
+  'Other',
+]
+
 const STORAGE_KEY_AFFECTED = 'starkson_affected_systems'
 const STORAGE_KEY_CATEGORIES = 'starkson_categories'
+const STORAGE_KEY_INCIDENT_CATEGORIES = 'starkson_incident_categories'
 
 function getFromStorage<T>(key: string, defaultValue: T[]): T[] {
   if (typeof window === 'undefined') return defaultValue
@@ -45,6 +56,7 @@ function setToStorage<T>(key: string, value: T[]): void {
 
 export const AFFECTED_SYSTEMS_DEFAULTS = AFFECTED_SYSTEMS_DEFAULT
 export const CATEGORIES_DEFAULTS = CATEGORIES_DEFAULT
+export const INCIDENT_CATEGORIES_DEFAULTS = INCIDENT_CATEGORIES_DEFAULT
 
 export function getAffectedSystems(): string[] {
   return getFromStorage(STORAGE_KEY_AFFECTED, AFFECTED_SYSTEMS_DEFAULT)
@@ -60,4 +72,13 @@ export function getCategories(): string[] {
 
 export function setCategories(list: string[]): void {
   setToStorage(STORAGE_KEY_CATEGORIES, list)
+}
+
+// Incident Categories
+export function getIncidentCategories(): string[] {
+  return getFromStorage(STORAGE_KEY_INCIDENT_CATEGORIES, INCIDENT_CATEGORIES_DEFAULT)
+}
+
+export function setIncidentCategories(list: string[]): void {
+  setToStorage(STORAGE_KEY_INCIDENT_CATEGORIES, list)
 }
