@@ -110,6 +110,9 @@ export default function DashboardPage() {
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [activityLoading, setActivityLoading] = useState(true)
   const [clickedCommentIds, setClickedCommentIds] = useState<Set<string>>(new Set())
+  const [recentIncidents, setRecentIncidents] = useState<{ id: string; incident_number: string; title: string; status: string }[]>([])
+  const [incidentsLoading, setIncidentsLoading] = useState(false)
+  const isAdminOrSO = hasRole(user, 'admin', 'security_officer')
 
   const handleActivityClick = useCallback((item: ActivityItem, href: string) => {
     const isComment = ['ADD_COMMENT', 'USER_COMMENT', 'STAFF_COMMENT', 'TICKET_COMMENT'].includes(item.action)
@@ -181,6 +184,32 @@ export default function DashboardPage() {
     window.addEventListener('visibilitychange', onFocus)
     return () => window.removeEventListener('visibilitychange', onFocus)
   }, [mounted, user, fetchActivity])
+
+  const fetchRecentIncidents = useCallback(async () => {
+    if (!user || !hasRole(user, 'admin', 'security_officer')) return
+    setIncidentsLoading(true)
+    try {
+      const res = await api.get('/incidents')
+      const list = Array.isArray(res.data) ? res.data : []
+      setRecentIncidents(
+        list.slice(0, 8).map((inc: { id: string; incident_number?: string; incidentNumber?: string; title?: string; status?: string }) => ({
+          id: inc.id,
+          incident_number: inc.incident_number || inc.incidentNumber || '',
+          title: inc.title || 'Incident',
+          status: inc.status || 'new',
+        }))
+      )
+    } catch {
+      setRecentIncidents([])
+    } finally {
+      setIncidentsLoading(false)
+    }
+  }, [user])
+
+  useEffect(() => {
+    if (!mounted || !user || !isAdminOrSO) return
+    fetchRecentIncidents()
+  }, [mounted, user, isAdminOrSO, fetchRecentIncidents])
 
   if (!mounted || !user) {
     return (
@@ -258,45 +287,150 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <ActivityColumn
-                title="Attachments"
-                icon={
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                  </svg>
-                }
-                items={activity.filter((a) => getActivityCategory(a.action) === 'attachments')}
-                formatLabel={formatActionLabel}
-                getIcon={getActionIcon}
-                onItemClick={handleActivityClick}
-                clickedCommentIds={clickedCommentIds}
-              />
-              <ActivityColumn
-                title="Ticket actions"
-                icon={
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                }
-                items={activity.filter((a) => getActivityCategory(a.action) === 'ticket_actions')}
-                formatLabel={formatActionLabel}
-                getIcon={getActionIcon}
-                onItemClick={handleActivityClick}
-                clickedCommentIds={clickedCommentIds}
-              />
-              <ActivityColumn
-                title="Comments"
-                icon={
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                  </svg>
-                }
-                items={activity.filter((a) => getActivityCategory(a.action) === 'comments')}
-                formatLabel={formatActionLabel}
-                getIcon={getActionIcon}
-                onItemClick={handleActivityClick}
-                clickedCommentIds={clickedCommentIds}
-              />
+              {isAdminOrSO ? (
+                <>
+                  <ActivityColumn
+                    title="Ticket actions"
+                    icon={
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    }
+                    items={activity.filter((a) => getActivityCategory(a.action) === 'ticket_actions')}
+                    formatLabel={formatActionLabel}
+                    getIcon={getActionIcon}
+                    onItemClick={handleActivityClick}
+                    clickedCommentIds={clickedCommentIds}
+                  />
+                  <div className="panel-card flex flex-col h-full min-h-[200px]">
+                    <div className="flex items-center gap-2 mb-4">
+                      <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-amber-100 text-amber-600">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                      </span>
+                      <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Recent Incidents</h3>
+                    </div>
+                    {incidentsLoading ? (
+                      <div className="flex-1 flex items-center justify-center py-8">
+                        <div className="animate-spin rounded-full h-6 w-6 border-2 border-amber-500 border-t-transparent" />
+                      </div>
+                    ) : recentIncidents.length === 0 ? (
+                      <p className="text-sm text-gray-500 flex-1">No incidents</p>
+                    ) : (
+                      <ul className="space-y-2 flex-1 min-h-0 max-h-[320px] overflow-y-auto">
+                        {recentIncidents.map((inc) => (
+                          <li key={inc.id}>
+                            <button
+                              type="button"
+                              onClick={() => router.push(`/incidents/${inc.id}`)}
+                              className="w-full flex items-start gap-2 py-2 border-b border-gray-100 last:border-0 text-left cursor-pointer hover:bg-amber-50/50 rounded-lg -mx-1 px-1 transition-colors"
+                            >
+                              <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex-shrink-0 mt-0.5">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <span className="text-sm font-medium text-gray-900 hover:text-amber-600 transition-colors line-clamp-2 block">
+                                  {inc.incident_number} — {inc.title}
+                                </span>
+                                <p className="text-xs text-gray-500 mt-0.5 capitalize">{inc.status.replace(/_/g, ' ')}</p>
+                              </div>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  <div className="panel-card flex flex-col h-full min-h-[200px]">
+                    <div className="flex items-center gap-2 mb-4">
+                      <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-sky-100 text-sky-600">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m2.118-2.118L19.172 7.828a4 4 0 00-5.656-5.656l-4 4a4 4 0 105.656 5.656l1.102-1.101m2.118-2.118L19.172 7.828a4 4 0 00-5.656-5.656l-4 4a4 4 0 105.656 5.656" />
+                        </svg>
+                      </span>
+                      <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Quick links</h3>
+                    </div>
+                    <div className="flex-1 space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => router.push('/incidents')}
+                        className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-sky-300 hover:bg-sky-50/50 transition-colors text-left"
+                      >
+                        <span className="text-sm font-medium text-gray-900">View all incidents</span>
+                        <svg className="w-4 h-4 text-gray-400 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => router.push('/tickets')}
+                        className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-sky-300 hover:bg-sky-50/50 transition-colors text-left"
+                      >
+                        <span className="text-sm font-medium text-gray-900">View all tickets</span>
+                        <svg className="w-4 h-4 text-gray-400 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                      {hasRole(user, 'admin') && (
+                        <button
+                          type="button"
+                          onClick={() => router.push('/admin')}
+                          className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-sky-300 hover:bg-sky-50/50 transition-colors text-left"
+                        >
+                          <span className="text-sm font-medium text-gray-900">Admin panel</span>
+                          <svg className="w-4 h-4 text-gray-400 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <ActivityColumn
+                    title="Attachments"
+                    icon={
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                      </svg>
+                    }
+                    items={activity.filter((a) => getActivityCategory(a.action) === 'attachments')}
+                    formatLabel={formatActionLabel}
+                    getIcon={getActionIcon}
+                    onItemClick={handleActivityClick}
+                    clickedCommentIds={clickedCommentIds}
+                  />
+                  <ActivityColumn
+                    title="Ticket actions"
+                    icon={
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    }
+                    items={activity.filter((a) => getActivityCategory(a.action) === 'ticket_actions')}
+                    formatLabel={formatActionLabel}
+                    getIcon={getActionIcon}
+                    onItemClick={handleActivityClick}
+                    clickedCommentIds={clickedCommentIds}
+                  />
+                  <ActivityColumn
+                    title="Comments"
+                    icon={
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                    }
+                    items={activity.filter((a) => getActivityCategory(a.action) === 'comments')}
+                    formatLabel={formatActionLabel}
+                    getIcon={getActionIcon}
+                    onItemClick={handleActivityClick}
+                    clickedCommentIds={clickedCommentIds}
+                  />
+                </>
+              )}
             </div>
           )}
         </div>
