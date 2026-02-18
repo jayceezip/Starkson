@@ -9,7 +9,8 @@ import api from '@/lib/api'
 import { formatActionLabel, getActionIcon, timeAgo } from '@/lib/activity'
 import { useNotifications } from '@/context/NotificationContext'
 import type { ActivityItem } from '@/lib/activity'
-import starkonLogo from '../../backend/config/Starkson-Logo.png'
+import starkonPngLogo from '../../backend/config/Starkson-Logo.png'
+import starkonSvgLogo from '../../backend/config/STARKSON LOGO.svg'
 
 const ACTIVITY_POLL_MS = 15000
 
@@ -252,15 +253,29 @@ export default function Sidebar({
             <div className={`flex items-center ${collapsed ? 'flex-col gap-2' : 'flex-1 min-w-0'} justify-center`}>
               <Link href="/dashboard" className={`block ${collapsed ? 'w-8 h-8' : 'w-32 h-10'}`} title="STARKSON">
                 {!logoError ? (
-                  <Image 
-                    src={starkonLogo}
-                    alt="Starkson Logo"
-                    width={collapsed ? 32 : 128}
-                    height={collapsed ? 32 : 40}
-                    className="object-contain"
-                    onError={() => setLogoError(true)}
-                    priority
-                  />
+                  collapsed ? (
+                    /* SVG Logo for collapsed state */
+                    <Image 
+                      src={starkonSvgLogo}
+                      alt="Starkson Logo"
+                      width={32}
+                      height={32}
+                      className="object-contain"
+                      onError={() => setLogoError(true)}
+                      priority
+                    />
+                  ) : (
+                    /* PNG Logo for expanded state */
+                    <Image 
+                      src={starkonPngLogo}
+                      alt="Starkson Logo"
+                      width={128}
+                      height={40}
+                      className="object-contain"
+                      onError={() => setLogoError(true)}
+                      priority
+                    />
+                  )
                 ) : (
                   <span className={`font-bold text-white tracking-tight ${collapsed ? 'text-lg' : 'text-xl'}`}>
                     {collapsed ? 'S' : 'STARKSON'}

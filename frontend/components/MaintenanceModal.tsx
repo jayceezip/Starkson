@@ -7,17 +7,20 @@ import {
   setAffectedSystems,
   getCategories,
   setCategories,
+  getIncidentCategories,
+  setIncidentCategories,
 } from '@/lib/maintenance'
 
 type Branch = { acronym: string; name: string }
 
-type ManageType = 'branches' | 'category' | 'affected_system' | null
+type ManageType = 'branches' | 'category' | 'affected_system' | 'incident_category' | null
 type ActionType = 'add' | 'delete' | null
 
 const LABELS: Record<NonNullable<ManageType>, { singular: string; plural: string }> = {
   branches: { singular: 'Branch', plural: 'Branches' },
   category: { singular: 'Category', plural: 'Categories' },
   affected_system: { singular: 'Affected System', plural: 'Affected Systems' },
+  incident_category: { singular: 'Incident Category', plural: 'Incident Categories' },
 }
 
 export default function MaintenanceModal({
@@ -31,9 +34,11 @@ export default function MaintenanceModal({
   const [actionType, setActionType] = useState<ActionType>(null)
   const [categories, setCategoriesState] = useState<string[]>([])
   const [affectedSystems, setAffectedSystemsState] = useState<string[]>([])
+  const [incidentCategories, setIncidentCategoriesState] = useState<string[]>([])
   const [branches, setBranchesState] = useState<Branch[]>([])
   const [branchesLoading, setBranchesLoading] = useState(false)
   const [branchError, setBranchError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
 
   const fetchBranches = async () => {
     try {
@@ -55,13 +60,16 @@ export default function MaintenanceModal({
       setActionType(null)
       setCategoriesState(getCategories())
       setAffectedSystemsState(getAffectedSystems())
+      setIncidentCategoriesState(getIncidentCategories())
       fetchBranches()
+      setSuccessMessage('')
     }
   }, [isOpen])
 
   const refreshLists = () => {
     setCategoriesState(getCategories())
     setAffectedSystemsState(getAffectedSystems())
+    setIncidentCategoriesState(getIncidentCategories())
   }
 
   const handleAddCategory = (name: string) => {
@@ -71,12 +79,23 @@ export default function MaintenanceModal({
     if (list.includes(trimmed)) return
     setCategories([...list, trimmed])
     refreshLists()
+    setSuccessMessage(`Category "${trimmed}" added successfully`)
+    // Close modal after successful addition
+    setTimeout(() => {
+      onClose()
+    }, 500)
   }
 
+  
   const handleDeleteCategory = (name: string) => {
     const list = getCategories().filter((c) => c !== name)
     setCategories(list)
     refreshLists()
+    setSuccessMessage(`Category "${name}" deleted successfully`)
+    // Close modal after successful deletion
+    setTimeout(() => {
+      onClose()
+    }, 500)
   }
 
   const handleAddAffectedSystem = (name: string) => {
@@ -86,12 +105,47 @@ export default function MaintenanceModal({
     if (list.includes(trimmed)) return
     setAffectedSystems([...list, trimmed])
     refreshLists()
+    setSuccessMessage(`Affected System "${trimmed}" added successfully`)
+    // Close modal after successful addition
+    setTimeout(() => {
+      onClose()
+    }, 500)
   }
 
   const handleDeleteAffectedSystem = (name: string) => {
     const list = getAffectedSystems().filter((s) => s !== name)
     setAffectedSystems(list)
     refreshLists()
+    setSuccessMessage(`Affected System "${name}" deleted successfully`)
+    // Close modal after successful deletion
+    setTimeout(() => {
+      onClose()
+    }, 500)
+  }
+
+  const handleAddIncidentCategory = (name: string) => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    const list = getIncidentCategories()
+    if (list.includes(trimmed)) return
+    setIncidentCategories([...list, trimmed])
+    refreshLists()
+    setSuccessMessage(`Incident Category "${trimmed}" added successfully`)
+    // Close modal after successful addition
+    setTimeout(() => {
+      onClose()
+    }, 500)
+  }
+
+  const handleDeleteIncidentCategory = (name: string) => {
+    const list = getIncidentCategories().filter((c) => c !== name)
+    setIncidentCategories(list)
+    refreshLists()
+    setSuccessMessage(`Incident Category "${name}" deleted successfully`)
+    // Close modal after successful deletion
+    setTimeout(() => {
+      onClose()
+    }, 500)
   }
 
   const handleAddBranch = async (acronym: string, name: string) => {
@@ -99,6 +153,11 @@ export default function MaintenanceModal({
       setBranchError('')
       await api.post('/branches', { acronym: acronym.trim().toUpperCase(), name: name.trim() })
       await fetchBranches()
+      setSuccessMessage(`Branch "${acronym}" added successfully`)
+      // Close modal after successful addition
+      setTimeout(() => {
+        onClose()
+      }, 500)
     } catch (err: any) {
       setBranchError(err.response?.data?.message || 'Failed to add branch')
     }
@@ -109,12 +168,18 @@ export default function MaintenanceModal({
       setBranchError('')
       await api.delete(`/branches/${encodeURIComponent(acronym)}`)
       await fetchBranches()
+      setSuccessMessage(`Branch "${acronym}" deleted successfully`)
+      // Close modal after successful deletion
+      setTimeout(() => {
+        onClose()
+      }, 500)
     } catch (err: any) {
       setBranchError(err.response?.data?.message || 'Failed to delete branch')
     }
   }
 
   const goBack = () => {
+    setSuccessMessage('') // Clear success message when navigating
     if (actionType) {
       setActionType(null)
     } else if (manageType) {
@@ -154,6 +219,16 @@ export default function MaintenanceModal({
         </div>
 
         <div className="p-6 max-h-[70vh] overflow-y-auto">
+          {/* Success Message */}
+          {successMessage && (
+            <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-sm text-green-700 flex items-center gap-2">
+              <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              {successMessage}
+            </div>
+          )}
+
           {!manageType ? (
             /* Step 1: Choose what to manage */
             <div className="space-y-2">
@@ -173,6 +248,16 @@ export default function MaintenanceModal({
                 className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors text-left"
               >
                 <span className="font-medium text-gray-900">Manage Category</span>
+                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={() => setManageType('incident_category')}
+                className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors text-left"
+              >
+                <span className="font-medium text-gray-900">Manage Incident Category</span>
                 <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
@@ -224,7 +309,10 @@ export default function MaintenanceModal({
                 </div>
               )}
               {actionType === 'add' ? (
-                <BranchAddForm onSubmit={handleAddBranch} loading={branchesLoading} />
+                <BranchAddForm 
+                  onSubmit={handleAddBranch} 
+                  loading={branchesLoading} 
+                />
               ) : (
                 <BranchDeleteForm
                   branches={branches}
@@ -245,6 +333,20 @@ export default function MaintenanceModal({
                 label={`Select ${LABELS.category.singular} to delete`}
                 options={categories}
                 onDelete={handleDeleteCategory}
+              />
+            )
+          ) : manageType === 'incident_category' ? (
+            actionType === 'add' ? (
+              <AddForm
+                label={`New ${LABELS.incident_category.singular}`}
+                placeholder="e.g., Data Breach"
+                onSubmit={handleAddIncidentCategory}
+              />
+            ) : (
+              <DeleteForm
+                label={`Select ${LABELS.incident_category.singular} to delete`}
+                options={incidentCategories}
+                onDelete={handleDeleteIncidentCategory}
               />
             )
           ) : manageType === 'affected_system' ? (

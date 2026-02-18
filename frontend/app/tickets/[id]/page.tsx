@@ -8,7 +8,7 @@ import api, { getApiBaseUrl } from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser, hasRole } from '@/lib/auth'
 import { formatPinoyDateTime } from '@/lib/date'
-
+import { getIncidentCategories } from '@/lib/maintenance'
 interface TimelineEntry {
   id: string
   action: string
@@ -195,6 +195,13 @@ export default function TicketDetailsPage() {
   const [editData, setEditData] = useState({ title: '', description: '', affectedSystem: '', priority: 'medium' })
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [incidentCategories, setIncidentCategories] = useState<string[]>([])
+
+  useEffect(() => {
+  if (showConvertModal) {
+    setIncidentCategories(getIncidentCategories())
+  }
+}, [showConvertModal])
 
   useEffect(() => {
     setMounted(true)
@@ -368,49 +375,76 @@ export default function TicketDetailsPage() {
     setShowStatusConfirmModal(false);
   }
 
-  const handleConvertToIncident = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!ticket) {
-      alert('Ticket not found')
-      return
+const handleConvertToIncident = async (e: React.FormEvent) => {
+  e.preventDefault()
+  if (!ticket) {
+    alert('Ticket not found')
+    return
+  }
+  if (ticket.isConverted) {
+    alert('This ticket has already been converted to an incident.')
+    if (ticket.convertedIncidentId) {
+      router.push(`/incidents/${ticket.convertedIncidentId}`)
     }
-    if (ticket.isConverted) {
-      alert('This ticket has already been converted to an incident.')
-      if (ticket.convertedIncidentId) {
-        router.push(`/incidents/${ticket.convertedIncidentId}`)
-      }
-      return
-    }
-
-    setConverting(true)
-    try {
-      const payload: Record<string, string> = { category: convertData.category, severity: convertData.severity, description: convertData.description || '' }
-      if (convertData.assignedTo) payload.assignedTo = convertData.assignedTo
-      const response = await api.post(`/tickets/${params.id}/convert`, payload)
-      const { incidentId, incidentNumber } = response.data || {}
-      setTicket((prev) => (prev ? {
-        ...prev,
-        status: 'converted_to_incident',
-        isConverted: true,
-        convertedIncidentId: incidentId ?? prev.convertedIncidentId,
-        convertedIncidentNumber: incidentNumber ?? prev.convertedIncidentNumber,
-      } : prev))
-      setShowConvertModal(false)
-      fetchTicket()
-    } catch (error: any) {
-      console.error('Failed to convert ticket:', error)
-      const errorMessage = error.response?.data?.message || 'Failed to convert ticket. It may have already been converted.'
-      alert(errorMessage)
-      if (error.response?.status === 400 && error.response?.data?.incidentId) {
-        router.push(`/incidents/${error.response.data.incidentId}`)
-      } else {
-        fetchTicket()
-      }
-    } finally {
-      setConverting(false)
-    }
+    return
   }
 
+  setConverting(true)
+  try {
+    // Map display categories to database values
+    const categoryMap: Record<string, string> = {
+      'Phishing': 'phishing',
+      'Malware': 'malware',
+      'Unauthorized Access': 'unauthorized_access',
+      'Data Exposure': 'data_exposure',
+      'Policy Violation': 'policy_violation',
+      'System Compromise': 'system_compromise',
+      'Other': 'other'
+    }
+
+    // Get the selected category display name from the select
+    const selectedDisplayName = incidentCategories.find(
+      cat => cat.toLowerCase().replace(/\s+/g, '_') === convertData.category
+    ) || convertData.category
+
+    // Map to database value or use the raw value if it's already in the correct format
+    const dbCategoryValue = categoryMap[selectedDisplayName] || convertData.category
+
+    const payload: Record<string, string> = { 
+      category: dbCategoryValue, 
+      severity: convertData.severity, 
+      description: convertData.description || '' 
+    }
+    
+    if (convertData.assignedTo) payload.assignedTo = convertData.assignedTo
+    
+    console.log('Sending payload:', payload) // Debug log
+    
+    const response = await api.post(`/tickets/${params.id}/convert`, payload)
+    const { incidentId, incidentNumber } = response.data || {}
+    setTicket((prev) => (prev ? {
+      ...prev,
+      status: 'converted_to_incident',
+      isConverted: true,
+      convertedIncidentId: incidentId ?? prev.convertedIncidentId,
+      convertedIncidentNumber: incidentNumber ?? prev.convertedIncidentNumber,
+    } : prev))
+    setShowConvertModal(false)
+    fetchTicket()
+  } catch (error: any) {
+    console.error('Failed to convert ticket:', error)
+    console.error('Error details:', error.response?.data) // Debug log
+    const errorMessage = error.response?.data?.message || 'Failed to convert ticket. It may have already been converted.'
+    alert(errorMessage)
+    if (error.response?.status === 400 && error.response?.data?.incidentId) {
+      router.push(`/incidents/${error.response.data.incidentId}`)
+    } else {
+      fetchTicket()
+    }
+  } finally {
+    setConverting(false)
+  }
+}
   const handleEditTicket = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!canModify) {
@@ -1057,7 +1091,7 @@ export default function TicketDetailsPage() {
                       {securityOfficersLoading ? 'Loading…' : 'Select Security Officer'}
                     </option>
                     {securityOfficers.map((so) => (
-                      <option key={so.id} value={so.id}>{so.name} {so.email ? `(${so.email})` : ''}</option>
+                      <option key={so.id} value={so.id}>{so.name}</option>
                     ))}
                   </select>
                   {!securityOfficersLoading && securityOfficers.length === 0 && (
@@ -1073,16 +1107,35 @@ export default function TicketDetailsPage() {
                     required
                   >
                     <option value="">Select category</option>
-                    <option value="phishing">Phishing</option>
-                    <option value="malware">Malware</option>
-                    <option value="unauthorized_access">Unauthorized Access</option>
-                    <option value="data_exposure">Data Exposure</option>
-                    <option value="policy_violation">Policy Violation</option>
-                    <option value="system_compromise">System Compromise</option>
-                    <option value="other">Other</option>
+                    {incidentCategories.length > 0 ? (
+                      incidentCategories.map((category) => {
+                        // Store the display name in the state, we'll map it when sending
+                        const dbValue = category.toLowerCase().replace(/\s+/g, '_')
+                        return (
+                          <option key={category} value={dbValue}>
+                            {category}
+                          </option>
+                        )
+                      })
+                    ) : (
+                      // Fallback options if no categories are configured
+                      <>
+                        <option value="phishing">Phishing</option>
+                        <option value="malware">Malware</option>
+                        <option value="unauthorized_access">Unauthorized Access</option>
+                        <option value="data_exposure">Data Exposure</option>
+                        <option value="policy_violation">Policy Violation</option>
+                        <option value="system_compromise">System Compromise</option>
+                        <option value="other">Other</option>
+                      </>
+                    )}
                   </select>
-                </div>
-                <div>
+                  {incidentCategories.length === 0 && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      No incident categories configured. Using default options.
+                    </p>
+                  )}
+                </div>               <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Severity *</label>
                   <select
                     value={convertData.severity}
