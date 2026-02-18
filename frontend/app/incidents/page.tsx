@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, Fragment } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Listbox, Transition } from '@headlessui/react'
 import api from '@/lib/api'
@@ -322,12 +322,18 @@ const ModernCategoryFilterSelect = ({
 export default function IncidentsPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
+  const searchParams = useSearchParams()
   const [mounted, setMounted] = useState(false)
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
-  const [filters, setFilters] = useState({ status: '', severity: '', category: '', branch: '' })
+  const [filters, setFilters] = useState(() => ({
+    status: searchParams.get('status') || '',
+    severity: searchParams.get('severity') || '',
+    category: searchParams.get('category') || '',
+    branch: searchParams.get('branch_acronym') || '',
+  }))
 
   useEffect(() => {
     setMounted(true)

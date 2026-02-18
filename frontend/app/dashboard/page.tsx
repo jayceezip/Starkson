@@ -111,6 +111,7 @@ export default function DashboardPage() {
   const [activityLoading, setActivityLoading] = useState(true)
   const [clickedCommentIds, setClickedCommentIds] = useState<Set<string>>(new Set())
   const [recentIncidents, setRecentIncidents] = useState<{ id: string; incident_number: string; title: string; status: string }[]>([])
+  const [topCategories, setTopCategories] = useState<{ category: string; count: number }[]>([])
   const [incidentsLoading, setIncidentsLoading] = useState(false)
   const isAdminOrSO = hasRole(user, 'admin', 'security_officer')
 
@@ -199,8 +200,19 @@ export default function DashboardPage() {
           status: inc.status || 'new',
         }))
       )
+      const categoryCounts: Record<string, number> = {}
+      list.forEach((inc: { category?: string }) => {
+        const cat = inc.category || 'Uncategorized'
+        categoryCounts[cat] = (categoryCounts[cat] || 0) + 1
+      })
+      const top = Object.entries(categoryCounts)
+        .map(([category, count]) => ({ category, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 8)
+      setTopCategories(top)
     } catch {
       setRecentIncidents([])
+      setTopCategories([])
     } finally {
       setIncidentsLoading(false)
     }
@@ -344,48 +356,37 @@ export default function DashboardPage() {
                     )}
                   </div>
                   <div className="panel-card flex flex-col h-full min-h-[200px]">
-                    <div className="flex items-center gap-2 mb-4">
-                      <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-sky-100 text-sky-600">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-violet-100 text-violet-600">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m2.118-2.118L19.172 7.828a4 4 0 00-5.656-5.656l-4 4a4 4 0 105.656 5.656l1.102-1.101m2.118-2.118L19.172 7.828a4 4 0 00-5.656-5.656l-4 4a4 4 0 105.656 5.656" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" />
                         </svg>
                       </span>
-                      <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Quick links</h3>
+                      <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Top categories</h3>
                     </div>
-                    <div className="flex-1 space-y-2">
-                      <button
-                        type="button"
-                        onClick={() => router.push('/incidents')}
-                        className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-sky-300 hover:bg-sky-50/50 transition-colors text-left"
-                      >
-                        <span className="text-sm font-medium text-gray-900">View all incidents</span>
-                        <svg className="w-4 h-4 text-gray-400 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => router.push('/tickets')}
-                        className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-sky-300 hover:bg-sky-50/50 transition-colors text-left"
-                      >
-                        <span className="text-sm font-medium text-gray-900">View all tickets</span>
-                        <svg className="w-4 h-4 text-gray-400 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </button>
-                      {hasRole(user, 'admin') && (
-                        <button
-                          type="button"
-                          onClick={() => router.push('/admin')}
-                          className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-sky-300 hover:bg-sky-50/50 transition-colors text-left"
-                        >
-                          <span className="text-sm font-medium text-gray-900">Admin panel</span>
-                          <svg className="w-4 h-4 text-gray-400 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
+                    <p className="text-xs text-gray-500 mb-4">Displaying the categories of many kinds of incidents</p>
+                    {incidentsLoading ? (
+                      <div className="flex-1 flex items-center justify-center py-8">
+                        <div className="animate-spin rounded-full h-6 w-6 border-2 border-violet-500 border-t-transparent" />
+                      </div>
+                    ) : topCategories.length === 0 ? (
+                      <p className="text-sm text-gray-500 flex-1">No incident categories yet</p>
+                    ) : (
+                      <ul className="space-y-2 flex-1 min-h-0 max-h-[320px] overflow-y-auto">
+                        {topCategories.map(({ category, count }) => (
+                          <li key={category}>
+                            <button
+                              type="button"
+                              onClick={() => router.push(`/incidents?category=${encodeURIComponent(category)}`)}
+                              className="w-full flex items-center justify-between gap-2 py-2.5 px-3 border border-gray-100 rounded-xl text-left cursor-pointer hover:border-violet-200 hover:bg-violet-50/50 transition-colors"
+                            >
+                              <span className="text-sm font-medium text-gray-900 capitalize">{category.replace(/_/g, ' ')}</span>
+                              <span className="text-sm text-gray-500 font-medium tabular-nums">{count} {count === 1 ? 'incident' : 'incidents'}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 </>
               ) : (
