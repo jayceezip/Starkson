@@ -7,7 +7,7 @@ import { BRANCHES, REAL_BRANCHES, ALL_BRANCHES_ACRONYM } from './branches'
 export type Branch = { acronym: string; name: string }
 
 export function useBranches() {
-  const [branches, setBranches] = useState<Branch[]>(BRANCHES as Branch[])
+  const [branches, setBranches] = useState<Branch[]>(() => [...BRANCHES] as Branch[])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
