@@ -85,6 +85,28 @@ export default function NotificationsPage() {
     setShowDeleteConfirm(null)
   }
 
+  const handleNotificationClick = async (notification: any) => {
+    // Mark as read if unread
+    if (!notification.isRead) {
+      await markAsRead(notification.id)
+    }
+    
+    // Redirect based on notification type and resource
+    if (notification.ticket_id) {
+      // If there's a ticket_id, go to the ticket
+      router.push(`/tickets/${notification.ticket_id}`)
+    } else if (notification.resourceType === 'incident' && notification.resourceId) {
+      // If it's an incident with resourceId, go to the incident
+      router.push(`/incidents/${notification.resourceId}`)
+    } else if (notification.resourceType === 'ticket' && notification.resourceId) {
+      // If it's a ticket with resourceId, go to the ticket
+      router.push(`/tickets/${notification.resourceId}`)
+    } else {
+      // Default fallback
+      console.log('No redirect path available for notification:', notification)
+    }
+  }
+
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'ticket':
@@ -94,6 +116,8 @@ export default function NotificationsPage() {
           </svg>
         )
       case 'incident':
+      case 'ADDED_INCIDENT_TIMELINE':
+      case 'INCIDENT_TIMELINE_UPDATE':
         return (
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -119,6 +143,8 @@ export default function NotificationsPage() {
       case 'ticket':
         return 'bg-blue-50 text-blue-600'
       case 'incident':
+      case 'ADDED_INCIDENT_TIMELINE':
+      case 'INCIDENT_TIMELINE_UPDATE':
         return 'bg-red-50 text-red-600'
       case 'system':
         return 'bg-purple-50 text-purple-600'
@@ -223,8 +249,11 @@ export default function NotificationsPage() {
                       
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1">
-                            <h3 className="text-sm font-medium text-gray-900 mb-1">
+                          <button
+                            onClick={() => handleNotificationClick(notification)}
+                            className="flex-1 text-left focus:outline-none focus:ring-2 focus:ring-sky-500 rounded-lg -ml-1 pl-1"
+                          >
+                            <h3 className="text-sm font-medium text-gray-900 mb-1 hover:text-sky-600 transition-colors">
                               {notification.title}
                             </h3>
                             {notification.message && (
@@ -235,12 +264,15 @@ export default function NotificationsPage() {
                             <p className="text-xs text-gray-500">
                               {timeAgo(notification.createdAt)}
                             </p>
-                          </div>
+                          </button>
                           
                           <div className="flex items-center gap-2 flex-shrink-0">
                             {isUnread && (
                               <button
-                                onClick={() => markAsRead(notification.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  markAsRead(notification.id)
+                                }}
                                 className="text-xs text-sky-600 hover:text-sky-700 font-medium px-2 py-1 rounded hover:bg-sky-50 transition-colors"
                                 title="Mark as read"
                               >
@@ -299,18 +331,18 @@ export default function NotificationsPage() {
                           </div>
                         </div>
                         
-                        {notification.link && (
+                        {/* Show View Details button if there's a ticket_id or resource info */}
+                        {(notification.ticket_id || (notification.resourceType && notification.resourceId)) && (
                           <div className="mt-3">
-                            <Link
-                              href={notification.link}
-                              onClick={() => isUnread && markAsRead(notification.id)}
-                              className="inline-flex items-center gap-1 text-xs text-sky-600 hover:text-sky-700 font-medium"
+                            <button
+                              onClick={() => handleNotificationClick(notification)}
+                              className="inline-flex items-center gap-1 text-xs text-sky-600 hover:text-sky-700 font-medium focus:outline-none focus:ring-2 focus:ring-sky-500 rounded px-2 py-1"
                             >
                               View details
                               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                               </svg>
-                            </Link>
+                            </button>
                           </div>
                         )}
                       </div>

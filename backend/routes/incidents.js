@@ -520,6 +520,11 @@ router.post('/:id/timeline', authenticate, authorize('security_officer', 'admin'
   try {
     const { action, description, isInternal = true } = req.body
 
+    // Validate required fields
+    if (!action || !description) {
+      return res.status(400).json({ message: 'Action and description are required' })
+    }
+
     const incident = await query('incidents', 'select', {
       filters: [{ column: 'id', value: req.params.id }],
       single: true
@@ -529,13 +534,15 @@ router.post('/:id/timeline', authenticate, authorize('security_officer', 'admin'
       return res.status(404).json({ message: 'Incident not found' })
     }
 
+    // Insert timeline entry
     const result = await query('incident_timeline', 'insert', {
       data: {
         incident_id: req.params.id,
         user_id: req.user.id,
         action,
         description,
-        is_internal: isInternal
+        is_internal: isInternal,
+        created_at: new Date().toISOString()
       }
     })
 
@@ -545,37 +552,94 @@ router.post('/:id/timeline', authenticate, authorize('security_officer', 'admin'
         action: 'ADD_TIMELINE_ENTRY',
         user_id: req.user.id,
         resource_type: 'incident',
-        resource_id: req.params.id
+        resource_id: req.params.id,
+        details: { action, description, is_internal: isInternal }
       }
     })
 
-    // When Security Officer (or admin) adds a timeline update visible to the user, notify the ticket creator
-    const isStaff = ['security_officer', 'admin'].includes(req.user.role)
-    if (isStaff && !isInternal && incident.source_ticket_id) {
-      const { data: sourceTicket } = await supabase
+    // Get the security officer's name
+    const { data: securityOfficer } = await supabase
+      .from('users')
+      .select('name')
+      .eq('id', req.user.id)
+      .single()
+    
+    const officerName = securityOfficer?.name || 'Security Officer'
+
+    // NOTIFY THE TICKET CREATOR (USER) about the timeline addition
+    if (incident.source_ticket_id) {
+      console.log(`Looking up source ticket: ${incident.source_ticket_id}`)
+      
+      const { data: sourceTicket, error: ticketError } = await supabase
         .from('tickets')
-        .select('created_by')
+        .select('created_by, ticket_number, title')
         .eq('id', incident.source_ticket_id)
         .single()
-      if (sourceTicket?.created_by && sourceTicket.created_by !== req.user.id) {
-        await query('notifications', 'insert', {
-          data: {
-            user_id: sourceTicket.created_by,
-            type: 'INCIDENT_TIMELINE_UPDATE',
-            title: 'Update on your incident',
-            message: `Security Officer added an update to incident ${incident.incident_number || ''}`,
-            resource_type: 'incident',
-            resource_id: req.params.id
+      
+      if (ticketError) {
+        console.error('Error fetching source ticket:', ticketError)
+      } else if (sourceTicket) {
+        console.log(`Found source ticket created by: ${sourceTicket.created_by}`)
+        
+        // Get the user's details to verify they exist
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('id, name, email')
+          .eq('id', sourceTicket.created_by)
+          .single()
+        
+        if (userError) {
+          console.error('Error fetching user:', userError)
+        } else if (userData) {
+          console.log(`Found user: ${userData.name} (${userData.email})`)
+          
+          // Only send notification if the user is not the same as the security officer
+          if (sourceTicket.created_by !== req.user.id) {
+            const incidentNumber = incident.incident_number || `INC-${incident.id}`
+            
+            // Truncate description if too long
+            const shortDescription = description.length > 100 
+              ? description.substring(0, 100) + '...' 
+              : description
+            
+            // Create notification with the new type 'ADDED_INCIDENT_TIMELINE'
+            const notificationData = {
+              user_id: sourceTicket.created_by,
+              type: 'ADDED_INCIDENT_TIMELINE',  // New specific type
+              title: 'Incident updated',
+              message: `${officerName} added a timeline entry to incident ${incidentNumber}: "${action}"`,
+              resource_type: 'incident',
+              resource_id: req.params.id,
+              ticket_id: incident.source_ticket_id,
+              is_read: false,
+              created_at: new Date().toISOString()
+            }
+            
+            console.log('Attempting to insert notification with type ADDED_INCIDENT_TIMELINE:', notificationData)
+            
+            // Insert notification
+            const notificationResult = await query('notifications', 'insert', {
+              data: notificationData
+            })
+            
+            console.log('Notification inserted successfully:', notificationResult)
+          } else {
+            console.log('User is the same as security officer, skipping notification')
           }
-        })
+        }
       }
+    } else {
+      console.log('Incident has no source_ticket_id, cannot notify user')
     }
 
-    res.status(201).json({ message: 'Timeline entry added', entryId: result.id })
+    res.status(201).json({ 
+      message: 'Timeline entry added', 
+      entryId: result.id,
+      notification_sent: incident.source_ticket_id ? true : false
+    })
   } catch (error) {
     console.error('Add timeline entry error:', error)
-    res.status(500).json({ message: 'Server error' })
+    res.status(500).json({ message: 'Server error: ' + error.message })
   }
 })
-
 module.exports = router

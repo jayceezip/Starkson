@@ -14,6 +14,7 @@ interface Notification {
   link: string | null
   isRead: boolean
   createdAt: string
+  ticket_id?: string | null  // Add this optional property
 }
 
 interface NotificationContextType {
@@ -50,7 +51,14 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         api.get('/notifications?limit=100'),
         api.get('/notifications/unread-count')
       ])
-      setNotifications(notifRes.data ?? [])
+      
+      // Map the response to include ticket_id if it exists in the data
+      const mappedNotifications = (notifRes.data ?? []).map((item: any) => ({
+        ...item,
+        ticket_id: item.ticket_id || item.ticketId || null // Handle both camelCase and snake_case
+      }))
+      
+      setNotifications(mappedNotifications)
       setUnreadCount(countRes.data?.count ?? 0)
     } catch (error) {
       console.error('Error fetching notifications:', error)
