@@ -266,6 +266,7 @@ export default function TicketDetailsPage() {
     e.preventDefault()
     if (!comment.trim() && selectedFiles.length === 0) return
 
+    setUploadingFiles(true)
     try {
       if (comment.trim()) {
         await api.post(`/tickets/${params.id}/comments`, { comment, isInternal })
@@ -274,7 +275,6 @@ export default function TicketDetailsPage() {
       }
 
       if (selectedFiles.length > 0) {
-        setUploadingFiles(true)
         const uploadPromises = selectedFiles.map(async (file, index) => {
           setFileUploadStatus(prev => ({ ...prev, [index]: { status: 'uploading' } }))
           
@@ -314,12 +314,12 @@ export default function TicketDetailsPage() {
           setSelectedFiles([])
           setFileUploadStatus({})
         }, 2000)
-        setUploadingFiles(false)
       }
 
       fetchTicket()
     } catch (error) {
       console.error('Failed to add comment/upload files:', error)
+    } finally {
       setUploadingFiles(false)
     }
   }
@@ -737,7 +737,7 @@ export default function TicketDetailsPage() {
                     disabled={uploadingFiles}
                     className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors"
                   >
-                    {uploadingFiles ? 'Uploading...' : 'Add Comment'}
+                    {uploadingFiles ? 'Posting...' : 'Add Comment'}
                   </button>
                 </form>
               </div>
