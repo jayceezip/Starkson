@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import api from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser, hasRole } from '@/lib/auth'
@@ -27,13 +26,18 @@ function ActivityColumn({
   items,
   formatLabel,
   getIcon,
+  onItemClick,
+  clickedCommentIds,
 }: {
   title: string
   icon: React.ReactNode
   items: ActivityItem[]
   formatLabel: (item: ActivityItem) => { label: string; href: string | null }
   getIcon: (action: string) => React.ReactNode
+  onItemClick?: (item: ActivityItem, href: string) => void
+  clickedCommentIds?: Set<string>
 }) {
+  const isComment = (a: string) => ['ADD_COMMENT', 'USER_COMMENT', 'STAFF_COMMENT', 'TICKET_COMMENT'].includes(a)
   return (
     <div className="panel-card flex flex-col h-full min-h-[200px]">
       <div className="flex items-center gap-2 mb-4">
@@ -48,16 +52,34 @@ function ActivityColumn({
         >
           {items.map((item) => {
             const { label, href } = formatLabel(item)
+            const commentClicked = isComment(item.action) && clickedCommentIds?.has(item.id)
+            const canClick = href && !(isComment(item.action) && commentClicked)
             return (
-              <li key={item.id} className="flex items-start gap-2 py-2 border-b border-gray-100 last:border-0">
+              <li
+                key={item.id}
+                className={`flex items-start gap-2 py-2 border-b border-gray-100 last:border-0 ${canClick ? 'cursor-pointer hover:bg-sky-50/50 rounded-lg -mx-1 px-1' : ''}`}
+                onClick={() => {
+                  if (canClick && href && onItemClick) {
+                    onItemClick(item, href)
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (canClick && href && onItemClick && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault()
+                    onItemClick(item, href)
+                  }
+                }}
+                role={canClick ? 'button' : undefined}
+                tabIndex={canClick ? 0 : undefined}
+              >
                 <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-sky-50 text-sky-600 flex-shrink-0 mt-0.5">
                   {getIcon(item.action)}
                 </span>
                 <div className="min-w-0 flex-1">
-                  {href ? (
-                    <Link href={href} className="text-sm font-medium text-gray-900 hover:text-sky-600 transition-colors line-clamp-2">
+                  {canClick ? (
+                    <span className="text-sm font-medium text-gray-900 hover:text-sky-600 transition-colors line-clamp-2 block">
                       {label}
-                    </Link>
+                    </span>
                   ) : (
                     <span className="text-sm font-medium text-gray-900 line-clamp-2">{label}</span>
                   )}
@@ -87,6 +109,15 @@ export default function DashboardPage() {
   })
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [activityLoading, setActivityLoading] = useState(true)
+  const [clickedCommentIds, setClickedCommentIds] = useState<Set<string>>(new Set())
+
+  const handleActivityClick = useCallback((item: ActivityItem, href: string) => {
+    const isComment = ['ADD_COMMENT', 'USER_COMMENT', 'STAFF_COMMENT', 'TICKET_COMMENT'].includes(item.action)
+    if (isComment) {
+      setClickedCommentIds((prev) => new Set(prev).add(item.id))
+    }
+    router.push(href)
+  }, [router])
 
   useEffect(() => {
     setMounted(true)
@@ -237,6 +268,8 @@ export default function DashboardPage() {
                 items={activity.filter((a) => getActivityCategory(a.action) === 'attachments')}
                 formatLabel={formatActionLabel}
                 getIcon={getActionIcon}
+                onItemClick={handleActivityClick}
+                clickedCommentIds={clickedCommentIds}
               />
               <ActivityColumn
                 title="Ticket actions"
@@ -248,6 +281,8 @@ export default function DashboardPage() {
                 items={activity.filter((a) => getActivityCategory(a.action) === 'ticket_actions')}
                 formatLabel={formatActionLabel}
                 getIcon={getActionIcon}
+                onItemClick={handleActivityClick}
+                clickedCommentIds={clickedCommentIds}
               />
               <ActivityColumn
                 title="Comments"
@@ -259,6 +294,8 @@ export default function DashboardPage() {
                 items={activity.filter((a) => getActivityCategory(a.action) === 'comments')}
                 formatLabel={formatActionLabel}
                 getIcon={getActionIcon}
+                onItemClick={handleActivityClick}
+                clickedCommentIds={clickedCommentIds}
               />
             </div>
           )}

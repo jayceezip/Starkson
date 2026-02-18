@@ -89,6 +89,8 @@ router.get('/', authenticate, authorize('admin'), async (req, res) => {
   try {
     const { limit = 200, offset = 0, resourceType, resourceId, action, startDate, endDate } = req.query
 
+    const startISO = startOfDayPHT(startDate)
+    const endISO = endOfDayPHT(endDate)
     let q = supabase
       .from('audit_logs')
       .select(`
@@ -96,15 +98,12 @@ router.get('/', authenticate, authorize('admin'), async (req, res) => {
         user:users!audit_logs_user_id_fkey(id, name, email)
       `, { count: 'exact' })
       .order('created_at', { ascending: false })
-      .range(parseInt(offset, 10) || 0, (parseInt(offset, 10) || 0) + (parseInt(limit, 10) || 200) - 1)
-
     if (resourceType) q = q.eq('resource_type', resourceType)
     if (resourceId) q = q.eq('resource_id', resourceId)
     if (action) q = q.eq('action', action)
-    const startISO = startOfDayPHT(startDate)
-    const endISO = endOfDayPHT(endDate)
     if (startISO) q = q.gte('created_at', startISO)
     if (endISO) q = q.lte('created_at', endISO)
+    q = q.range(parseInt(offset, 10) || 0, (parseInt(offset, 10) || 0) + (parseInt(limit, 10) || 200) - 1)
 
     const { data: logs, error, count } = await q
 
