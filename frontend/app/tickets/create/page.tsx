@@ -6,7 +6,9 @@ import Link from 'next/link'
 import api, { getApiBaseUrl } from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser, setStoredAuth } from '@/lib/auth'
-import { BRANCHES, REAL_BRANCHES, ALL_BRANCHES_ACRONYM } from '@/lib/branches'
+import { useBranches } from '@/lib/useBranches'
+import { getAffectedSystems, getCategories } from '@/lib/maintenance'
+import SelectDropdown from '@/components/SelectDropdown'
 
 const REQUEST_TYPES = [
   { value: 'account_password', label: 'Account & Password Issues' },
@@ -215,20 +217,21 @@ export default function CreateTicketPage() {
       .finally(() => setUserLoaded(true))
   }, [])
 
+  const { realBranches, ALL_BRANCHES_ACRONYM } = useBranches()
   const userBranchList = user?.branchAcronyms && user.branchAcronyms.length > 0 ? user.branchAcronyms : []
   const hasAllBranches = userBranchList.includes(ALL_BRANCHES_ACRONYM)
   const realUserBranches = userBranchList.filter((a: string) => a !== ALL_BRANCHES_ACRONYM)
   const ticketBranchOptions = user?.role === 'admin'
-    ? REAL_BRANCHES
+    ? realBranches
     : hasAllBranches
-      ? REAL_BRANCHES
-      : REAL_BRANCHES.filter((b) => realUserBranches.includes(b.acronym))
+      ? realBranches
+      : realBranches.filter((b) => realUserBranches.includes(b.acronym))
   const singleBranchAuto = realUserBranches.length === 1 && !hasAllBranches && user?.role !== 'admin'
   const noBranchesAssigned = userLoaded && user?.role !== 'admin' && !hasAllBranches && realUserBranches.length === 0
   const defaultBranch = singleBranchAuto
     ? realUserBranches[0]
-    : user?.role === 'admin' && REAL_BRANCHES.length > 0
-      ? REAL_BRANCHES[0].acronym
+    : user?.role === 'admin' && realBranches.length > 0
+      ? realBranches[0].acronym
       : ticketBranchOptions.length > 0
         ? ticketBranchOptions[0].acronym
         : ''
@@ -241,6 +244,13 @@ export default function CreateTicketPage() {
     category: '',
     branchAcronym: defaultBranch,
   })
+  const [affectedSystems, setAffectedSystems] = useState<string[]>([])
+  const [categories, setCategories] = useState<string[]>([])
+
+  useEffect(() => {
+    setAffectedSystems(getAffectedSystems())
+    setCategories(getCategories())
+  }, [])
   const [files, setFiles] = useState<File[]>([])
   const [uploadStatus, setUploadStatus] = useState<Record<number, { status: 'pending' | 'uploading' | 'success' | 'error', message?: string }>>({})
   const [error, setError] = useState('')
@@ -434,8 +444,8 @@ export default function CreateTicketPage() {
               <input type="hidden" name="branchAcronym" value={formData.branchAcronym} />
             )}
 
-            {/* Request Type Card */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+            {/* Request Type Card - overflow-visible so SelectDropdown opens below */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-visible hover:shadow-md transition-shadow">
               <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
                 <h2 className="font-semibold text-gray-900">Request Details</h2>
               </div>
@@ -500,31 +510,20 @@ export default function CreateTicketPage() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Affected System
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.affectedSystem}
-                      onChange={(e) => setFormData({ ...formData, affectedSystem: e.target.value })}
-                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow"
-                      placeholder="e.g., Windows 10, Outlook, VPN"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Category (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.category}
-                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow"
-                      placeholder="e.g., Hardware, Software"
-                    />
-                  </div>
+                  <SelectDropdown
+                    label="Affected System"
+                    value={formData.affectedSystem}
+                    onChange={(v) => setFormData({ ...formData, affectedSystem: v })}
+                    options={affectedSystems.map((o) => ({ value: o, label: o }))}
+                    placeholder="Select affected system"
+                  />
+                  <SelectDropdown
+                    label="Category"
+                    value={formData.category}
+                    onChange={(v) => setFormData({ ...formData, category: v })}
+                    options={categories.map((o) => ({ value: o, label: o }))}
+                    placeholder="Select category"
+                  />
                 </div>
               </div>
             </div>

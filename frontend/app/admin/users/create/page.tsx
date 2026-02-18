@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import api from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
-import { BRANCHES, REAL_BRANCHES, ALL_BRANCHES_ACRONYM } from '@/lib/branches'
+import { useBranches } from '@/lib/useBranches'
 
 const ROLES = [
   { value: 'user', label: 'User' },
@@ -16,6 +16,7 @@ const ROLES = [
 
 export default function AdminCreateUserPage() {
   const router = useRouter()
+  const { realBranches, ALL_BRANCHES_ACRONYM } = useBranches()
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -198,7 +199,7 @@ export default function AdminCreateUserPage() {
                     <span className="text-xs text-gray-600">User has access to every branch and chooses which branch when creating a ticket.</span>
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-64 overflow-y-auto p-2 border border-gray-200 rounded-xl bg-gray-50/50">
-                    {REAL_BRANCHES.map((branch) => (
+                    {realBranches.map((branch) => (
                       <label
                         key={branch.acronym}
                         className={`flex items-center gap-3 p-3 rounded-lg bg-white border border-gray-200 cursor-pointer ${formData.branchAcronyms.includes(ALL_BRANCHES_ACRONYM) ? 'opacity-60' : 'hover:border-blue-200'}`}

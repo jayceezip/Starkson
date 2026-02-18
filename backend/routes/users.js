@@ -2,9 +2,7 @@ const express = require('express')
 const router = express.Router()
 const { query, supabase } = require('../config/database')
 const { authenticate, authorize } = require('../middleware/auth')
-const { BRANCHES } = require('../constants/branches')
-
-const VALID_ACRONYMS = new Set(BRANCHES.map(b => b.acronym))
+const { getValidAcronyms } = require('../lib/branches')
 
 // Get security officers only (for convert-to-incident assignment; it_support and admin)
 router.get('/security-officers', authenticate, authorize('it_support', 'security_officer', 'admin'), async (req, res) => {
@@ -117,8 +115,9 @@ router.put('/:id/role', authenticate, authorize('admin'), async (req, res) => {
 router.put('/:id/branches', authenticate, authorize('admin'), async (req, res) => {
   try {
     const { branchAcronyms } = req.body
+    const validAcronyms = await getValidAcronyms()
     const normalized = Array.isArray(branchAcronyms)
-      ? branchAcronyms.filter(a => typeof a === 'string' && VALID_ACRONYMS.has(a.trim()))
+      ? branchAcronyms.filter(a => typeof a === 'string' && validAcronyms.has(a.trim()))
       : []
 
     const { data: existing } = await supabase

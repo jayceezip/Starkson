@@ -6,6 +6,7 @@ import Link from 'next/link'
 import api from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser } from '@/lib/auth'
+import { useBranches } from '@/lib/useBranches'
 
 interface UserRow {
   id: string
@@ -33,6 +34,12 @@ export default function AdminUsersPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [editingRole, setEditingRole] = useState<string | null>(null)
   const [newRole, setNewRole] = useState<string>('')
+  const [editingBranches, setEditingBranches] = useState<string | null>(null)
+  const [editingBranchUserName, setEditingBranchUserName] = useState<string>('')
+  const [editingBranchAcronyms, setEditingBranchAcronyms] = useState<string[]>([])
+  const [savingBranches, setSavingBranches] = useState(false)
+
+  const { branches, realBranches, ALL_BRANCHES_ACRONYM } = useBranches()
 
   useEffect(() => {
     setMounted(true)
@@ -77,6 +84,47 @@ export default function AdminUsersPage() {
     } catch (e) {
       console.error('Failed to update role:', e)
       alert('Failed to update role')
+    }
+  }
+
+  const handleOpenBranchEdit = (u: UserRow) => {
+    if (u.role === 'admin') return
+    setEditingBranches(u.id)
+    setEditingBranchUserName(u.name)
+    setEditingBranchAcronyms(Array.isArray(u.branchAcronyms) ? [...u.branchAcronyms] : [])
+  }
+
+  const handleBranchCheckboxChange = (acronym: string, checked: boolean) => {
+    if (acronym === ALL_BRANCHES_ACRONYM) {
+      setEditingBranchAcronyms(checked ? [ALL_BRANCHES_ACRONYM] : [])
+    } else {
+      setEditingBranchAcronyms((prev) => {
+        const next = prev.filter((a) => a !== ALL_BRANCHES_ACRONYM)
+        if (checked) return [...next, acronym]
+        return next.filter((a) => a !== acronym)
+      })
+    }
+  }
+
+  const handleUpdateBranches = async (userId: string) => {
+    if (editingBranchAcronyms.length === 0) {
+      alert('Please assign at least one branch or All Branches.')
+      return
+    }
+    setSavingBranches(true)
+    try {
+      await api.put(`/users/${userId}/branches`, {
+        branchAcronyms: editingBranchAcronyms.includes(ALL_BRANCHES_ACRONYM)
+          ? [ALL_BRANCHES_ACRONYM]
+          : editingBranchAcronyms,
+      })
+      setEditingBranches(null)
+      fetchUsers()
+    } catch (e) {
+      console.error('Failed to update branches:', e)
+      alert('Failed to update branches')
+    } finally {
+      setSavingBranches(false)
     }
   }
 
@@ -261,18 +309,33 @@ export default function AdminUsersPage() {
                         )}
                       </td>
                       <td className="px-6 py-4">
-                        <span className="text-sm text-gray-600">
-                          {u.role === 'admin'
-                            ? '—'
-                            : u.branchAcronyms && u.branchAcronyms.length > 0
-                              ? u.branchAcronyms.includes('ALL')
-                                ? 'All Branches'
-                                : u.branchAcronyms.join(', ')
-                              : '—'}
-                        </span>
+                        {u.role === 'admin' ? (
+                          <span className="text-sm text-gray-500">—</span>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-600">
+                              {u.branchAcronyms && u.branchAcronyms.length > 0
+                                ? u.branchAcronyms.includes('ALL')
+                                  ? 'All Branches'
+                                  : u.branchAcronyms.join(', ')
+                                : '—'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenBranchEdit(u)}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50 transition-colors"
+                              title="Edit branches"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                              Edit
+                            </button>
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-lg text-xs font-semibold border ${getStatusBadgeColor(u.status || 'active')}`}>
+                        <span className={`inline-flex items-center px-3 py-1 rounded-lg text-xs font-semibold border ${getStatusBadgeColor(u.status ?? 'active')}`}>
                           {u.status || 'active'}
                         </span>
                       </td>
@@ -331,6 +394,76 @@ export default function AdminUsersPage() {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Assign branches modal */}
+        {editingBranches && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => setEditingBranches(null)}
+              aria-hidden="true"
+            />
+            <div
+              className="relative z-10 w-full max-w-md mx-4 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Assign branches
+                  {editingBranchUserName && (
+                    <span className="ml-2 text-gray-500 font-normal">— {editingBranchUserName}</span>
+                  )}
+                </h2>
+              </div>
+              <div className="p-6 max-h-[70vh] overflow-y-auto">
+                <label className="flex items-center gap-3 p-3 rounded-lg bg-blue-50 border border-blue-100 cursor-pointer mb-3">
+                  <input
+                    type="checkbox"
+                    checked={editingBranchAcronyms.includes(ALL_BRANCHES_ACRONYM)}
+                    onChange={(e) => handleBranchCheckboxChange(ALL_BRANCHES_ACRONYM, e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm font-medium text-gray-900">All Branches</span>
+                </label>
+                <div className="space-y-1 max-h-64 overflow-y-auto">
+                  {realBranches.map((b) => (
+                    <label
+                      key={b.acronym}
+                      className={`flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer ${editingBranchAcronyms.includes(ALL_BRANCHES_ACRONYM) ? 'opacity-60' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={editingBranchAcronyms.includes(b.acronym)}
+                        disabled={editingBranchAcronyms.includes(ALL_BRANCHES_ACRONYM)}
+                        onChange={(e) => handleBranchCheckboxChange(b.acronym, e.target.checked)}
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                      />
+                      <span className="text-sm font-medium text-gray-900">{b.acronym}</span>
+                      <span className="text-sm text-gray-500 truncate flex-1">{b.name}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="flex gap-3 mt-6 pt-4 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => editingBranches && handleUpdateBranches(editingBranches)}
+                    disabled={savingBranches}
+                    className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {savingBranches ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingBranches(null)}
+                    className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>

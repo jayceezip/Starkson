@@ -2,9 +2,7 @@ const express = require('express')
 const router = express.Router()
 const { query, supabase } = require('../config/database')
 const { authenticate, authorize } = require('../middleware/auth')
-const { BRANCHES } = require('../constants/branches')
-
-const VALID_ACRONYMS = new Set(BRANCHES.map(b => b.acronym))
+const { getValidAcronyms } = require('../lib/branches')
 
 // Helper function to find IT Support user for ticket assignment
 const findITSupportUser = async () => {
@@ -528,7 +526,8 @@ router.post('/', authenticate, authorize('user', 'admin'), async (req, res) => {
       return res.status(400).json({ message: 'Missing required fields' })
     }
 
-    if (!branchAcronym || !VALID_ACRONYMS.has(branchAcronym) || branchAcronym === 'ALL') {
+    const validAcronyms = await getValidAcronyms()
+    if (!branchAcronym || !validAcronyms.has(branchAcronym) || branchAcronym === 'ALL') {
       return res.status(400).json({ message: 'Valid branch is required (ticket must be for a specific branch)' })
     }
 
@@ -914,7 +913,8 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
       })
     }
 
-    const branchAcronym = ticket.branch_acronym && VALID_ACRONYMS.has(ticket.branch_acronym)
+    const validAcronyms = await getValidAcronyms()
+    const branchAcronym = ticket.branch_acronym && validAcronyms.has(ticket.branch_acronym)
       ? ticket.branch_acronym
       : 'SPI'
     const { data: lastIncidents, error: countErr } = await supabase

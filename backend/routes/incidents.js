@@ -2,9 +2,7 @@ const express = require('express')
 const router = express.Router()
 const { query, supabase } = require('../config/database')
 const { authenticate, authorize } = require('../middleware/auth')
-const { BRANCHES } = require('../constants/branches')
-
-const VALID_ACRONYMS = new Set(BRANCHES.map(b => b.acronym))
+const { getValidAcronyms } = require('../lib/branches')
 
 // Generate incident number by branch: INC-D01-000001
 const generateIncidentNumber = async (branchAcronym) => {
@@ -269,7 +267,8 @@ router.post('/', authenticate, authorize('security_officer', 'admin'), async (re
       return res.status(400).json({ message: 'Missing required fields' })
     }
 
-    const branch = branchAcronym && VALID_ACRONYMS.has(branchAcronym) ? branchAcronym : 'SPI'
+    const validAcronyms = await getValidAcronyms()
+    const branch = branchAcronym && validAcronyms.has(branchAcronym) ? branchAcronym : 'SPI'
     const incidentNumber = await generateIncidentNumber(branch)
 
     const result = await query('incidents', 'insert', {

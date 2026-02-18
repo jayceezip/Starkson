@@ -4,9 +4,7 @@ const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const { query, supabase } = require('../config/database')
 const { authenticate, authorize } = require('../middleware/auth')
-const { BRANCHES } = require('../constants/branches')
-
-const VALID_ACRONYMS = new Set(BRANCHES.map(b => b.acronym))
+const { getValidAcronyms } = require('../lib/branches')
 
 // Register (admin only). Only one admin is allowed in the system.
 router.post('/register', authenticate, authorize('admin'), async (req, res) => {
@@ -33,7 +31,8 @@ router.post('/register', authenticate, authorize('admin'), async (req, res) => {
     }
 
     // Non-admin roles must have at least one branch (unless you allow no branch)
-    const normalizedBranches = rawBranches.filter(a => typeof a === 'string' && a.trim() && VALID_ACRONYMS.has(a.trim()))
+    const validAcronyms = await getValidAcronyms()
+    const normalizedBranches = rawBranches.filter(a => typeof a === 'string' && a.trim() && validAcronyms.has(a.trim()))
     if (!['admin'].includes(role) && normalizedBranches.length === 0) {
       return res.status(400).json({ message: 'Please assign at least one branch for this role.' })
     }
