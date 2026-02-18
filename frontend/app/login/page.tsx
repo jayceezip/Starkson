@@ -3,9 +3,11 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import api from '@/lib/api'
 import { setStoredAuth, getStoredToken } from '@/lib/auth'
 import loginBg from './login-page.jpg'
+import starkonLogo from '../../../backend/config/Starkson-Logo.jpg'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -35,7 +37,7 @@ export default function LoginPage() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center relative bg-cover bg-center"
+      className="min-h-screen flex items-center justify-center relative bg-cover bg-center overflow-hidden"
       style={{ backgroundImage: `url(${loginBg.src})` }}
     >
       {/* Dark overlay for readability */}
@@ -43,16 +45,22 @@ export default function LoginPage() {
 
       <div className="relative w-full max-w-md px-4">
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 md:p-10">
-          {/* Brand */}
-          <div className="flex justify-center mb-4">
-            <Link href="/" className="text-3xl font-bold text-gray-900 tracking-tight focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 rounded-lg">
-              STARKSON
+          {/* Brand Logo */}
+          <div className="flex justify-center mb-6">
+            <Link href="/" className="focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 rounded-lg">
+              <Image 
+                src={starkonLogo}
+                alt="Starkson Logo"
+                width={230}
+                height={110}
+                className="object-contain"
+                priority
+              />
             </Link>
           </div>
 
-          <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-gray-900">Welcome back</h1>
-            <p className="mt-2 text-sm text-gray-500">Sign in to your account</p>
+          <div className="text-center mb-4">
+            <h1 className="text-black-500">Sign in to your account</h1>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">

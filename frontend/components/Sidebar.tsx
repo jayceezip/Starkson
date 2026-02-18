@@ -2,12 +2,14 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter, usePathname } from 'next/navigation'
 import { getStoredUser, clearStoredAuth, hasRole } from '@/lib/auth'
 import api from '@/lib/api'
 import { formatActionLabel, getActionIcon, timeAgo } from '@/lib/activity'
 import { useNotifications } from '@/context/NotificationContext'
 import type { ActivityItem } from '@/lib/activity'
+import starkonLogo from '../../backend/config/Starkson-Logo.png'
 
 const ACTIVITY_POLL_MS = 15000
 
@@ -26,6 +28,7 @@ export default function Sidebar({
   const [notifOpen, setNotifOpen] = useState(false)
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const notifRef = useRef<HTMLDivElement>(null)
+  const [logoError, setLogoError] = useState(false)
   
   // Use the notification context
   const {
@@ -247,8 +250,22 @@ export default function Sidebar({
           {/* Brand + Notification bell + collapse toggle */}
           <div className={`py-4 border-b border-gray-700 relative flex items-center gap-2 ${collapsed ? 'px-0 justify-center flex-col' : 'px-4 justify-between'}`} ref={notifRef}>
             <div className={`flex items-center ${collapsed ? 'flex-col gap-2' : 'flex-1 min-w-0'} justify-center`}>
-              <Link href="/dashboard" className={`font-bold text-white tracking-tight hover:opacity-90 transition-opacity truncate ${collapsed ? 'text-lg' : 'text-xl flex-1 text-center'}`} title="STARKSON">
-                {collapsed ? 'S' : 'STARKSON'}
+              <Link href="/dashboard" className={`block ${collapsed ? 'w-8 h-8' : 'w-32 h-10'}`} title="STARKSON">
+                {!logoError ? (
+                  <Image 
+                    src={starkonLogo}
+                    alt="Starkson Logo"
+                    width={collapsed ? 32 : 128}
+                    height={collapsed ? 32 : 40}
+                    className="object-contain"
+                    onError={() => setLogoError(true)}
+                    priority
+                  />
+                ) : (
+                  <span className={`font-bold text-white tracking-tight ${collapsed ? 'text-lg' : 'text-xl'}`}>
+                    {collapsed ? 'S' : 'STARKSON'}
+                  </span>
+                )}
               </Link>
             </div>
             <button
