@@ -30,7 +30,7 @@ export default function AdminAuditPage() {
   const [filters, setFilters] = useState({ resourceType: '', action: '', startDate: '', endDate: '' })
 
   const toYmdManila = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' })
-  const setDatePreset = (preset: 'today' | 'this_week' | 'this_month' | 'last_month' | 'last_3_months' | 'all') => {
+  const setDatePreset = (preset: 'today' | 'this_week' | 'this_month' | 'last_month' | 'all') => {
     const todayManila = todayPinoy()
     if (preset === 'today') {
       setFilters((f) => ({ ...f, startDate: todayManila, endDate: todayManila }))
@@ -64,12 +64,6 @@ export default function AdminAuditPage() {
         setFilters((f) => ({ ...f, startDate: startYmd, endDate: toYmdManila(endOfLast) }))
         setPage(1)
         return
-      }
-      case 'last_3_months': {
-        const d = new Date(todayManila + 'T12:00:00+08:00')
-        d.setMonth(d.getMonth() - 3)
-        startYmd = toYmdManila(d)
-        break
       }
       default:
         return
@@ -274,7 +268,6 @@ export default function AdminAuditPage() {
             <button type="button" onClick={() => setDatePreset('this_week')} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200">This week</button>
             <button type="button" onClick={() => setDatePreset('this_month')} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200">This month</button>
             <button type="button" onClick={() => setDatePreset('last_month')} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200">Last month</button>
-            <button type="button" onClick={() => setDatePreset('last_3_months')} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200">Last 3 months</button>
             <button type="button" onClick={() => setDatePreset('all')} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200">All time</button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">

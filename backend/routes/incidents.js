@@ -434,6 +434,37 @@ router.put('/:id', authenticate, authorize('security_officer', 'admin'), async (
           is_internal: false // Visible to users
         }
       })
+      // Notify assigned Security Officer and Admin
+      const incNumber = incident.incident_number || ''
+      if (assignedTo) {
+        await query('notifications', 'insert', {
+          data: {
+            user_id: assignedTo,
+            type: 'INCIDENT_ASSIGNED',
+            title: 'Incident Assigned to You',
+            message: `Incident ${incNumber} has been assigned to you`,
+            resource_type: 'incident',
+            resource_id: req.params.id
+          }
+        })
+      }
+      const { data: adminUsers } = await supabase.from('users').select('id').eq('role', 'admin').eq('status', 'active')
+      if (adminUsers && adminUsers.length > 0) {
+        for (const adm of adminUsers) {
+          if (adm.id !== req.user.id) {
+            await query('notifications', 'insert', {
+              data: {
+                user_id: adm.id,
+                type: 'INCIDENT_ASSIGNED',
+                title: 'Incident Assigned',
+                message: `Incident ${incNumber} was assigned to ${assignedUser?.name || 'Security Officer'}`,
+                resource_type: 'incident',
+                resource_id: req.params.id
+              }
+            })
+          }
+        }
+      }
     }
 
     // Log audit

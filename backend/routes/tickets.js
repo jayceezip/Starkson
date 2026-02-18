@@ -1020,6 +1020,24 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
               resource_id: result.id
             }
           })
+          // Notify Admin
+          const { data: adminUsers } = await supabase.from('users').select('id').eq('role', 'admin').eq('status', 'active')
+          if (adminUsers && adminUsers.length > 0) {
+            for (const adm of adminUsers) {
+              if (adm.id !== req.user.id) {
+                await query('notifications', 'insert', {
+                  data: {
+                    user_id: adm.id,
+                    type: 'INCIDENT_ASSIGNED',
+                    title: 'Incident Assigned',
+                    message: `Incident ${finalIncidentNumber} converted from ticket ${ticket.ticket_number} was assigned to Security Officer`,
+                    resource_type: 'incident',
+                    resource_id: result.id
+                  }
+                })
+              }
+            }
+          }
         }
 
         // Copy ticket comments to incident timeline (keep ticket and comments)
@@ -1168,6 +1186,24 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
           resource_id: result.id
         }
       })
+      // Notify Admin of incident assignment (so Admin sees all incidents in recent activity/notifications)
+      const { data: adminUsers } = await supabase.from('users').select('id').eq('role', 'admin').eq('status', 'active')
+      if (adminUsers && adminUsers.length > 0) {
+        for (const adm of adminUsers) {
+          if (adm.id !== req.user.id) {
+            await query('notifications', 'insert', {
+              data: {
+                user_id: adm.id,
+                type: 'INCIDENT_ASSIGNED',
+                title: 'Incident Assigned',
+                message: `Incident ${incidentNumber} converted from ticket ${ticket.ticket_number} was assigned to Security Officer`,
+                resource_type: 'incident',
+                resource_id: result.id
+              }
+            })
+          }
+        }
+      }
     }
 
     // Copy ticket comments to incident timeline so Security Officers can see user comments (keep ticket comments)
