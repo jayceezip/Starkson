@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react'
 import api from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 
@@ -30,13 +30,18 @@ interface NotificationContextType {
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined)
 
+// Custom event for notification updates
+const NOTIFICATION_UPDATE_EVENT = 'notification-update'
+
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const isFetchingRef = useRef(false)
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async (showLoading = true) => {
     const user = getStoredUser()
     if (!user) {
       setNotifications([])
@@ -45,7 +50,12 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    setLoading(true)
+    // Prevent multiple simultaneous fetches
+    if (isFetchingRef.current) return
+    
+    isFetchingRef.current = true
+    if (showLoading) setLoading(true)
+    
     try {
       const [notifRes, countRes] = await Promise.all([
         api.get('/notifications?limit=100'),
@@ -65,11 +75,12 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       setNotifications([])
       setUnreadCount(0)
     } finally {
-      setLoading(false)
+      if (showLoading) setLoading(false)
+      isFetchingRef.current = false
     }
-  }
+  }, [])
 
-  const markAsRead = async (id: string) => {
+  const markAsRead = useCallback(async (id: string) => {
     try {
       await api.put(`/notifications/${id}/read`)
       // Update local state
@@ -77,23 +88,29 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         n.id === id ? { ...n, isRead: true } : n
       ))
       setUnreadCount(prev => Math.max(0, prev - 1))
+      
+      // Dispatch custom event to notify other components
+      window.dispatchEvent(new CustomEvent(NOTIFICATION_UPDATE_EVENT))
     } catch (error) {
       console.error('Error marking notification as read:', error)
     }
-  }
+  }, [])
 
-  const markAllAsRead = async () => {
+  const markAllAsRead = useCallback(async () => {
     try {
       await api.put('/notifications/read-all')
       // Update local state
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })))
       setUnreadCount(0)
+      
+      // Dispatch custom event to notify other components
+      window.dispatchEvent(new CustomEvent(NOTIFICATION_UPDATE_EVENT))
     } catch (error) {
       console.error('Error marking all notifications as read:', error)
     }
-  }
+  }, [])
 
-  const deleteNotification = async (id: string) => {
+  const deleteNotification = useCallback(async (id: string) => {
     try {
       const notificationToDelete = notifications.find(n => n.id === id)
       const wasUnread = notificationToDelete && !notificationToDelete.isRead
@@ -104,30 +121,64 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       if (wasUnread) {
         setUnreadCount(prev => Math.max(0, prev - 1))
       }
+      
+      // Dispatch custom event to notify other components
+      window.dispatchEvent(new CustomEvent(NOTIFICATION_UPDATE_EVENT))
     } catch (error) {
       console.error('Error deleting notification:', error)
       throw error
     }
-  }
+  }, [notifications])
 
-  const forceRefresh = () => {
+  const forceRefresh = useCallback(() => {
     setRefreshTrigger(prev => prev + 1)
-  }
+  }, [])
 
+  // Listen for visibility change to refresh when user comes back to tab
   useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchNotifications(false) // Fetch without showing loading state
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [fetchNotifications])
+
+  // Listen for custom notification updates
+  useEffect(() => {
+    const handleNotificationUpdate = () => {
+      fetchNotifications(false) // Fetch without showing loading state
+    }
+
+    window.addEventListener(NOTIFICATION_UPDATE_EVENT, handleNotificationUpdate)
+    return () => window.removeEventListener(NOTIFICATION_UPDATE_EVENT, handleNotificationUpdate)
+  }, [fetchNotifications])
+
+  // Polling for new notifications
+  useEffect(() => {
+    // Initial fetch
     fetchNotifications()
-    
-    // Poll for new notifications every 30 seconds
-    const interval = setInterval(fetchNotifications, 3000)
-    return () => clearInterval(interval)
-  }, [refreshTrigger])
+
+    // Set up polling interval
+    pollingIntervalRef.current = setInterval(() => {
+      fetchNotifications(false) // Fetch without showing loading state
+    }, 30000) // 30 seconds
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+      }
+    }
+  }, [refreshTrigger, fetchNotifications])
 
   return (
     <NotificationContext.Provider value={{
       notifications,
       unreadCount,
       loading,
-      fetchNotifications,
+      fetchNotifications: () => fetchNotifications(true),
       markAllAsRead,
       markAsRead,
       deleteNotification,

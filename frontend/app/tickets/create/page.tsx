@@ -116,13 +116,13 @@ const FileAttachment = ({ file, index, onRemove, status, isUploading }: {
   const isImage = file.type.startsWith('image/');
 
   // Create preview for images
-  useState(() => {
+  useEffect(() => {
     if (isImage) {
       const url = URL.createObjectURL(file);
       setPreviewUrl(url);
       return () => URL.revokeObjectURL(url);
     }
-  });
+  }, [file, isImage]);
 
   const getStatusConfig = () => {
     switch (status?.status) {
@@ -246,6 +246,8 @@ export default function CreateTicketPage() {
   })
   const [affectedSystems, setAffectedSystems] = useState<string[]>([])
   const [categories, setCategories] = useState<string[]>([])
+  const [otherAffectedSystem, setOtherAffectedSystem] = useState('')
+  const [otherCategory, setOtherCategory] = useState('')
 
   useEffect(() => {
     setAffectedSystems(getAffectedSystems())
@@ -257,6 +259,17 @@ export default function CreateTicketPage() {
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [dragActive, setDragActive] = useState(false)
+
+  // Create options with "Others" at the end
+  const affectedSystemOptions = [
+    ...affectedSystems.map((o) => ({ value: o, label: o })),
+    { value: 'others', label: 'Others' }
+  ]
+
+  const categoryOptions = [
+    ...categories.map((o) => ({ value: o, label: o })),
+    { value: 'others', label: 'Others' }
+  ]
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -320,6 +333,20 @@ export default function CreateTicketPage() {
       setLoading(false)
       return
     }
+
+    // Validate "Others" fields
+    if (formData.affectedSystem === 'others' && !otherAffectedSystem.trim()) {
+      setError('Please specify the affected system')
+      setLoading(false)
+      return
+    }
+
+    if (formData.category === 'others' && !otherCategory.trim()) {
+      setError('Please specify the category')
+      setLoading(false)
+      return
+    }
+
     const branchToSend = singleBranchAuto ? realUserBranches[0] : formData.branchAcronym
     if (!branchToSend) {
       setError('Please select a branch for this ticket.')
@@ -328,7 +355,14 @@ export default function CreateTicketPage() {
     }
 
     try {
-      const payload = { ...formData, branchAcronym: branchToSend }
+      // Prepare payload with custom "Others" values
+      const payload = { 
+        ...formData, 
+        branchAcronym: branchToSend,
+        affectedSystem: formData.affectedSystem === 'others' ? otherAffectedSystem.trim() : formData.affectedSystem,
+        category: formData.category === 'others' ? otherCategory.trim() : formData.category,
+      }
+      
       const response = await api.post('/tickets', payload)
       const ticketId = response.data.ticketId
 
@@ -510,20 +544,44 @@ export default function CreateTicketPage() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <SelectDropdown
-                    label="Affected System"
-                    value={formData.affectedSystem}
-                    onChange={(v) => setFormData({ ...formData, affectedSystem: v })}
-                    options={affectedSystems.map((o) => ({ value: o, label: o }))}
-                    placeholder="Select affected system"
-                  />
-                  <SelectDropdown
-                    label="Category"
-                    value={formData.category}
-                    onChange={(v) => setFormData({ ...formData, category: v })}
-                    options={categories.map((o) => ({ value: o, label: o }))}
-                    placeholder="Select category"
-                  />
+                  <div className="space-y-2">
+                    <SelectDropdown
+                      label="Affected System"
+                      value={formData.affectedSystem}
+                      onChange={(v) => setFormData({ ...formData, affectedSystem: v })}
+                      options={affectedSystemOptions}
+                      placeholder="Select affected system"
+                    />
+                    {formData.affectedSystem === 'others' && (
+                      <input
+                        type="text"
+                        value={otherAffectedSystem}
+                        onChange={(e) => setOtherAffectedSystem(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow mt-2"
+                        placeholder="Please specify affected system"
+                        required={formData.affectedSystem === 'others'}
+                      />
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <SelectDropdown
+                      label="Category"
+                      value={formData.category}
+                      onChange={(v) => setFormData({ ...formData, category: v })}
+                      options={categoryOptions}
+                      placeholder="Select category"
+                    />
+                    {formData.category === 'others' && (
+                      <input
+                        type="text"
+                        value={otherCategory}
+                        onChange={(e) => setOtherCategory(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow mt-2"
+                        placeholder="Please specify category"
+                        required={formData.category === 'others'}
+                      />
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

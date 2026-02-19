@@ -21,8 +21,7 @@ export default function NotificationsPage() {
     loading,
     markAllAsRead,
     markAsRead,
-    deleteNotification,
-    forceRefresh
+    deleteNotification
   } = useNotifications()
 
   const [markingAll, setMarkingAll] = useState(false)
@@ -46,6 +45,7 @@ export default function NotificationsPage() {
     setMarkingAll(true)
     try {
       await markAllAsRead()
+      // No need to update local state or reload - context handles it
     } catch (error) {
       console.error('Error marking all notifications as read:', error)
     } finally {

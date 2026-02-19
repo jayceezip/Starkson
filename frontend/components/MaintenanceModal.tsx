@@ -23,6 +23,12 @@ const LABELS: Record<NonNullable<ManageType>, { singular: string; plural: string
   incident_category: { singular: 'Incident Category', plural: 'Incident Categories' },
 }
 
+// Helper function to determine if "a" or "an" should be used
+const getArticle = (word: string): string => {
+  const firstLetter = word.charAt(0).toLowerCase();
+  return ['a', 'e', 'i', 'o', 'u'].includes(firstLetter) ? 'an' : 'a';
+};
+
 export default function MaintenanceModal({
   isOpen,
   onClose,
@@ -191,6 +197,21 @@ export default function MaintenanceModal({
 
   if (!isOpen) return null
 
+  // Get the button text for add/delete actions
+  const getAddButtonText = () => {
+    if (!manageType) return '';
+    const singular = LABELS[manageType].singular;
+    const article = getArticle(singular);
+    return `Add ${article} ${singular}`;
+  };
+
+  const getDeleteButtonText = () => {
+    if (!manageType) return '';
+    const singular = LABELS[manageType].singular;
+    const article = getArticle(singular);
+    return `Delete ${article} ${singular}`;
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden="true" />
@@ -200,7 +221,7 @@ export default function MaintenanceModal({
           <h2 className="text-lg font-semibold text-gray-900">
             {actionType
               ? manageType
-                ? `${actionType === 'add' ? 'Add' : 'Delete'} a ${LABELS[manageType].singular}`
+                ? `${actionType === 'add' ? 'Add' : 'Delete'} ${actionType === 'add' ? getArticle(LABELS[manageType].singular) : getArticle(LABELS[manageType].singular)} ${LABELS[manageType].singular}`
                 : 'Maintenance'
               : manageType
                 ? `Manage ${LABELS[manageType].plural}`
@@ -231,47 +252,60 @@ export default function MaintenanceModal({
 
           {!manageType ? (
             /* Step 1: Choose what to manage */
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => setManageType('branches')}
-                className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors text-left"
-              >
-                <span className="font-medium text-gray-900">Manage Branches</span>
-                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => setManageType('category')}
-                className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors text-left"
-              >
-                <span className="font-medium text-gray-900">Manage Category</span>
-                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => setManageType('incident_category')}
-                className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors text-left"
-              >
-                <span className="font-medium text-gray-900">Manage Incident Category</span>
-                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => setManageType('affected_system')}
-                className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors text-left"
-              >
-                <span className="font-medium text-gray-900">Manage Affected System</span>
-                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
+            <div className="space-y-4">
+              {/* For Tickets Section */}
+              <div>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">For Tickets</h3>
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => setManageType('branches')}
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors text-left"
+                  >
+                    <span className="font-medium text-gray-900">Manage Branches</span>
+                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setManageType('category')}
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors text-left"
+                  >
+                    <span className="font-medium text-gray-900">Manage Category</span>
+                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setManageType('affected_system')}
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors text-left"
+                  >
+                    <span className="font-medium text-gray-900">Manage Affected System</span>
+                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* For Incidents Section */}
+              <div>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">For Incidents</h3>
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => setManageType('incident_category')}
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors text-left"
+                  >
+                    <span className="font-medium text-gray-900">Manage Incident Category</span>
+                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
             </div>
           ) : !actionType ? (
             /* Step 2: Add or Delete */
@@ -282,7 +316,7 @@ export default function MaintenanceModal({
                 className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors text-left"
               >
                 <span className="font-medium text-gray-900">
-                  Add a {LABELS[manageType].singular}
+                  {getAddButtonText()}
                 </span>
                 <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -294,7 +328,7 @@ export default function MaintenanceModal({
                 className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200 hover:border-red-200 hover:bg-red-50/50 transition-colors text-left"
               >
                 <span className="font-medium text-gray-900">
-                  Delete a {LABELS[manageType].singular.toLowerCase()}
+                  {getDeleteButtonText()}
                 </span>
                 <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
