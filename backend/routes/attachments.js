@@ -61,6 +61,179 @@ router.get('/test', (req, res) => {
   res.json({ message: 'Attachments router is working', timestamp: new Date().toISOString() })
 })
 
+// Get recent attachments for dashboard
+router.get('/recent', authenticate, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 20
+    
+    let query = supabase
+      .from('attachments')
+      .select(`
+        *,
+        uploaded_by_user:users!attachments_uploaded_by_fkey(id, name, email)
+      `)
+      .order('created_at', { ascending: false })
+      .limit(limit)
+
+    // Different permission logic based on role
+    if (req.user.role === 'user') {
+      // Regular users: only see attachments from their own tickets
+      const { data: userTickets } = await supabase
+        .from('tickets')
+        .select('id')
+        .eq('created_by', req.user.id)
+
+      const ticketIds = userTickets?.map(t => t.id) || []
+      
+      if (ticketIds.length === 0) {
+        return res.json({ attachments: [] })
+      }
+
+      // Filter attachments to only show from user's tickets
+      query = query
+        .or(`record_type.eq.incident,and(record_type.eq.ticket,record_id.in.(${ticketIds.join(',')}))`)
+    
+    } else if (req.user.role === 'it_support') {
+      // IT Support: see attachments from tickets they're assigned to AND from their own tickets
+      // This ensures they see attachments posted by users on tickets assigned to them
+      
+      // Get tickets assigned to this IT Support staff
+      const { data: assignedTickets } = await supabase
+        .from('tickets')
+        .select('id')
+        .eq('assigned_to', req.user.id)
+
+      // Also get tickets they created (if any)
+      const { data: createdTickets } = await supabase
+        .from('tickets')
+        .select('id')
+        .eq('created_by', req.user.id)
+
+      const assignedIds = assignedTickets?.map(t => t.id) || []
+      const createdIds = createdTickets?.map(t => t.id) || []
+      
+      // Combine and deduplicate ticket IDs
+      const allTicketIds = [...new Set([...assignedIds, ...createdIds])]
+      
+      if (allTicketIds.length === 0) {
+        return res.json({ attachments: [] })
+      }
+
+      // Show attachments from all relevant tickets
+      // This includes attachments uploaded by users on tickets assigned to this IT Support
+      query = query
+        .or(`record_type.eq.incident,and(record_type.eq.ticket,record_id.in.(${allTicketIds.join(',')}))`)
+      
+      console.log(`🔧 IT Support viewing attachments from ${allTicketIds.length} tickets`);
+    
+    } else if (req.user.role === 'security_officer') {
+      // Security Officer: see attachments from incidents they're assigned to
+      const { data: assignedIncidents } = await supabase
+        .from('incidents')
+        .select('id')
+        .eq('assigned_to', req.user.id)
+
+      const incidentIds = assignedIncidents?.map(i => i.id) || []
+      
+      // Also get incidents they created
+      const { data: createdIncidents } = await supabase
+        .from('incidents')
+        .select('id')
+        .eq('created_by', req.user.id)
+
+      const createdIncidentIds = createdIncidents?.map(i => i.id) || []
+      const allIncidentIds = [...new Set([...incidentIds, ...createdIncidentIds])]
+      
+      if (allIncidentIds.length > 0) {
+        query = query
+          .or(`record_type.eq.ticket,and(record_type.eq.incident,record_id.in.(${allIncidentIds.join(',')}))`)
+      } else {
+        // If no incidents, only show ticket attachments from their own tickets
+        const { data: userTickets } = await supabase
+          .from('tickets')
+          .select('id')
+          .eq('created_by', req.user.id)
+
+        const ticketIds = userTickets?.map(t => t.id) || []
+        
+        if (ticketIds.length > 0) {
+          query = query
+            .or(`record_type.eq.incident,and(record_type.eq.ticket,record_id.in.(${ticketIds.join(',')}))`)
+        } else {
+          return res.json({ attachments: [] })
+        }
+      }
+    
+    } else if (req.user.role === 'admin') {
+      // Admin: see all attachments (no filtering needed)
+      console.log(`👑 Admin viewing all attachments`);
+    }
+
+    const { data: attachments, error } = await query
+
+    if (error) {
+      console.error('Get recent attachments error:', error)
+      return res.status(500).json({ message: 'Server error' })
+    }
+
+    // Enhance attachments with ticket/incident info
+    const enhancedAttachments = await Promise.all(attachments.map(async (att) => {
+      let referenceNumber = null
+      let title = null
+      
+      if (att.record_type === 'ticket') {
+        const { data: ticket } = await supabase
+          .from('tickets')
+          .select('ticket_number, title')
+          .eq('id', att.record_id)
+          .single()
+        
+        if (ticket) {
+          referenceNumber = ticket.ticket_number
+          title = ticket.title
+        }
+      } else if (att.record_type === 'incident') {
+        const { data: incident } = await supabase
+          .from('incidents')
+          .select('incident_number, title')
+          .eq('id', att.record_id)
+          .single()
+        
+        if (incident) {
+          referenceNumber = incident.incident_number
+          title = incident.title
+        }
+      }
+
+      // Get the best available name field
+      const userData = att.uploaded_by_user || {}
+      const uploaderName = userData.name || userData.full_name || userData.username || userData.email || 'Unknown'
+
+      return {
+        id: att.id,
+        record_type: att.record_type,
+        record_id: att.record_id,
+        filename: att.filename,
+        original_name: att.original_name,
+        mime_type: att.mime_type,
+        size: att.size,
+        file_path: att.file_path,
+        uploaded_by: att.uploaded_by,
+        uploader_name: uploaderName,
+        created_at: att.created_at,
+        reference_number: referenceNumber,
+        title: title,
+        parent_display: referenceNumber ? `${referenceNumber} - ${title || 'Untitled'}` : `${att.record_type} #${att.record_id.substring(0, 8)}`
+      }
+    }))
+
+    res.json({ attachments: enhancedAttachments })
+  } catch (error) {
+    console.error('Get recent attachments error:', error)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
 // Upload attachment - MUST be before GET /:recordType/:recordId to avoid route conflicts
 router.post('/:recordType/:recordId', authenticate, (req, res, next) => {
   console.log('🔐 Authentication passed, proceeding to file upload...')
@@ -176,8 +349,6 @@ router.post('/:recordType/:recordId', authenticate, (req, res, next) => {
     }
 
     // Store Cloudinary URL and public_id instead of local file path
-    // Note: file_path might be longer than 500 chars, but PostgreSQL TEXT can handle it
-    // If your schema uses VARCHAR(500), you may need to alter it to TEXT
     let result
     try {
       result = await query('attachments', 'insert', {
@@ -502,8 +673,5 @@ router.delete('/:id', authenticate, async (req, res) => {
     res.status(500).json({ message: 'Server error' })
   }
 })
-
-// Note: Removed catch-all route - let Express handle 404s naturally
-// The logging middleware at the top will show all requests to this router
 
 module.exports = router

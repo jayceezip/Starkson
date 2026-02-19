@@ -1,12 +1,30 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser, hasRole } from '@/lib/auth'
 import { formatActionLabel, getActionIcon, timeAgo } from '@/lib/activity'
 import type { ActivityItem } from '@/lib/activity'
+
+// Add Attachment type
+type Attachment = {
+  id: string
+  record_type: 'ticket' | 'incident'
+  record_id: string
+  filename: string
+  original_name: string
+  mime_type: string | null
+  size: number | null
+  file_path: string
+  uploaded_by: string
+  uploader_name: string
+  created_at: string
+  reference_number: string | null
+  title: string | null
+  parent_display: string
+}
 
 type ActivityCategory = 'attachments' | 'ticket_actions' | 'comments'
 
@@ -97,6 +115,74 @@ function ActivityColumn({
   )
 }
 
+// Component for displaying attachments - REMOVED ICONS
+function AttachmentsColumn({
+  attachments,
+  loading,
+  onAttachmentClick,
+}: {
+  attachments: Attachment[]
+  loading: boolean
+  onAttachmentClick: (attachment: Attachment) => void
+}) {
+  const formatFileSize = (bytes: number | null) => {
+    if (!bytes) return ''
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  return (
+    <div className="panel-card flex flex-col h-full min-h-[200px]">
+      <div className="flex items-center gap-2 mb-4">
+        <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+          </svg>
+        </span>
+        <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Recent Attachments</h3>
+      </div>
+      {loading ? (
+        <div className="flex-1 flex items-center justify-center py-8">
+          <div className="animate-spin rounded-full h-6 w-6 border-2 border-emerald-500 border-t-transparent" />
+        </div>
+      ) : attachments.length === 0 ? (
+        <p className="text-sm text-gray-500 flex-1">No attachments yet</p>
+      ) : (
+        <ul className="space-y-2 flex-1 min-h-0 max-h-[320px] overflow-y-auto">
+          {attachments.map((attachment) => (
+            <li key={attachment.id}>
+              <button
+                type="button"
+                onClick={() => onAttachmentClick(attachment)}
+                className="w-full flex items-start gap-2 py-2 border-b border-gray-100 last:border-0 text-left cursor-pointer hover:bg-emerald-50/50 rounded-lg -mx-1 px-1 transition-colors"
+              >
+                {/* REMOVED THE ICON SPAN COMPLETELY */}
+                <div className="min-w-0 flex-1">
+                  <span className="text-sm font-medium text-gray-900 hover:text-emerald-600 transition-colors line-clamp-1 block">
+                    {attachment.original_name}
+                  </span>
+                  <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
+                    <span className="truncate max-w-[150px]">
+                      {attachment.record_type === 'ticket' ? '🎫' : '⚠️'} {attachment.parent_display}
+                    </span>
+                    {attachment.size && attachment.size > 0 && (
+                      <span className="flex-shrink-0">• {formatFileSize(attachment.size)}</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Uploaded {timeAgo(attachment.created_at)} by {attachment.uploader_name}
+                  </p>
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
@@ -112,7 +198,15 @@ export default function DashboardPage() {
   const [clickedCommentIds, setClickedCommentIds] = useState<Set<string>>(new Set())
   const [recentIncidents, setRecentIncidents] = useState<{ id: string; incident_number: string; title: string; status: string }[]>([])
   const [topCategories, setTopCategories] = useState<{ category: string; count: number }[]>([])
+  const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false)
   const [incidentsLoading, setIncidentsLoading] = useState(false)
+  
+  // Use refs to track state
+  const isMounted = useRef(true)
+  const pollingIntervalRef = useRef<NodeJS.Timeout>()
+  const lastFetchRef = useRef<number>(Date.now())
+  
   const isAdminOrSO = hasRole(user, 'admin', 'security_officer')
 
   const handleActivityClick = useCallback((item: ActivityItem, href: string) => {
@@ -123,10 +217,24 @@ export default function DashboardPage() {
     router.push(href)
   }, [router])
 
+  const handleAttachmentClick = useCallback((attachment: Attachment) => {
+    // Navigate to the ticket or incident that owns this attachment
+    if (attachment.record_type === 'ticket') {
+      router.push(`/tickets/${attachment.record_id}`)
+    } else {
+      router.push(`/incidents/${attachment.record_id}`)
+    }
+  }, [router])
+
   useEffect(() => {
     setMounted(true)
+    isMounted.current = true
     const currentUser = getStoredUser()
     setUser(currentUser)
+    
+    return () => {
+      isMounted.current = false
+    }
   }, [])
 
   useEffect(() => {
@@ -140,81 +248,154 @@ export default function DashboardPage() {
     const fetchStats = async () => {
       try {
         const response = await api.get('/dashboard/stats')
-        setStats(response.data)
+        if (isMounted.current) {
+          setStats(response.data)
+        }
       } catch (error: any) {
         console.error('Failed to fetch stats:', error)
       }
     }
     fetchStats()
 
-    const interval = setInterval(fetchStats, 15000)
+    const interval = setInterval(fetchStats, 30000)
     return () => clearInterval(interval)
   }, [user, router, mounted])
 
   const fetchActivity = useCallback(async () => {
-    if (!user) return
+    if (!user || !isMounted.current) return
     try {
       const res = await api.get('/dashboard/activity?limit=25')
-      setActivity(res.data?.activity ?? [])
+      if (isMounted.current) {
+        setActivity(res.data?.activity ?? [])
+      }
     } catch (e) {
       console.error('Failed to fetch activity:', e)
-      setActivity([])
+      if (isMounted.current) {
+        setActivity([])
+      }
     } finally {
-      setActivityLoading(false)
+      if (isMounted.current) {
+        setActivityLoading(false)
+      }
     }
   }, [user])
 
+  // Fetch attachments
+  const fetchAttachments = useCallback(async () => {
+    if (!user || !isMounted.current) return
+    try {
+      const res = await api.get('/attachments/recent?limit=20')
+      if (isMounted.current) {
+        setAttachments(res.data?.attachments ?? [])
+      }
+    } catch (e) {
+      console.error('Failed to fetch attachments:', e)
+      if (isMounted.current) {
+        setAttachments([])
+      }
+    }
+  }, [user])
+
+  // Initial data fetch
   useEffect(() => {
     if (!mounted || !user) return
+    
     setActivityLoading(true)
-    fetchActivity()
-  }, [user, mounted, fetchActivity])
+    setAttachmentsLoading(true)
+    
+    Promise.all([fetchActivity(), fetchAttachments()]).finally(() => {
+      if (isMounted.current) {
+        setActivityLoading(false)
+        setAttachmentsLoading(false)
+        lastFetchRef.current = Date.now()
+      }
+    })
+  }, [user, mounted, fetchActivity, fetchAttachments])
 
-  // Real-time: poll every 5s and refetch when tab becomes visible so new notifications appear without refresh
+  // Silent background polling - NO LOADING STATES
   useEffect(() => {
     if (!mounted || !user) return
-    const interval = setInterval(() => {
-      fetchActivity()
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [mounted, user, fetchActivity])
+    
+    const pollData = async () => {
+      if (!isMounted.current) return
+      
+      // Silent fetch in background - don't show loading
+      try {
+        await Promise.all([fetchActivity(), fetchAttachments()])
+        lastFetchRef.current = Date.now()
+      } catch (error) {
+        console.error('Background polling error:', error)
+      }
+    }
+    
+    // Poll every 30 seconds silently
+    pollingIntervalRef.current = setInterval(pollData, 30000)
+    
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+      }
+    }
+  }, [mounted, user, fetchActivity, fetchAttachments])
 
+  // Visibility change - SILENT FETCH, NO RELOAD
   useEffect(() => {
     if (!mounted || !user) return
-    const onFocus = () => fetchActivity()
-    window.addEventListener('visibilitychange', onFocus)
-    return () => window.removeEventListener('visibilitychange', onFocus)
-  }, [mounted, user, fetchActivity])
+    
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isMounted.current) {
+        const timeSinceLastFetch = Date.now() - lastFetchRef.current
+        // Only fetch if it's been more than 10 seconds since last fetch
+        if (timeSinceLastFetch > 10000) {
+          // Silent background fetch - no loading states
+          Promise.all([fetchActivity(), fetchAttachments()])
+            .then(() => {
+              lastFetchRef.current = Date.now()
+            })
+            .catch(console.error)
+        }
+      }
+    }
+    
+    window.addEventListener('visibilitychange', onVisibilityChange)
+    return () => window.removeEventListener('visibilitychange', onVisibilityChange)
+  }, [mounted, user, fetchActivity, fetchAttachments])
 
   const fetchRecentIncidents = useCallback(async () => {
-    if (!user || !hasRole(user, 'admin', 'security_officer')) return
+    if (!user || !hasRole(user, 'admin', 'security_officer') || !isMounted.current) return
     setIncidentsLoading(true)
     try {
       const res = await api.get('/incidents')
       const list = Array.isArray(res.data) ? res.data : []
-      setRecentIncidents(
-        list.slice(0, 8).map((inc: { id: string; incident_number?: string; incidentNumber?: string; title?: string; status?: string }) => ({
-          id: inc.id,
-          incident_number: inc.incident_number || inc.incidentNumber || '',
-          title: inc.title || 'Incident',
-          status: inc.status || 'new',
-        }))
-      )
-      const categoryCounts: Record<string, number> = {}
-      list.forEach((inc: { category?: string }) => {
-        const cat = inc.category || 'Uncategorized'
-        categoryCounts[cat] = (categoryCounts[cat] || 0) + 1
-      })
-      const top = Object.entries(categoryCounts)
-        .map(([category, count]) => ({ category, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 8)
-      setTopCategories(top)
+      if (isMounted.current) {
+        setRecentIncidents(
+          list.slice(0, 8).map((inc: { id: string; incident_number?: string; incidentNumber?: string; title?: string; status?: string }) => ({
+            id: inc.id,
+            incident_number: inc.incident_number || inc.incidentNumber || '',
+            title: inc.title || 'Incident',
+            status: inc.status || 'new',
+          }))
+        )
+        const categoryCounts: Record<string, number> = {}
+        list.forEach((inc: { category?: string }) => {
+          const cat = inc.category || 'Uncategorized'
+          categoryCounts[cat] = (categoryCounts[cat] || 0) + 1
+        })
+        const top = Object.entries(categoryCounts)
+          .map(([category, count]) => ({ category, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 8)
+        setTopCategories(top)
+      }
     } catch {
-      setRecentIncidents([])
-      setTopCategories([])
+      if (isMounted.current) {
+        setRecentIncidents([])
+        setTopCategories([])
+      }
     } finally {
-      setIncidentsLoading(false)
+      if (isMounted.current) {
+        setIncidentsLoading(false)
+      }
     }
   }, [user])
 
@@ -290,7 +471,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Recent Activity - 3 columns */}
+        {/* Recent Activity - 3 columns with Attachments */}
         <div>
           <h2 className="panel-section-title mb-4">Recent Activity</h2>
           {activityLoading ? (
@@ -391,18 +572,10 @@ export default function DashboardPage() {
                 </>
               ) : (
                 <>
-                  <ActivityColumn
-                    title="Attachments"
-                    icon={
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                      </svg>
-                    }
-                    items={activity.filter((a) => getActivityCategory(a.action) === 'attachments')}
-                    formatLabel={formatActionLabel}
-                    getIcon={getActionIcon}
-                    onItemClick={handleActivityClick}
-                    clickedCommentIds={clickedCommentIds}
+                  <AttachmentsColumn
+                    attachments={attachments}
+                    loading={attachmentsLoading}
+                    onAttachmentClick={handleAttachmentClick}
                   />
                   <ActivityColumn
                     title="Ticket actions"

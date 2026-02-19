@@ -62,10 +62,12 @@ export default function TicketsPage() {
     setUser(currentUser)
   }, [])
 
-  const fetchTickets = useCallback(async () => {
+  const fetchTickets = useCallback(async (showLoading = true) => {
     if (!user) return
     try {
-      setLoading(true)
+      if (showLoading) {
+        setLoading(true)
+      }
       const params = new URLSearchParams()
       if (filters.status) params.append('status', filters.status)
       if (filters.priority) params.append('priority', filters.priority)
@@ -76,25 +78,45 @@ export default function TicketsPage() {
     } catch (error) {
       console.error('Failed to fetch tickets:', error)
     } finally {
-      setLoading(false)
+      if (showLoading) {
+        setLoading(false)
+      }
     }
   }, [user, filters.status, filters.priority, filters.branch])
 
+  // Initial load - shows loading spinner
   useEffect(() => {
     if (!mounted) return
     if (!user) {
       router.push('/login')
       return
     }
-    fetchTickets()
+    fetchTickets(true)
   }, [user, router, mounted, fetchTickets])
 
+  // Background updates - NO LOADING STATE
   useEffect(() => {
     if (!mounted || !user) return
-    const onFocus = () => fetchTickets()
-    window.addEventListener('visibilitychange', onFocus)
-    return () => window.removeEventListener('visibilitychange', onFocus)
+    
+    const interval = setInterval(() => {
+      fetchTickets(false) // Silent background update - no loading state
+    }, 30000) // Poll every 30 seconds
+    
+    return () => clearInterval(interval)
   }, [mounted, user, fetchTickets])
+
+  // When filters change, fetch with loading state
+  useEffect(() => {
+    if (!mounted || !user || loading) return
+    fetchTickets(true) // Show loading when filters change
+  }, [filters])
+
+  // Handle click on converted incident link - REDIRECTS TO TICKET PAGE
+  const handleIncidentLinkClick = (e: React.MouseEvent, ticketId: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    router.push(`/tickets/${ticketId}`)
+  }
 
   // Keyword search: split query into words, match any ticket field (case-insensitive)
   const keywords = searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean)
@@ -195,7 +217,7 @@ export default function TicketsPage() {
               <h1 className="text-2xl font-bold text-gray-900 tracking-tight">IT Support Tickets</h1>
               <button
                 type="button"
-                onClick={() => fetchTickets()}
+                onClick={() => fetchTickets(true)}
                 disabled={loading}
                 className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
                 title="Refresh list"
@@ -382,12 +404,17 @@ export default function TicketsPage() {
                                     {getStatusLabel(ticket.status || 'new')}
                                   </span>
                                   {ticket.status === 'converted_to_incident' && ticket.convertedIncidentId && (
-                                    <Link 
-                                      href={`/incidents/${ticket.convertedIncidentId}`} 
+                                    <button
+                                      onClick={(e) => {
+                                        if (ticket.convertedIncidentId) {
+                                          handleIncidentLinkClick(e, ticket.id);
+                                        }
+                                      }}
                                       className="text-xs text-red-600 hover:text-red-700 font-medium hover:underline inline-flex items-center gap-0.5"
+                                      title={`View ticket ${ticket.ticketNumber || ''}`}
                                     >
-                                      → {ticket.convertedIncidentNumber || 'View'}
-                                    </Link>
+                                      → {ticket.convertedIncidentNumber || 'INC-' + ticket.convertedIncidentId.substring(0, 8)}
+                                    </button>
                                   )}
                                 </div>
                               </td>

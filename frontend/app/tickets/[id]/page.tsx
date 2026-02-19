@@ -178,6 +178,7 @@ export default function TicketDetailsPage() {
   const [mounted, setMounted] = useState(false)
   const [ticket, setTicket] = useState<Ticket | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [pendingStatus, setPendingStatus] = useState<string | null>(null)
   const [showStatusConfirmModal, setShowStatusConfirmModal] = useState(false)
@@ -198,10 +199,10 @@ export default function TicketDetailsPage() {
   const [incidentCategories, setIncidentCategories] = useState<string[]>([])
 
   useEffect(() => {
-  if (showConvertModal) {
-    setIncidentCategories(getIncidentCategories())
-  }
-}, [showConvertModal])
+    if (showConvertModal) {
+      setIncidentCategories(getIncidentCategories())
+    }
+  }, [showConvertModal])
 
   useEffect(() => {
     setMounted(true)
@@ -219,11 +220,25 @@ export default function TicketDetailsPage() {
   }, [showConvertModal])
 
   const fetchTicket = useCallback(async () => {
+    if (!params.id) return
+    
+    setLoading(true)
+    setError(null)
+    
     try {
       const response = await api.get(`/tickets/${params.id}`)
       setTicket(response.data)
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to fetch ticket:', error)
+      
+      // Handle 404 or not found errors
+      if (error.response?.status === 404 || error.message?.includes('404')) {
+        setError('Ticket not found')
+      } else if (error.response?.status === 403) {
+        setError('You do not have permission to view this ticket')
+      } else {
+        setError('Failed to load ticket. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
@@ -236,6 +251,7 @@ export default function TicketDetailsPage() {
       router.push('/login')
       return
     }
+    
     fetchTicket()
   }, [params.id, user, router, mounted, fetchTicket])
 
@@ -375,76 +391,77 @@ export default function TicketDetailsPage() {
     setShowStatusConfirmModal(false);
   }
 
-const handleConvertToIncident = async (e: React.FormEvent) => {
-  e.preventDefault()
-  if (!ticket) {
-    alert('Ticket not found')
-    return
-  }
-  if (ticket.isConverted) {
-    alert('This ticket has already been converted to an incident.')
-    if (ticket.convertedIncidentId) {
-      router.push(`/incidents/${ticket.convertedIncidentId}`)
+  const handleConvertToIncident = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!ticket) {
+      alert('Ticket not found')
+      return
     }
-    return
-  }
-
-  setConverting(true)
-  try {
-    // Map display categories to database values
-    const categoryMap: Record<string, string> = {
-      'Phishing': 'phishing',
-      'Malware': 'malware',
-      'Unauthorized Access': 'unauthorized_access',
-      'Data Exposure': 'data_exposure',
-      'Policy Violation': 'policy_violation',
-      'System Compromise': 'system_compromise',
-      'Other': 'other'
+    if (ticket.isConverted) {
+      alert('This ticket has already been converted to an incident.')
+      if (ticket.convertedIncidentId) {
+        router.push(`/incidents/${ticket.convertedIncidentId}`)
+      }
+      return
     }
 
-    // Get the selected category display name from the select
-    const selectedDisplayName = incidentCategories.find(
-      cat => cat.toLowerCase().replace(/\s+/g, '_') === convertData.category
-    ) || convertData.category
+    setConverting(true)
+    try {
+      // Map display categories to database values
+      const categoryMap: Record<string, string> = {
+        'Phishing': 'phishing',
+        'Malware': 'malware',
+        'Unauthorized Access': 'unauthorized_access',
+        'Data Exposure': 'data_exposure',
+        'Policy Violation': 'policy_violation',
+        'System Compromise': 'system_compromise',
+        'Other': 'other'
+      }
 
-    // Map to database value or use the raw value if it's already in the correct format
-    const dbCategoryValue = categoryMap[selectedDisplayName] || convertData.category
+      // Get the selected category display name from the select
+      const selectedDisplayName = incidentCategories.find(
+        cat => cat.toLowerCase().replace(/\s+/g, '_') === convertData.category
+      ) || convertData.category
 
-    const payload: Record<string, string> = { 
-      category: dbCategoryValue, 
-      severity: convertData.severity, 
-      description: convertData.description || '' 
-    }
-    
-    if (convertData.assignedTo) payload.assignedTo = convertData.assignedTo
-    
-    console.log('Sending payload:', payload) // Debug log
-    
-    const response = await api.post(`/tickets/${params.id}/convert`, payload)
-    const { incidentId, incidentNumber } = response.data || {}
-    setTicket((prev) => (prev ? {
-      ...prev,
-      status: 'converted_to_incident',
-      isConverted: true,
-      convertedIncidentId: incidentId ?? prev.convertedIncidentId,
-      convertedIncidentNumber: incidentNumber ?? prev.convertedIncidentNumber,
-    } : prev))
-    setShowConvertModal(false)
-    fetchTicket()
-  } catch (error: any) {
-    console.error('Failed to convert ticket:', error)
-    console.error('Error details:', error.response?.data) // Debug log
-    const errorMessage = error.response?.data?.message || 'Failed to convert ticket. It may have already been converted.'
-    alert(errorMessage)
-    if (error.response?.status === 400 && error.response?.data?.incidentId) {
-      router.push(`/incidents/${error.response.data.incidentId}`)
-    } else {
+      // Map to database value or use the raw value if it's already in the correct format
+      const dbCategoryValue = categoryMap[selectedDisplayName] || convertData.category
+
+      const payload: Record<string, string> = { 
+        category: dbCategoryValue, 
+        severity: convertData.severity, 
+        description: convertData.description || '' 
+      }
+      
+      if (convertData.assignedTo) payload.assignedTo = convertData.assignedTo
+      
+      console.log('Sending payload:', payload) // Debug log
+      
+      const response = await api.post(`/tickets/${params.id}/convert`, payload)
+      const { incidentId, incidentNumber } = response.data || {}
+      setTicket((prev) => (prev ? {
+        ...prev,
+        status: 'converted_to_incident',
+        isConverted: true,
+        convertedIncidentId: incidentId ?? prev.convertedIncidentId,
+        convertedIncidentNumber: incidentNumber ?? prev.convertedIncidentNumber,
+      } : prev))
+      setShowConvertModal(false)
       fetchTicket()
+    } catch (error: any) {
+      console.error('Failed to convert ticket:', error)
+      console.error('Error details:', error.response?.data) // Debug log
+      const errorMessage = error.response?.data?.message || 'Failed to convert ticket. It may have already been converted.'
+      alert(errorMessage)
+      if (error.response?.status === 400 && error.response?.data?.incidentId) {
+        router.push(`/incidents/${error.response.data.incidentId}`)
+      } else {
+        fetchTicket()
+      }
+    } finally {
+      setConverting(false)
     }
-  } finally {
-    setConverting(false)
   }
-}
+  
   const handleEditTicket = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!canModify) {
@@ -465,10 +482,6 @@ const handleConvertToIncident = async (e: React.FormEvent) => {
   const handleDeleteTicket = async () => {
     if (!canDelete) {
       alert('This ticket cannot be deleted (resolved, closed, or converted)')
-      return
-    }
-
-    if (!confirm('Are you sure you want to delete this ticket? This action cannot be undone.')) {
       return
     }
 
@@ -501,13 +514,43 @@ const handleConvertToIncident = async (e: React.FormEvent) => {
     return status.replace(/ /g, '_');
   };
 
-  if (!mounted || !user || loading || !ticket) {
+  // Show error state if ticket not found or permission denied
+  if (!mounted || !user || loading) {
     return (
       <ProtectedRoute>
         <div className="min-h-screen bg-gray-50 pt-20 lg:pt-8 px-4 lg:px-8 pb-8 flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
             <p className="mt-4 text-gray-600">Loading...</p>
+          </div>
+        </div>
+      </ProtectedRoute>
+    )
+  }
+
+  if (error || !ticket) {
+    return (
+      <ProtectedRoute>
+        <div className="min-h-screen bg-gray-50 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Ticket Not Found</h2>
+              <p className="text-gray-600 mb-6">{error || 'The ticket you are looking for does not exist or you do not have permission to view it.'}</p>
+              <Link
+                href="/tickets"
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                Back to Tickets
+              </Link>
+            </div>
           </div>
         </div>
       </ProtectedRoute>

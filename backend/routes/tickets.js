@@ -841,41 +841,52 @@ router.post('/:id/comments', authenticate, async (req, res) => {
       }
     })
 
-    // Log audit
+    // Log audit with different action for internal notes
     await query('audit_logs', 'insert', {
       data: {
-        action: 'ADD_COMMENT',
+        action: isInternal ? 'ADD_INTERNAL_NOTE' : 'ADD_COMMENT',
         user_id: req.user.id,
         resource_type: 'ticket',
-        resource_id: req.params.id
+        resource_id: req.params.id,
+        details: { is_internal: isInternal }
       }
     })
 
-    // Notify the other party so it shows on their dashboard
-    const isStaff = ['it_support', 'admin'].includes(req.user.role)
-    if (isStaff && ticket.created_by && ticket.created_by !== req.user.id) {
-      await query('notifications', 'insert', {
-        data: {
-          user_id: ticket.created_by,
-          type: 'TICKET_COMMENT',
-          title: 'New comment on your ticket',
-          message: `IT Support commented on ticket ${ticket.ticket_number}`,
-          resource_type: 'ticket',
-          resource_id: ticket.id
-        }
-      })
-    }
-    if (req.user.role === 'user' && ticket.assigned_to && ticket.assigned_to !== req.user.id) {
-      await query('notifications', 'insert', {
-        data: {
-          user_id: ticket.assigned_to,
-          type: 'TICKET_COMMENT',
-          title: 'User commented on ticket',
-          message: `A user commented on ticket ${ticket.ticket_number}`,
-          resource_type: 'ticket',
-          resource_id: ticket.id
-        }
-      })
+    // ONLY SEND NOTIFICATIONS FOR PUBLIC COMMENTS (isInternal = false)
+    if (!isInternal) {
+      const isStaff = ['it_support', 'admin'].includes(req.user.role)
+      
+      // Notify ticket creator if commenter is not the creator
+      if (ticket.created_by && ticket.created_by !== req.user.id) {
+        await query('notifications', 'insert', {
+          data: {
+            user_id: ticket.created_by,
+            type: 'TICKET_COMMENT',
+            title: isStaff ? 'Staff commented on your ticket' : 'New comment on your ticket',
+            message: `${isStaff ? 'IT Support' : 'A user'} commented on ticket ${ticket.ticket_number}`,
+            resource_type: 'ticket',
+            resource_id: ticket.id
+          }
+        })
+      }
+      
+      // Notify assigned staff if commenter is a user
+      if (ticket.assigned_to && 
+          ticket.assigned_to !== req.user.id && 
+          req.user.role === 'user') {
+        await query('notifications', 'insert', {
+          data: {
+            user_id: ticket.assigned_to,
+            type: 'TICKET_COMMENT',
+            title: 'User commented on assigned ticket',
+            message: `A user commented on ticket ${ticket.ticket_number}`,
+            resource_type: 'ticket',
+            resource_id: ticket.id
+          }
+        })
+      }
+    } else {
+      console.log('🔒 Internal note added - no notifications sent to users');
     }
 
     res.status(201).json({ message: 'Comment added', commentId: result.id })
