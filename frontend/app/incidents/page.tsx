@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Fragment } from 'react'
+import { useEffect, useState, Fragment, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Listbox, Transition } from '@headlessui/react'
@@ -319,7 +319,7 @@ const ModernCategoryFilterSelect = ({
   );
 };
 
-export default function IncidentsPage() {
+function IncidentsPageContent() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const searchParams = useSearchParams()
@@ -666,5 +666,19 @@ export default function IncidentsPage() {
         </div>
       </div>
     </ProtectedRoute>
+  )
+}
+
+export default function IncidentsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#f5f5f7] flex items-center justify-center">
+          <div className="animate-spin rounded-full h-10 w-10 border-2 border-gray-200 border-t-blue-600" />
+        </div>
+      }
+    >
+      <IncidentsPageContent />
+    </Suspense>
   )
 }

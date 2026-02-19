@@ -18,6 +18,8 @@ interface UserRow {
   branchAcronyms?: string[]
 }
 
+const PAGE_SIZE = 10
+
 const ROLES = [
   { value: 'user', label: 'User' },
   { value: 'it_support', label: 'IT Support' },
@@ -38,6 +40,7 @@ export default function AdminUsersPage() {
   const [editingBranchUserName, setEditingBranchUserName] = useState<string>('')
   const [editingBranchAcronyms, setEditingBranchAcronyms] = useState<string[]>([])
   const [savingBranches, setSavingBranches] = useState(false)
+  const [page, setPage] = useState(1)
 
   const { branches, realBranches, ALL_BRANCHES_ACRONYM } = useBranches()
 
@@ -74,6 +77,15 @@ export default function AdminUsersPage() {
         const searchText = [u.name, u.email, u.role, u.status, (u.branchAcronyms || []).join(' ')].filter(Boolean).join(' ').toLowerCase()
         return keywords.every((kw) => searchText.includes(kw))
       })
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE))
+  const start = (page - 1) * PAGE_SIZE
+  const paginatedUsers = filteredUsers.slice(start, start + PAGE_SIZE)
+
+  // Reset to page 1 when search changes or filtered list shortens
+  useEffect(() => {
+    if (page > totalPages) setPage(1)
+  }, [searchQuery, filteredUsers.length, totalPages, page])
 
   const handleUpdateRole = async (userId: string) => {
     if (!newRole) return
@@ -273,7 +285,7 @@ export default function AdminUsersPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filteredUsers.map((u) => (
+                  {paginatedUsers.map((u) => (
                     <tr key={u.id} className="hover:bg-blue-50/30 transition-colors group">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
@@ -381,19 +393,51 @@ export default function AdminUsersPage() {
                 </tbody>
               </table>
             </div>
-            {searchQuery.trim() && (
-              <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
-                <p className="text-sm font-medium text-gray-600">
-                  Showing <span className="font-bold text-gray-900">{filteredUsers.length}</span> of <span className="font-bold text-gray-900">{users.length}</span> users
-                </p>
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
-                >
-                  Clear search
-                </button>
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <p className="text-sm font-medium text-gray-600">
+                Showing <span className="font-bold text-gray-900">{filteredUsers.length === 0 ? 0 : start + 1}</span>–<span className="font-bold text-gray-900">{Math.min(start + PAGE_SIZE, filteredUsers.length)}</span> of <span className="font-bold text-gray-900">{filteredUsers.length}</span> users
+                {searchQuery.trim() && <span className="ml-1">(filtered from {users.length})</span>}
+              </p>
+              <div className="flex items-center gap-2">
+                {searchQuery.trim() && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors px-2"
+                  >
+                    Clear search
+                  </button>
+                )}
+                {totalPages > 1 && (
+                  <nav className="flex items-center gap-1" aria-label="Pagination">
+                    <button
+                      type="button"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page <= 1}
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:pointer-events-none text-sm font-medium"
+                    >
+                      <span className="sr-only">Previous</span>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <span className="px-3 py-1.5 text-sm text-gray-600">
+                      Page <span className="font-semibold">{page}</span> of <span className="font-semibold">{totalPages}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={page >= totalPages}
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:pointer-events-none text-sm font-medium"
+                    >
+                      <span className="sr-only">Next</span>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </nav>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
 
