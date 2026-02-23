@@ -6,6 +6,16 @@ const { query, supabase } = require('../config/database')
 const { authenticate, authorize } = require('../middleware/auth')
 const { getValidAcronyms } = require('../lib/branches')
 
+/**
+ * IMPORTANT CHANGE:
+ * - Username normalization is now UPPERCASE (not lowercase).
+ * - This means:
+ *   - If admin creates "JulieAbaca", it will be stored as "JULIEABACA".
+ *   - On login, any casing the user types will be converted to uppercase,
+ *     so "julieabaca" or "JULIEABACA" both match the stored username.
+ * - Displayed username will be uppercase, not small caps.
+ */
+
 // Register (admin only). Only one admin is allowed in the system.
 router.post('/register', authenticate, authorize('admin'), async (req, res) => {
   try {
@@ -24,20 +34,28 @@ router.post('/register', authenticate, authorize('admin'), async (req, res) => {
 
     // Only one admin allowed
     if (role === 'admin') {
-      const { count } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'admin')
+      const { count } = await supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true })
+        .eq('role', 'admin')
+
       if (count >= 1) {
         return res.status(400).json({ message: 'Only one admin is allowed. An admin already exists.' })
       }
     }
 
-    // Non-admin roles must have at least one branch (unless you allow no branch)
+    // Non-admin roles must have at least one branch
     const validAcronyms = await getValidAcronyms()
-    const normalizedBranches = rawBranches.filter(a => typeof a === 'string' && a.trim() && validAcronyms.has(a.trim()))
+    const normalizedBranches = rawBranches
+      .filter(a => typeof a === 'string' && a.trim() && validAcronyms.has(a.trim()))
+      .map(a => a.trim())
+
     if (!['admin'].includes(role) && normalizedBranches.length === 0) {
       return res.status(400).json({ message: 'Please assign at least one branch for this role.' })
     }
 
-    const normalizedUsername = typeof username === 'string' ? username.trim().toLowerCase() : ''
+    // Username normalization: UPPERCASE
+    const normalizedUsername = typeof username === 'string' ? username.trim().toUpperCase() : ''
     if (!normalizedUsername) {
       return res.status(400).json({ message: 'Username is required' })
     }
@@ -89,6 +107,7 @@ router.post('/register', authenticate, authorize('admin'), async (req, res) => {
         .eq('id', result.id)
         .select('branch_acronyms')
         .single()
+
       if (!updateErr && updated) {
         storedBranchAcronyms = Array.isArray(updated.branch_acronyms) ? updated.branch_acronyms : branchAcronymsForDb
       }
@@ -112,18 +131,21 @@ router.post('/register', authenticate, authorize('admin'), async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body
-    const normalizedUsername = typeof username === 'string' ? username.trim().toLowerCase() : ''
+
+    // Username normalization: UPPERCASE (accepts any casing input, stores/uses ALL CAPS)
+    const normalizedUsername = typeof username === 'string' ? username.trim().toUpperCase() : ''
 
     const { data: user, error: userError } = await supabase
       .from('users')
       .select('*')
       .eq('username', normalizedUsername)
       .maybeSingle()
+
     if (userError || !user) {
       return res.status(401).json({ message: 'Invalid credentials' })
     }
 
-    // Verify password
+    // Verify password (case-sensitive as usual)
     const isValid = await bcrypt.compare(password, user.password)
     if (!isValid) {
       return res.status(401).json({ message: 'Invalid credentials' })
@@ -141,7 +163,7 @@ router.post('/login', async (req, res) => {
       token,
       user: {
         id: user.id,
-        username: user.username,
+        username: user.username, // will be ALL CAPS
         fullname: user.fullname,
         role: user.role,
         branchAcronyms
@@ -161,11 +183,13 @@ router.get('/me', authenticate, async (req, res) => {
       .select('id, username, fullname, role, branch_acronyms')
       .eq('id', req.user.id)
       .single()
+
     if (error || !user) return res.status(404).json({ message: 'User not found' })
+
     const branchAcronyms = Array.isArray(user.branch_acronyms) ? user.branch_acronyms : []
     res.json({
       id: user.id,
-      username: user.username,
+      username: user.username, // will be ALL CAPS
       fullname: user.fullname,
       role: user.role,
       branchAcronyms
