@@ -205,8 +205,8 @@ export default function CreateTicketPage() {
         const fresh = res.data
         const userData = {
           id: fresh.id,
-          email: fresh.email,
-          name: fresh.name,
+          username: fresh.username,
+          fullname: fresh.fullname,
           role: fresh.role,
           branchAcronyms: fresh.branchAcronyms ?? []
         }
