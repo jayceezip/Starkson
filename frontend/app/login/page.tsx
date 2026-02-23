@@ -11,7 +11,7 @@ import starkonLogo from '../../../backend/config/Starkson-Logo.jpg'
 
 export default function LoginPage() {
   const router = useRouter()
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
@@ -27,7 +27,7 @@ export default function LoginPage() {
     setError('')
 
     try {
-      const response = await api.post('/auth/login', { email, password })
+      const response = await api.post('/auth/login', { username, password })
       setStoredAuth(response.data.token, response.data.user)
       router.push('/dashboard')
     } catch (err: any) {
@@ -65,16 +65,16 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label htmlFor="login-email" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Email
+              <label htmlFor="login-username" className="block text-sm font-medium text-gray-700 mb-1.5">
+                Username
               </label>
               <input
-                id="login-email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="login-username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-colors"
-                placeholder="you@company.com"
+                placeholder="Enter your username"
                 required
               />
             </div>

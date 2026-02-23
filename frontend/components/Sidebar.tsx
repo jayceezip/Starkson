@@ -514,7 +514,7 @@ const getNotificationIcon = (type: string) => {
             <Link
               href="/profile"
               className={`flex items-center rounded-lg transition-colors hover:bg-gray-700 ${collapsed ? 'justify-center p-2' : 'gap-3 px-4 py-3'}`}
-              title={collapsed ? `${user.name} · ${formatRole(user.role)}` : undefined}
+              title={collapsed ? `${user.fullname} · ${formatRole(user.role)}` : undefined}
             >
               <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center flex-shrink-0">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -523,7 +523,7 @@ const getNotificationIcon = (type: string) => {
               </div>
               {!collapsed && (
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{user.name}</p>
+                  <p className="text-sm font-medium text-white truncate">{user.fullname}</p>
                   <p className="text-xs text-gray-400 truncate">{formatRole(user.role)}</p>
                 </div>
               )}

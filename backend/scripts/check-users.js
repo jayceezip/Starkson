@@ -10,7 +10,7 @@ async function checkUsers() {
     // Check IT Support users
     const { data: itSupportUsers, error: itError } = await supabase
       .from('users')
-      .select('id, name, email, role, status')
+      .select('id, fullname, username, role, status')
       .eq('role', 'it_support')
     
     if (itError) {
@@ -23,7 +23,7 @@ async function checkUsers() {
       console.log('\nActive IT Support Users:')
       itSupportUsers.forEach(user => {
         const statusIcon = user.status === 'active' ? '✅' : '❌'
-        console.log(`  ${statusIcon} ${user.name} (${user.email}) - Status: ${user.status}`)
+        console.log(`  ${statusIcon} ${user.fullname} (${user.username}) - Status: ${user.status}`)
       })
     } else {
       console.log('⚠️  No IT Support users found!')
@@ -34,7 +34,7 @@ async function checkUsers() {
     // Check Security Officers
     const { data: securityOfficers, error: secError } = await supabase
       .from('users')
-      .select('id, name, email, role, status')
+      .select('id, fullname, username, role, status')
       .eq('role', 'security_officer')
     
     if (secError) {
@@ -47,7 +47,7 @@ async function checkUsers() {
       console.log('\nActive Security Officers:')
       securityOfficers.forEach(user => {
         const statusIcon = user.status === 'active' ? '✅' : '❌'
-        console.log(`  ${statusIcon} ${user.name} (${user.email}) - Status: ${user.status}`)
+        console.log(`  ${statusIcon} ${user.fullname} (${user.username}) - Status: ${user.status}`)
       })
     } else {
       console.log('⚠️  No Security Officers found!')

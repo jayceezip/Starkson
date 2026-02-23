@@ -9,7 +9,7 @@ const { getValidAcronyms } = require('../lib/branches')
 // Register (admin only). Only one admin is allowed in the system.
 router.post('/register', authenticate, authorize('admin'), async (req, res) => {
   try {
-    const { email, password, name, role = 'user', branchAcronyms = [] } = req.body
+    const { username, password, fullname, role = 'user', branchAcronyms = [] } = req.body
 
     const rawBranches = Array.isArray(branchAcronyms)
       ? branchAcronyms
@@ -37,14 +37,19 @@ router.post('/register', authenticate, authorize('admin'), async (req, res) => {
       return res.status(400).json({ message: 'Please assign at least one branch for this role.' })
     }
 
-    // Check if user exists
+    const normalizedUsername = typeof username === 'string' ? username.trim().toLowerCase() : ''
+    if (!normalizedUsername) {
+      return res.status(400).json({ message: 'Username is required' })
+    }
+
+    // Check if username exists
     const existing = await query('users', 'select', {
-      filters: [{ column: 'email', value: email }],
+      filters: [{ column: 'username', value: normalizedUsername }],
       single: true
     })
 
     if (existing) {
-      return res.status(400).json({ message: 'User already exists' })
+      return res.status(400).json({ message: 'Username already taken' })
     }
 
     // Hash password
@@ -53,9 +58,9 @@ router.post('/register', authenticate, authorize('admin'), async (req, res) => {
     // Create user (admin has no branch_acronyms). Use Supabase directly so array column is stored.
     const branchAcronymsForDb = role === 'admin' ? [] : normalizedBranches
     const insertPayload = {
-      email,
+      username: normalizedUsername,
       password: hashedPassword,
-      name,
+      fullname: typeof fullname === 'string' ? fullname.trim() : '',
       role,
       status: 'active',
       branch_acronyms: branchAcronymsForDb
@@ -106,12 +111,13 @@ router.post('/register', authenticate, authorize('admin'), async (req, res) => {
 // Login (fetch user with branch_acronyms from DB)
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body
+    const { username, password } = req.body
+    const normalizedUsername = typeof username === 'string' ? username.trim().toLowerCase() : ''
 
     const { data: user, error: userError } = await supabase
       .from('users')
       .select('*')
-      .eq('email', email)
+      .eq('username', normalizedUsername)
       .maybeSingle()
     if (userError || !user) {
       return res.status(401).json({ message: 'Invalid credentials' })
@@ -125,7 +131,7 @@ router.post('/login', async (req, res) => {
 
     // Generate token
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
+      { id: user.id, username: user.username, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     )
@@ -135,8 +141,8 @@ router.post('/login', async (req, res) => {
       token,
       user: {
         id: user.id,
-        email: user.email,
-        name: user.name,
+        username: user.username,
+        fullname: user.fullname,
         role: user.role,
         branchAcronyms
       }
@@ -152,15 +158,15 @@ router.get('/me', authenticate, async (req, res) => {
   try {
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, email, name, role, branch_acronyms')
+      .select('id, username, fullname, role, branch_acronyms')
       .eq('id', req.user.id)
       .single()
     if (error || !user) return res.status(404).json({ message: 'User not found' })
     const branchAcronyms = Array.isArray(user.branch_acronyms) ? user.branch_acronyms : []
     res.json({
       id: user.id,
-      email: user.email,
-      name: user.name,
+      username: user.username,
+      fullname: user.fullname,
       role: user.role,
       branchAcronyms
     })

@@ -32,7 +32,7 @@ const findSecurityOfficer = async () => {
   try {
     const { data: securityOfficers, error: secError } = await supabase
       .from('users')
-      .select('id, name, email')
+      .select('id, fullname, username')
       .eq('role', 'security_officer')
       .eq('status', 'active')
       .order('created_at', { ascending: true })
@@ -46,8 +46,8 @@ const findSecurityOfficer = async () => {
     if (securityOfficers && securityOfficers.length > 0) {
       console.log('✅ Found Security Officer for assignment:', {
         id: securityOfficers[0].id,
-        name: securityOfficers[0].name,
-        email: securityOfficers[0].email
+        fullname: securityOfficers[0].fullname,
+        username: securityOfficers[0].username
       })
       return securityOfficers[0].id
     } else {
@@ -97,8 +97,8 @@ router.get('/', authenticate, async (req, res) => {
   try {
     let selectQuery = `
       *,
-      created_by_user:users!tickets_created_by_fkey(id, name, email),
-      assigned_to_user:users!tickets_assigned_to_fkey(id, name)
+      created_by_user:users!tickets_created_by_fkey(id, fullname, username),
+      assigned_to_user:users!tickets_assigned_to_fkey(id, fullname)
     `
 
     // Fetch current user's branch_acronyms for filtering (user/it_support/security_officer see by branch)
@@ -202,26 +202,26 @@ router.get('/', authenticate, async (req, res) => {
       ])
       
       // If assigned_to_user is not populated, fetch it manually
-      let assignedToName = ticket.assigned_to_user?.name || null
+      let assignedToName = ticket.assigned_to_user?.fullname || null
       if (ticket.assigned_to && !assignedToName) {
         const { data: assignedUser } = await supabase
           .from('users')
-          .select('name')
+          .select('fullname')
           .eq('id', ticket.assigned_to)
           .single()
-        assignedToName = assignedUser?.name || null
+        assignedToName = assignedUser?.fullname || null
         console.log(`🔍 Manually fetched assigned user for ${ticket.ticket_number}:`, assignedToName)
       }
       
       // If created_by_user is not populated, fetch it manually
-      let createdByName = ticket.created_by_user?.name || 'Unknown'
-      if (ticket.created_by && !ticket.created_by_user?.name) {
+      let createdByName = ticket.created_by_user?.fullname || 'Unknown'
+      if (ticket.created_by && !ticket.created_by_user?.fullname) {
         const { data: createdByUser } = await supabase
           .from('users')
-          .select('name')
+          .select('fullname')
           .eq('id', ticket.created_by)
           .single()
-        createdByName = createdByUser?.name || 'Unknown'
+        createdByName = createdByUser?.fullname || 'Unknown'
       }
 
       // If ticket was converted to incident, include link to incident
@@ -292,14 +292,14 @@ router.get('/:id', authenticate, async (req, res) => {
     }
     
     // Fallback: If assigned_to_user is not populated, fetch it manually
-    let assignedToName = ticket.assigned_to_user?.name || null
+    let assignedToName = ticket.assigned_to_user?.fullname || null
     if (ticket.assigned_to && !assignedToName) {
       const { data: assignedUser } = await supabase
         .from('users')
-        .select('name')
+        .select('fullname')
         .eq('id', ticket.assigned_to)
         .single()
-      assignedToName = assignedUser?.name || null
+      assignedToName = assignedUser?.fullname || null
       console.log(`🔍 Manually fetched assigned user for ticket ${ticket.ticket_number}:`, assignedToName)
     }
 
@@ -377,7 +377,7 @@ router.get('/:id', authenticate, async (req, res) => {
       .from('ticket_comments')
       .select(`
         *,
-        user:users(id, name, email)
+        user:users(id, fullname, username)
       `)
       .eq('ticket_id', req.params.id)
       .order('created_at', { ascending: true })
@@ -404,7 +404,7 @@ router.get('/:id', authenticate, async (req, res) => {
         .from('incident_timeline')
         .select(`
           *,
-          user:users(id, name, email)
+          user:users(id, fullname, username)
         `)
         .eq('incident_id', existingIncident.id)
         .order('created_at', { ascending: true })
@@ -430,7 +430,7 @@ router.get('/:id', authenticate, async (req, res) => {
             action: incidentTimeline[0].action,
             description: incidentTimeline[0].description?.substring(0, 50),
             is_internal: incidentTimeline[0].is_internal,
-            userName: incidentTimeline[0].user?.name
+            userName: incidentTimeline[0].user?.fullname
           })
         }
       }
@@ -478,8 +478,8 @@ router.get('/:id', authenticate, async (req, res) => {
         createdAt: c.created_at,
         isInternal: c.is_internal,
         userId: c.user_id,
-        userName: c.user?.name || 'Unknown User',
-        userEmail: c.user?.email
+        userName: c.user?.fullname || 'Unknown User',
+        userUsername: c.user?.username
       })),
       // Incident timeline (for users when ticket is converted)
       incidentTimeline: incidentTimeline.map(t => ({
@@ -487,8 +487,8 @@ router.get('/:id', authenticate, async (req, res) => {
         createdAt: t.created_at,
         isInternal: t.is_internal,
         userId: t.user_id,
-        userName: t.user?.name || 'Unknown User',
-        userEmail: t.user?.email
+        userName: t.user?.fullname || 'Unknown User',
+        userUsername: t.user?.username
       })),
       attachments: attachments.map(a => ({
         id: a.id,
@@ -1059,7 +1059,7 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
           for (const comment of retryTicketComments) {
             const { data: commentUser } = await supabase
               .from('users')
-              .select('name, role')
+              .select('fullname, role')
               .eq('id', comment.user_id)
               .single()
             await query('incident_timeline', 'insert', {
@@ -1128,7 +1128,7 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
         if (assignedToId) {
           const { data: secOfficer } = await supabase
             .from('users')
-            .select('name')
+            .select('fullname')
             .eq('id', assignedToId)
             .single()
           
@@ -1137,7 +1137,7 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
               incident_id: result.id,
               user_id: req.user.id,
               action: 'INCIDENT_ASSIGNED',
-              description: `Incident assigned to Security Officer: ${secOfficer?.name || 'Security Officer'}`,
+              description: `Incident assigned to Security Officer: ${secOfficer?.fullname || 'Security Officer'}`,
               is_internal: false
             }
           })
@@ -1225,7 +1225,7 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
       for (const comment of ticketComments) {
         const { data: commentUser } = await supabase
           .from('users')
-          .select('name, role')
+          .select('fullname, role')
           .eq('id', comment.user_id)
           .single()
         await query('incident_timeline', 'insert', {
@@ -1294,7 +1294,7 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
     if (assignedToId) {
       const { data: secOfficer } = await supabase
         .from('users')
-        .select('name')
+        .select('fullname')
         .eq('id', assignedToId)
         .single()
       
@@ -1303,7 +1303,7 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
           incident_id: result.id,
           user_id: req.user.id,
           action: 'INCIDENT_ASSIGNED',
-          description: `Incident assigned to Security Officer: ${secOfficer?.name || 'Security Officer'}`,
+          description: `Incident assigned to Security Officer: ${secOfficer?.fullname || 'Security Officer'}`,
           is_internal: false // Visible to users
         }
       })

@@ -10,8 +10,8 @@ import { useBranches } from '@/lib/useBranches'
 
 interface UserRow {
   id: string
-  email: string
-  name: string
+  username: string
+  fullname: string
   role: string
   status: string
   createdAt?: string
@@ -69,12 +69,12 @@ export default function AdminUsersPage() {
     fetchUsers()
   }, [mounted, user, router])
 
-  // Keyword search: match name, email, role (case-insensitive)
+  // Keyword search: match fullname, username, role (case-insensitive)
   const keywords = searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean)
   const filteredUsers = keywords.length === 0
     ? users
     : users.filter((u) => {
-        const searchText = [u.name, u.email, u.role, u.status, (u.branchAcronyms || []).join(' ')].filter(Boolean).join(' ').toLowerCase()
+        const searchText = [u.fullname, u.username, u.role, u.status, (u.branchAcronyms || []).join(' ')].filter(Boolean).join(' ').toLowerCase()
         return keywords.every((kw) => searchText.includes(kw))
       })
 
@@ -102,7 +102,7 @@ export default function AdminUsersPage() {
   const handleOpenBranchEdit = (u: UserRow) => {
     if (u.role === 'admin') return
     setEditingBranches(u.id)
-    setEditingBranchUserName(u.name)
+    setEditingBranchUserName(u.fullname)
     setEditingBranchAcronyms(Array.isArray(u.branchAcronyms) ? [...u.branchAcronyms] : [])
   }
 
@@ -209,7 +209,7 @@ export default function AdminUsersPage() {
               <input
                 id="user-search"
                 type="search"
-                placeholder="Search by name, email, role, or status..."
+                placeholder="Search by fullname, username, role, or status..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-11 pr-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm focus:shadow-md"
@@ -290,17 +290,17 @@ export default function AdminUsersPage() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm shadow-sm">
-                            {u.name.charAt(0).toUpperCase()}
+                            {u.fullname.charAt(0).toUpperCase()}
                           </div>
-                          <span className="font-semibold text-gray-900">{u.name}</span>
+                          <span className="font-semibold text-gray-900">{u.fullname}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2 text-gray-600">
                           <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                           </svg>
-                          <span className="text-sm">{u.email}</span>
+                          <span className="text-sm font-mono">{u.username}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">

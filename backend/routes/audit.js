@@ -31,7 +31,7 @@ router.get('/export', authenticate, authorize('admin'), async (req, res) => {
         .from('audit_logs')
         .select(`
           id, action, resource_type, resource_id, details, ip_address, created_at, user_id,
-          user:users!audit_logs_user_id_fkey(name, email)
+          user:users!audit_logs_user_id_fkey(fullname, username)
         `)
         .order('created_at', { ascending: false })
         .range(offset, offset + EXPORT_PAGE_SIZE - 1)
@@ -64,13 +64,13 @@ router.get('/export', authenticate, authorize('admin'), async (req, res) => {
       action: l.action,
       resourceType: l.resource_type || '',
       resourceId: l.resource_id || '',
-      userName: l.user?.name || '',
-      userEmail: l.user?.email || '',
+      userName: l.user?.fullname || '',
+      userUsername: l.user?.username || '',
       details: typeof l.details === 'object' ? JSON.stringify(l.details) : (l.details || ''),
       ipAddress: l.ip_address || ''
     }))
 
-    const headers = ['id', 'createdAt', 'action', 'resourceType', 'resourceId', 'userName', 'userEmail', 'details', 'ipAddress']
+    const headers = ['id', 'createdAt', 'action', 'resourceType', 'resourceId', 'userName', 'userUsername', 'details', 'ipAddress']
     const csv = [headers.join(',')].concat(
       rows.map(r => headers.map(h => `"${String(r[h] || '').replace(/"/g, '""')}"`).join(','))
     ).join('\n')

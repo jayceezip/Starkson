@@ -18,8 +18,8 @@ export default function AdminCreateUserPage() {
   const router = useRouter()
   const { realBranches, ALL_BRANCHES_ACRONYM } = useBranches()
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
+    fullname: '',
+    username: '',
     password: '',
     confirmPassword: '',
     role: 'user',
@@ -59,8 +59,8 @@ export default function AdminCreateUserPage() {
 
     try {
       await api.post('/auth/register', {
-        name: formData.name,
-        email: formData.email,
+        fullname: formData.fullname,
+        username: formData.username,
         password: formData.password,
         role: formData.role,
         branchAcronyms: formData.role === 'admin' ? [] : (formData.branchAcronyms.includes(ALL_BRANCHES_ACRONYM) ? [ALL_BRANCHES_ACRONYM] : formData.branchAcronyms.filter((a) => a !== ALL_BRANCHES_ACRONYM)),
@@ -98,19 +98,19 @@ export default function AdminCreateUserPage() {
         <div className="flex-1 flex items-start justify-center w-full max-w-4xl mx-auto">
           <div className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-8 md:p-12 lg:p-16">
             <p className="text-gray-600 mb-8 text-lg">
-              Add a new user to the platform. They will be able to sign in with the email and password you set.
+              Add a new user to the platform. They will be able to sign in with the username and password you set.
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-6 max-w-xl">
               <div>
-                <label htmlFor="create-name" className="block text-base font-semibold text-gray-700 mb-2">
+                <label htmlFor="create-fullname" className="block text-base font-semibold text-gray-700 mb-2">
                   Full name
                 </label>
                 <input
-                  id="create-name"
+                  id="create-fullname"
                   type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  value={formData.fullname}
+                  onChange={(e) => setFormData({ ...formData, fullname: e.target.value })}
                   className="w-full px-5 py-3.5 text-base border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
                   placeholder="John Doe"
                   required
@@ -118,16 +118,16 @@ export default function AdminCreateUserPage() {
               </div>
 
               <div>
-                <label htmlFor="create-email" className="block text-base font-semibold text-gray-700 mb-2">
-                  Email
+                <label htmlFor="create-username" className="block text-base font-semibold text-gray-700 mb-2">
+                  Username
                 </label>
                 <input
-                  id="create-email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  id="create-username"
+                  type="text"
+                  value={formData.username}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value.toLowerCase().trim() })}
                   className="w-full px-5 py-3.5 text-base border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-                  placeholder="you@company.com"
+                  placeholder="johndoe"
                   required
                 />
               </div>

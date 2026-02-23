@@ -9,10 +9,10 @@ router.get('/security-officers', authenticate, authorize('it_support', 'security
   try {
     const { data: users, error } = await supabase
       .from('users')
-      .select('id, name, email')
+      .select('id, fullname, username')
       .eq('role', 'security_officer')
       .eq('status', 'active')
-      .order('name', { ascending: true })
+      .order('fullname', { ascending: true })
     if (error) throw error
     res.json(users || [])
   } catch (error) {
@@ -26,7 +26,7 @@ router.get('/', authenticate, authorize('admin'), async (req, res) => {
   try {
     const { data: users, error } = await supabase
       .from('users')
-      .select('id, email, name, role, status, branch_acronyms, created_at, updated_at')
+      .select('id, username, fullname, role, status, branch_acronyms, created_at, updated_at')
       .order('created_at', { ascending: false })
 
     if (error) throw error
@@ -48,7 +48,7 @@ router.get('/:id', authenticate, authorize('admin'), async (req, res) => {
   try {
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, email, name, role, status, branch_acronyms, created_at, updated_at')
+      .select('id, username, fullname, role, status, branch_acronyms, created_at, updated_at')
       .eq('id', req.params.id)
       .single()
 

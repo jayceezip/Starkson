@@ -70,7 +70,7 @@ router.get('/recent', authenticate, async (req, res) => {
       .from('attachments')
       .select(`
         *,
-        uploaded_by_user:users!attachments_uploaded_by_fkey(id, name, email)
+        uploaded_by_user:users!attachments_uploaded_by_fkey(id, fullname, username)
       `)
       .order('created_at', { ascending: false })
       .limit(limit)
@@ -207,7 +207,7 @@ router.get('/recent', authenticate, async (req, res) => {
 
       // Get the best available name field
       const userData = att.uploaded_by_user || {}
-      const uploaderName = userData.name || userData.full_name || userData.username || userData.email || 'Unknown'
+      const uploaderName = userData.fullname || userData.username || 'Unknown'
 
       return {
         id: att.id,
@@ -450,7 +450,7 @@ router.get('/:recordType/:recordId', authenticate, async (req, res) => {
       size: att.size,
       filePath: att.file_path,
       uploadedBy: att.uploaded_by,
-      uploadedByName: att.uploaded_by_user?.name || 'Unknown',
+      uploadedByName: att.uploaded_by_user?.fullname || 'Unknown',
       createdAt: att.created_at,
       // Also include snake_case for compatibility
       record_type: att.record_type,

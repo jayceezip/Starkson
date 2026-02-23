@@ -35,11 +35,11 @@ async function createAdmin() {
       process.exit(0)
     }
 
-    const name = await question('Enter admin name: ')
-    const email = await question('Enter admin email: ')
+    const fullname = await question('Enter admin full name: ')
+    const username = await question('Enter admin username: ')
     const password = await question('Enter admin password: ')
 
-    if (!name || !email || !password) {
+    if (!fullname || !username || !password) {
       console.log('❌ All fields are required!')
       readline.close()
       process.exit(1)
@@ -51,14 +51,21 @@ async function createAdmin() {
       process.exit(1)
     }
 
-    // Check if email already exists
+    const normalizedUsername = username.trim().toLowerCase()
+    if (!normalizedUsername) {
+      console.log('❌ Username cannot be empty!')
+      readline.close()
+      process.exit(1)
+    }
+
+    // Check if username already exists
     const existing = await query('users', 'select', {
-      filters: [{ column: 'email', value: email }],
+      filters: [{ column: 'username', value: normalizedUsername }],
       single: true
     })
 
     if (existing) {
-      console.log('❌ User with this email already exists!')
+      console.log('❌ User with this username already exists!')
       readline.close()
       process.exit(1)
     }
@@ -69,9 +76,9 @@ async function createAdmin() {
     // Create admin user (only one admin; no branch assignment)
     const result = await query('users', 'insert', {
       data: {
-        email,
+        username: normalizedUsername,
         password: hashedPassword,
-        name,
+        fullname: fullname.trim(),
         role: 'admin',
         status: 'active',
         branch_acronyms: []
@@ -79,8 +86,8 @@ async function createAdmin() {
     })
 
     console.log('\n✅ Admin account created successfully!')
-    console.log(`   Name: ${name}`)
-    console.log(`   Email: ${email}`)
+    console.log(`   Full Name: ${fullname}`)
+    console.log(`   Username: ${normalizedUsername}`)
     console.log(`   Role: admin`)
     console.log(`   User ID: ${result.id}`)
     console.log('\nYou can now login with these credentials.')

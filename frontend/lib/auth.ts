@@ -4,8 +4,8 @@ export type UserRole = 'user' | 'it_support' | 'security_officer' | 'admin'
 
 export interface User {
   id: number
-  email: string
-  name: string
+  username: string
+  fullname: string
   role: UserRole
   branchAcronyms?: string[]
 }

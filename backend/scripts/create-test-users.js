@@ -11,26 +11,26 @@ const { query } = require('../config/database')
 
 const testUsers = [
   {
-    name: 'Sarah Johnson',
-    email: 'sarah.johnson@company.com',
+    fullname: 'Sarah Johnson',
+    username: 'sarah.johnson',
     password: 'Password123!',
     role: 'user'
   },
   {
-    name: 'Mike Chen',
-    email: 'mike.chen@company.com',
+    fullname: 'Mike Chen',
+    username: 'mike.chen',
     password: 'Password123!',
     role: 'it_support'
   },
   {
-    name: 'Alex Rodriguez',
-    email: 'alex.rodriguez@company.com',
+    fullname: 'Alex Rodriguez',
+    username: 'alex.rodriguez',
     password: 'Password123!',
     role: 'security_officer'
   },
   {
-    name: 'Jennifer Smith',
-    email: 'jennifer.smith@company.com',
+    fullname: 'Jennifer Smith',
+    username: 'jennifer.smith',
     password: 'Password123!',
     role: 'admin'
   }
@@ -41,14 +41,15 @@ async function createTestUsers() {
     console.log('=== STARKSON Test Users Creator ===\n')
 
     for (const user of testUsers) {
+      const normalizedUsername = user.username.trim().toLowerCase()
       // Check if user exists
       const existing = await query('users', 'select', {
-        filters: [{ column: 'email', value: user.email }],
+        filters: [{ column: 'username', value: normalizedUsername }],
         single: true
       })
 
       if (existing) {
-        console.log(`⏭️  User ${user.email} already exists, skipping...`)
+        console.log(`⏭️  User ${normalizedUsername} already exists, skipping...`)
         continue
       }
 
@@ -58,15 +59,15 @@ async function createTestUsers() {
       // Create user
       const result = await query('users', 'insert', {
         data: {
-          email: user.email,
+          username: normalizedUsername,
           password: hashedPassword,
-          name: user.name,
+          fullname: user.fullname.trim(),
           role: user.role,
           status: 'active'
         }
       })
 
-      console.log(`✅ Created ${user.role}: ${user.name} (${user.email})`)
+      console.log(`✅ Created ${user.role}: ${user.fullname} (${normalizedUsername})`)
     }
 
     console.log('\n✅ All test users created successfully!')
@@ -74,9 +75,9 @@ async function createTestUsers() {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
     testUsers.forEach(user => {
       console.log(`\n${user.role.toUpperCase()}`)
-      console.log(`  Email: ${user.email}`)
+      console.log(`  Username: ${user.username}`)
       console.log(`  Password: ${user.password}`)
-      console.log(`  Name: ${user.name}`)
+      console.log(`  Full Name: ${user.fullname}`)
     })
     console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
     console.log('\nYou can now login with any of these accounts.')

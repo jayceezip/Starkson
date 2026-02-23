@@ -36,15 +36,15 @@ router.get('/', authenticate, authorize('security_officer', 'admin'), async (req
 
     const selectWithAffectedUser = `
       *,
-      created_by_user:users!incidents_created_by_fkey(id, name),
-      assigned_to_user:users!incidents_assigned_to_fkey(id, name),
+      created_by_user:users!incidents_created_by_fkey(id, fullname),
+      assigned_to_user:users!incidents_assigned_to_fkey(id, fullname),
       source_ticket:tickets!incidents_source_ticket_id_fkey(ticket_number, affected_system, created_by),
-      affected_user_link:users!incidents_affected_user_id_fkey(id, name)
+      affected_user_link:users!incidents_affected_user_id_fkey(id, fullname)
     `
     const selectWithoutAffectedUser = `
       *,
-      created_by_user:users!incidents_created_by_fkey(id, name),
-      assigned_to_user:users!incidents_assigned_to_fkey(id, name),
+      created_by_user:users!incidents_created_by_fkey(id, fullname),
+      assigned_to_user:users!incidents_assigned_to_fkey(id, fullname),
       source_ticket:tickets!incidents_source_ticket_id_fkey(ticket_number, affected_system, created_by)
     `
     let incidents
@@ -90,8 +90,8 @@ router.get('/', authenticate, authorize('security_officer', 'admin'), async (req
         createdAt: incident.created_at,
         timelineCount: timelineCount.count || 0,
         attachmentCount: attachmentCount.count || 0,
-        createdByName: incident.created_by_user?.name,
-        assignedToName: incident.assigned_to_user?.name,
+        createdByName: incident.created_by_user?.fullname,
+        assignedToName: incident.assigned_to_user?.fullname,
         sourceTicketNumber: incident.source_ticket?.ticket_number,
         sourceTicketId: incident.source_ticket_id ?? null,
         affectedAsset: affectedAsset ?? null,
@@ -116,8 +116,8 @@ router.get('/:id', authenticate, async (req, res) => {
       .from('incidents')
       .select(`
         *,
-        created_by_user:users!incidents_created_by_fkey(id, name, email),
-        assigned_to_user:users!incidents_assigned_to_fkey(id, name, email),
+        created_by_user:users!incidents_created_by_fkey(id, fullname, username),
+        assigned_to_user:users!incidents_assigned_to_fkey(id, fullname, username),
         source_ticket:tickets!incidents_source_ticket_id_fkey(ticket_number, created_by, assigned_to, affected_system)
       `)
       .eq('id', req.params.id)
@@ -184,9 +184,9 @@ router.get('/:id', authenticate, async (req, res) => {
     let affectedUser = null
     let affectedUserId = incident.affected_user_id ?? null
     if (affectedUserId) {
-      const { data: affectedUserRow } = await supabase.from('users').select('id, name, email').eq('id', affectedUserId).single()
+      const { data: affectedUserRow } = await supabase.from('users').select('id, fullname, username').eq('id', affectedUserId).single()
       if (affectedUserRow) {
-        affectedUser = affectedUserRow.name ?? null
+        affectedUser = affectedUserRow.fullname ?? null
         affectedUserId = affectedUserRow.id
       }
     }
@@ -211,10 +211,10 @@ router.get('/:id', authenticate, async (req, res) => {
       created_at: incident.created_at,
       incidentNumber: incident.incident_number,
       createdAt: incident.created_at,
-      createdByName: incident.created_by_user?.name,
-      createdByEmail: incident.created_by_user?.email,
-      assignedToName: incident.assigned_to_user?.name,
-      assignedToEmail: incident.assigned_to_user?.email,
+      createdByName: incident.created_by_user?.fullname,
+      createdByUsername: incident.created_by_user?.username,
+      assignedToName: incident.assigned_to_user?.fullname,
+      assignedToUsername: incident.assigned_to_user?.username,
       sourceTicketNumber: incident.source_ticket?.ticket_number,
       sourceTicketId: incident.source_ticket_id ?? null,
       // Explicit camelCase so frontend always receives these
@@ -228,8 +228,8 @@ router.get('/:id', authenticate, async (req, res) => {
       impactAvailability,
       timeline: timeline.map(t => ({
         ...t,
-        userName: t.user?.name || 'Unknown User',
-        userEmail: t.user?.email,
+        userName: t.user?.fullname || 'Unknown User',
+        userUsername: t.user?.username,
         createdAt: t.created_at,
         isInternal: t.is_internal
       })),
@@ -421,7 +421,7 @@ router.put('/:id', authenticate, authorize('security_officer', 'admin'), async (
     if (assignedTo !== undefined && assignedTo !== incident.assigned_to) {
       const { data: assignedUser } = await supabase
         .from('users')
-        .select('name, role')
+        .select('fullname, role')
         .eq('id', assignedTo)
         .single()
       
@@ -560,11 +560,11 @@ router.post('/:id/timeline', authenticate, authorize('security_officer', 'admin'
     // Get the security officer's name
     const { data: securityOfficer } = await supabase
       .from('users')
-      .select('name')
+      .select('fullname')
       .eq('id', req.user.id)
       .single()
     
-    const officerName = securityOfficer?.name || 'Security Officer'
+    const officerName = securityOfficer?.fullname || 'Security Officer'
 
     // NOTIFY THE TICKET CREATOR (USER) about the timeline addition
     if (incident.source_ticket_id) {
@@ -584,14 +584,14 @@ router.post('/:id/timeline', authenticate, authorize('security_officer', 'admin'
         // Get the user's details to verify they exist
         const { data: userData, error: userError } = await supabase
           .from('users')
-          .select('id, name, email')
+          .select('id, fullname, username')
           .eq('id', sourceTicket.created_by)
           .single()
         
         if (userError) {
           console.error('Error fetching user:', userError)
         } else if (userData) {
-          console.log(`Found user: ${userData.name} (${userData.email})`)
+          console.log(`Found user: ${userData.fullname} (${userData.username})`)
           
           // Only send notification if the user is not the same as the security officer
           if (sourceTicket.created_by !== req.user.id) {

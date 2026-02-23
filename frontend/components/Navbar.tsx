@@ -111,7 +111,7 @@ export default function Navbar() {
           {/* User Info and Actions */}
           <div className="flex items-center gap-4 pl-4 border-l border-gray-700">
             <div className="text-right">
-              <span className="text-gray-200 text-sm font-medium block">{user.name}</span>
+              <span className="text-gray-200 text-sm font-medium block">{user.fullname}</span>
               <span className="text-gray-400 text-xs block">{formatRole(user.role)}</span>
             </div>
             <Link

@@ -657,7 +657,7 @@ export default function TicketDetailsPage() {
                       const timelineDate = t.created_at || t.createdAt
                       const formattedDate = formatPinoyDateTime(timelineDate)
                       
-                      const userName = t.userName || t.user?.name || 'System'
+                      const userName = t.userName || t.user?.fullname || 'System'
                       const action = t.action || 'UPDATE'
                       
                       return (
@@ -695,7 +695,7 @@ export default function TicketDetailsPage() {
                       const formattedDate = formatPinoyDateTime(commentDate)
                       
                       const isInternal = c.is_internal || c.isInternal
-                      const userName = c.userName || c.user?.name || 'Unknown User'
+                      const userName = c.userName || c.user?.fullname || 'Unknown User'
                       
                       return (
                         <div key={c.id} className={`p-4 rounded-xl border-l-4 ${isInternal ? 'bg-amber-50 border-amber-400' : 'bg-gray-50 border-blue-500'}`}>
