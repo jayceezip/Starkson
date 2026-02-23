@@ -41,6 +41,8 @@ export default function AdminUsersPage() {
   const [editingBranchAcronyms, setEditingBranchAcronyms] = useState<string[]>([])
   const [savingBranches, setSavingBranches] = useState(false)
   const [page, setPage] = useState(1)
+  const [userToDelete, setUserToDelete] = useState<UserRow | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const { branches, realBranches, ALL_BRANCHES_ACRONYM } = useBranches()
 
@@ -137,6 +139,21 @@ export default function AdminUsersPage() {
       alert('Failed to update branches')
     } finally {
       setSavingBranches(false)
+    }
+  }
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!userToDelete || userToDelete.id !== userId) return
+    setDeleting(true)
+    try {
+      await api.delete(`/users/${userId}`)
+      setUserToDelete(null)
+      fetchUsers()
+    } catch (e: any) {
+      console.error('Failed to delete user:', e)
+      alert(e.response?.data?.message || 'Failed to delete user')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -276,8 +293,8 @@ export default function AdminUsersPage() {
               <table className="min-w-[700px] w-full">
                 <thead className="bg-gradient-to-r from-gray-50 to-gray-50/50 border-b border-gray-200">
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">User</th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Email</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Fullname</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Username</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Role</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Branches</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Status</th>
@@ -374,18 +391,33 @@ export default function AdminUsersPage() {
                             </button>
                           </div>
                         ) : (
-                          <button
-                            onClick={() => {
-                              setEditingRole(u.id)
-                              setNewRole(u.role || 'user')
-                            }}
-                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50 transition-all"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                            Edit Role
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                setEditingRole(u.id)
+                                setNewRole(u.role || 'user')
+                              }}
+                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50 transition-all"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                              Edit Role
+                            </button>
+                            {user?.id !== u.id && (
+                              <button
+                                type="button"
+                                onClick={() => setUserToDelete(u)}
+                                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 transition-all"
+                                title="Delete user"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                                Delete
+                              </button>
+                            )}
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -436,6 +468,48 @@ export default function AdminUsersPage() {
                     </button>
                   </nav>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete user confirmation modal */}
+        {userToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => !deleting && setUserToDelete(null)}
+              aria-hidden="true"
+            />
+            <div
+              className="relative z-10 w-full max-w-md mx-4 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-6 py-4 border-b border-gray-100 bg-red-50">
+                <h2 className="text-lg font-semibold text-gray-900">Delete user</h2>
+              </div>
+              <div className="p-6">
+                <p className="text-gray-700 mb-4">
+                  Are you sure you want to delete <strong>{userToDelete.fullname}</strong> ({userToDelete.username})? This action cannot be undone.
+                </p>
+                <div className="flex gap-3 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setUserToDelete(null)}
+                    disabled={deleting}
+                    className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteUser(userToDelete.id)}
+                    disabled={deleting}
+                    className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {deleting ? 'Deleting...' : 'Delete user'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

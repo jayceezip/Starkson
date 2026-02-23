@@ -181,4 +181,50 @@ router.put('/:id/status', authenticate, authorize('admin'), async (req, res) => 
   }
 })
 
+// Delete user (admin only)
+router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const targetId = req.params.id
+
+    if (targetId === req.user.id) {
+      return res.status(400).json({ message: 'You cannot delete your own account' })
+    }
+
+    const { data: target, error: fetchError } = await supabase
+      .from('users')
+      .select('id, username, fullname, role')
+      .eq('id', targetId)
+      .single()
+
+    if (fetchError || !target) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+
+    const { error: deleteError } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', targetId)
+
+    if (deleteError) {
+      console.error('Delete user error:', deleteError)
+      return res.status(500).json({ message: deleteError.message || 'Failed to delete user' })
+    }
+
+    await query('audit_logs', 'insert', {
+      data: {
+        action: 'DELETE_USER',
+        user_id: req.user.id,
+        resource_type: 'user',
+        resource_id: targetId,
+        details: { deletedUsername: target.username, deletedFullname: target.fullname, deletedRole: target.role }
+      }
+    })
+
+    res.json({ message: 'User deleted successfully' })
+  } catch (error) {
+    console.error('Delete user error:', error)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
 module.exports = router
