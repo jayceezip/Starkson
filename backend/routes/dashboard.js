@@ -34,12 +34,49 @@ router.get('/stats', authenticate, async (req, res) => {
 
     // Total incidents count: only for security_officer and admin (role-based)
     let incidentsCount = 0
+    let assignedIncidents = 0
+    let openIncidents = 0
+    let resolvedIncidents = 0 // Renamed from recoveredIncidents to include both recovered AND closed
+    
     if (req.user.role === 'security_officer' || req.user.role === 'admin') {
+      // Total incidents
       const { count: incCount, error: incidentsError } = await supabase
         .from('incidents')
         .select('*', { count: 'exact', head: true })
       if (!incidentsError) incidentsCount = incCount || 0
       console.log('Total incidents count:', incidentsCount)
+      
+      // For Security Officer - get incidents assigned to them
+      if (req.user.role === 'security_officer') {
+        // ALL incidents assigned to current user (including resolved/closed)
+        const { count: assignedCount, error: assignedError } = await supabase
+          .from('incidents')
+          .select('*', { count: 'exact', head: true })
+          .eq('assigned_to', req.user.id)
+        
+        if (!assignedError) assignedIncidents = assignedCount || 0
+        console.log('Assigned incidents count (all):', assignedIncidents)
+        
+        // Open incidents assigned to current user (not closed or recovered)
+        const { count: openCount, error: openError } = await supabase
+          .from('incidents')
+          .select('*', { count: 'exact', head: true })
+          .eq('assigned_to', req.user.id)
+          .not('status', 'in', '("closed","recovered")')
+        
+        if (!openError) openIncidents = openCount || 0
+        console.log('Open incidents assigned to user:', openIncidents)
+        
+        // RESOLVED incidents assigned to current user (both recovered AND closed)
+        const { count: resolvedCount, error: resolvedError } = await supabase
+          .from('incidents')
+          .select('*', { count: 'exact', head: true })
+          .eq('assigned_to', req.user.id)
+          .in('status', ['recovered', 'closed'])
+        
+        if (!resolvedError) resolvedIncidents = resolvedCount || 0
+        console.log('Resolved incidents assigned to user (recovered + closed):', resolvedIncidents)
+      }
     }
 
     // Open tickets count (status: new, assigned, in_progress, waiting_for_user)
@@ -81,38 +118,15 @@ router.get('/stats', authenticate, async (req, res) => {
     }
     console.log('Resolved tickets count:', resolvedTicketsCount)
 
-    // Debug: Also fetch actual tickets to verify they exist
-    let debugQuery = supabase.from('tickets').select('id, ticket_number, status, created_by, assigned_to, created_at')
-    if (req.user.role === 'user') {
-      debugQuery = debugQuery.eq('created_by', req.user.id)
-    } else if (req.user.role === 'it_support') {
-      debugQuery = debugQuery.or(`assigned_to.eq.${req.user.id},assigned_to.is.null`)
-    }
-    const { data: debugTickets, error: debugError } = await debugQuery.limit(5)
-    if (!debugError) {
-      console.log('Sample tickets found:', debugTickets?.length || 0)
-      if (debugTickets && debugTickets.length > 0) {
-        console.log('First ticket sample:', {
-          id: debugTickets[0].id,
-          ticket_number: debugTickets[0].ticket_number,
-          status: debugTickets[0].status,
-          created_by: debugTickets[0].created_by,
-          assigned_to: debugTickets[0].assigned_to,
-          user_id: req.user.id,
-          role: req.user.role
-        })
-      } else {
-        console.log('⚠️ No tickets found matching the filter criteria')
-      }
-    } else {
-      console.error('Debug query error:', debugError)
-    }
-
     const response = {
       tickets: ticketsCount || 0,
       incidents: incidentsCount || 0,
       openTickets: openTicketsCount || 0,
       resolvedTickets: resolvedTicketsCount || 0,
+      // Security Officer specific stats
+      assignedIncidents: assignedIncidents || 0,
+      openIncidents: openIncidents || 0,
+      resolvedIncidents: resolvedIncidents || 0, // Changed from recoveredIncidents
     }
     console.log('Dashboard stats response:', response)
     res.json(response)
