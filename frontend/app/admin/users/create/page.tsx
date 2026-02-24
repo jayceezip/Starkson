@@ -130,7 +130,7 @@ export default function AdminCreateUserPage() {
                   placeholder="e.g., John Doe, john doe, JOHN DOE"
                   required
                 />
-                <p className="text-xs text-gray-500 mt-1">Usernames are case-sensitive and will be stored exactly as entered (e.g., Jerick, jerick, and JERICK are all different)</p>
+                <p className="text-xs text-gray-500 mt-1">Usernames are case-sensitive and will be stored exactly as entered (e.g., John Doe, john doe, JOHN DOE are all different)</p>
               </div>
 
               <div>

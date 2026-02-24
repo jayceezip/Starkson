@@ -188,11 +188,15 @@ export default function DashboardPage() {
   const [user, setUser] = useState<any>(null)
   const [mounted, setMounted] = useState(false)
   const [stats, setStats] = useState({
-    tickets: 0,
-    incidents: 0,
-    openTickets: 0,
-    resolvedTickets: 0,
-  })
+  tickets: 0,
+  incidents: 0,
+  openTickets: 0,
+  resolvedTickets: 0,
+  // Security Officer specific stats
+  assignedIncidents: 0,
+  openIncidents: 0,
+  resolvedIncidents: 0, // Make sure this is here
+})
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [activityLoading, setActivityLoading] = useState(true)
   const [clickedCommentIds, setClickedCommentIds] = useState<Set<string>>(new Set())
@@ -206,8 +210,11 @@ export default function DashboardPage() {
   const isMounted = useRef(true)
   const pollingIntervalRef = useRef<NodeJS.Timeout>()
   const lastFetchRef = useRef<number>(Date.now())
+  const initialFetchDone = useRef(false)
   
-  const isAdminOrSO = hasRole(user, 'admin', 'security_officer')
+  const isAdmin = hasRole(user, 'admin')
+  const isSecurityOfficer = hasRole(user, 'security_officer')
+  const isAdminOrSO = isAdmin || isSecurityOfficer
 
   const handleActivityClick = useCallback((item: ActivityItem, href: string) => {
     const isComment = ['ADD_COMMENT', 'USER_COMMENT', 'STAFF_COMMENT', 'TICKET_COMMENT'].includes(item.action)
@@ -245,18 +252,26 @@ export default function DashboardPage() {
       return
     }
 
+    // Silent fetch stats in the background - no loading state
     const fetchStats = async () => {
       try {
         const response = await api.get('/dashboard/stats')
         if (isMounted.current) {
+          console.log('Dashboard stats received:', response.data)
           setStats(response.data)
         }
       } catch (error: any) {
         console.error('Failed to fetch stats:', error)
       }
     }
-    fetchStats()
+    
+    // Only fetch if not done yet
+    if (!initialFetchDone.current) {
+      fetchStats()
+      initialFetchDone.current = true
+    }
 
+    // Silent background polling every 30 seconds
     const interval = setInterval(fetchStats, 30000)
     return () => clearInterval(interval)
   }, [user, router, mounted])
@@ -425,50 +440,131 @@ export default function DashboardPage() {
           <span className="text-sm text-gray-500">Today</span>
         </div>
 
-        {/* Stat cards with icons and subtitles */}
+        {/* Stat cards with icons and subtitles - NO LOADING STATE */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="panel-card relative">
-            <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-sky-100 text-sky-600">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-            <h3 className="panel-card-title uppercase tracking-wide">Total Tickets</h3>
-            <p className="panel-card-value">{stats.tickets}</p>
-            <p className="text-sm text-gray-500 mt-1">All time tickets</p>
-          </div>
-          {hasRole(user, 'security_officer', 'admin') && (
-            <div className="panel-card relative">
-              <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-sky-100 text-sky-600">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
+          {isAdmin ? (
+            // Admin sees all stats
+            <>
+              <div className="panel-card relative">
+                <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-sky-100 text-sky-600">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <h3 className="panel-card-title uppercase tracking-wide">Total Tickets</h3>
+                <p className="panel-card-value">{stats.tickets}</p>
+                <p className="text-sm text-gray-500 mt-1">All time tickets</p>
               </div>
-              <h3 className="panel-card-title uppercase tracking-wide">Incidents</h3>
-              <p className="panel-card-value">{stats.incidents}</p>
-              <p className="text-sm text-gray-500 mt-1">Security incidents</p>
-            </div>
+              <div className="panel-card relative">
+                <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-red-100 text-red-600">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <h3 className="panel-card-title uppercase tracking-wide">Incidents</h3>
+                <p className="panel-card-value">{stats.incidents}</p>
+                <p className="text-sm text-gray-500 mt-1">Security incidents</p>
+              </div>
+              <div className="panel-card relative">
+                <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-amber-100 text-amber-600">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h3 className="panel-card-title uppercase tracking-wide">Open Tickets</h3>
+                <p className="panel-card-value">{stats.openTickets}</p>
+                <p className="text-sm text-gray-500 mt-1">Awaiting resolution</p>
+              </div>
+              <div className="panel-card relative">
+                <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-green-100 text-green-600">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h3 className="panel-card-title uppercase tracking-wide">Resolved</h3>
+                <p className="panel-card-value">{stats.resolvedTickets}</p>
+                <p className="text-sm text-gray-500 mt-1">Successfully closed</p>
+              </div>
+            </>
+          ) : isSecurityOfficer ? (
+            // Security Officer sees incident-specific stats - 3 cards only, no Total Tickets
+            <>
+              <div className="panel-card relative">
+                <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-purple-100 text-purple-600">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+                <h3 className="panel-card-title uppercase tracking-wide">Assigned to me</h3>
+                <p className="panel-card-value">{stats.assignedIncidents || 0}</p>
+                <p className="text-sm text-gray-500 mt-1">All incidents assigned to you</p>
+              </div>
+              <div className="panel-card relative">
+                <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-amber-100 text-amber-600">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h3 className="panel-card-title uppercase tracking-wide">Open Incidents</h3>
+                <p className="panel-card-value">{stats.openIncidents || 0}</p>
+                <p className="text-sm text-gray-500 mt-1">Active investigations assigned to you</p>
+              </div>
+              <div className="panel-card relative">
+                <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-green-100 text-green-600">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h3 className="panel-card-title uppercase tracking-wide">Resolved</h3>
+                <p className="panel-card-value">{stats.resolvedIncidents || 0}</p>
+                <p className="text-sm text-gray-500 mt-1">Recovered & closed incidents</p>
+              </div>
+            </>
+          ) : (
+            // Regular user sees their stats
+            <>
+              <div className="panel-card relative">
+                <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-sky-100 text-sky-600">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <h3 className="panel-card-title uppercase tracking-wide">Total Tickets</h3>
+                <p className="panel-card-value">{stats.tickets}</p>
+                <p className="text-sm text-gray-500 mt-1">All time tickets</p>
+              </div>
+              <div className="panel-card relative">
+                <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-amber-100 text-amber-600">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h3 className="panel-card-title uppercase tracking-wide">Open Tickets</h3>
+                <p className="panel-card-value">{stats.openTickets}</p>
+                <p className="text-sm text-gray-500 mt-1">Awaiting resolution</p>
+              </div>
+              <div className="panel-card relative">
+                <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-green-100 text-green-600">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h3 className="panel-card-title uppercase tracking-wide">Resolved</h3>
+                <p className="panel-card-value">{stats.resolvedTickets}</p>
+                <p className="text-sm text-gray-500 mt-1">Successfully closed</p>
+              </div>
+              <div className="panel-card relative">
+                <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-red-100 text-red-600">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <h3 className="panel-card-title uppercase tracking-wide">Incidents</h3>
+                <p className="panel-card-value">{stats.incidents}</p>
+                <p className="text-sm text-gray-500 mt-1">Security incidents</p>
+              </div>
+            </>
           )}
-          <div className="panel-card relative">
-            <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-sky-100 text-sky-600">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <h3 className="panel-card-title uppercase tracking-wide">Open Tickets</h3>
-            <p className="panel-card-value">{stats.openTickets}</p>
-            <p className="text-sm text-gray-500 mt-1">Awaiting resolution</p>
-          </div>
-          <div className="panel-card relative">
-            <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-sky-100 text-sky-600">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <h3 className="panel-card-title uppercase tracking-wide">Resolved</h3>
-            <p className="panel-card-value">{stats.resolvedTickets}</p>
-            <p className="text-sm text-gray-500 mt-1">Successfully closed</p>
-          </div>
         </div>
 
         {/* Recent Activity - 3 columns with Attachments */}
