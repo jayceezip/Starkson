@@ -16,7 +16,7 @@ interface TimelineEntry {
   createdAt?: string
   created_at?: string
   userName?: string
-  user?: { name?: string; email?: string }
+  user?: { fullname?: string; username?: string }
   isInternal?: boolean
   is_internal?: boolean
 }
@@ -187,7 +187,7 @@ export default function TicketDetailsPage() {
   const [showConvertModal, setShowConvertModal] = useState(false)
   const [converting, setConverting] = useState(false)
   const [convertData, setConvertData] = useState({ category: '', severity: 'medium', description: '', assignedTo: '' })
-  const [securityOfficers, setSecurityOfficers] = useState<{ id: string; name: string; email: string }[]>([])
+  const [securityOfficers, setSecurityOfficers] = useState<{ id: string; fullname: string; username: string }[]>([])
   const [securityOfficersLoading, setSecurityOfficersLoading] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [uploadingFiles, setUploadingFiles] = useState(false)
@@ -1134,7 +1134,7 @@ export default function TicketDetailsPage() {
                       {securityOfficersLoading ? 'Loading…' : 'Select Security Officer'}
                     </option>
                     {securityOfficers.map((so) => (
-                      <option key={so.id} value={so.id}>{so.name}</option>
+                      <option key={so.id} value={so.id}>{so.fullname}</option>
                     ))}
                   </select>
                   {!securityOfficersLoading && securityOfficers.length === 0 && (

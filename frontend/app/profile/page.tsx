@@ -133,8 +133,8 @@ export default function ProfilePage() {
                   </svg>
                 </div>
                 <div className="text-center sm:text-left flex-1 min-w-0">
-                  <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 truncate">{user.name}</h2>
-                  <p className="text-base sm:text-lg text-gray-500 font-mono mt-1 truncate">{user.email}</p>
+                  <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 truncate">{user.fullname}</h2>
+                  <p className="text-base sm:text-lg text-gray-500 font-mono mt-1 truncate">{user.username}</p>
                   <span className={`inline-block mt-3 px-4 py-1.5 rounded-full text-sm font-semibold border ${getRoleBadgeClass(user.role)}`}>
                     {formatRole(user.role)}
                   </span>
