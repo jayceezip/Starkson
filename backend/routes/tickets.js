@@ -280,8 +280,8 @@ router.get('/:id', authenticate, async (req, res) => {
       .from('tickets')
       .select(`
         *,
-        created_by_user:users!tickets_created_by_fkey(id, name, email),
-        assigned_to_user:users!tickets_assigned_to_fkey(id, name, email)
+        created_by_user:users!tickets_created_by_fkey(id, fullname, username),
+        assigned_to_user:users!tickets_assigned_to_fkey(id, fullname, username)
       `)
       .eq('id', req.params.id)
       .single()

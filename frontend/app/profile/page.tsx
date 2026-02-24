@@ -128,13 +128,13 @@ export default function ProfilePage() {
             <div className="p-10 sm:p-12">
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-8 mb-10">
                 <div className="flex-shrink-0 w-28 h-28 sm:w-36 sm:h-36 rounded-full bg-sky-100 flex items-center justify-center ring-4 ring-sky-50">
-                  <svg className="w-14 h-14 sm:w-20 sm:h-20 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-14 h-14 sm:w-20 sm:h-20 text-sky-600" fill="none" stroke="curruntentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
                 </div>
                 <div className="text-center sm:text-left flex-1 min-w-0">
-                  <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 truncate">{user.fullname}</h2>
-                  <p className="text-base sm:text-lg text-gray-500 font-mono mt-1 truncate">{user.username}</p>
+                  <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 truncate">{user.name}</h2>
+                  <p className="text-base sm:text-lg text-gray-500 font-mono mt-1 truncate">{user.email}</p>
                   <span className={`inline-block mt-3 px-4 py-1.5 rounded-full text-sm font-semibold border ${getRoleBadgeClass(user.role)}`}>
                     {formatRole(user.role)}
                   </span>
