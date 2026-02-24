@@ -64,10 +64,10 @@ router.get('/', authenticate, authorize('security_officer', 'admin'), async (req
 
     // Resolve ticket creator name for incidents where ticket still exists (for list display)
     const incidentsWithAffected = await Promise.all(incidents.map(async (incident) => {
-      let affectedUser = incident.affected_user_link?.name ?? incident.affected_user ?? null
+      let affectedUser = incident.affected_user_link?.fullname ?? incident.affected_user ?? null
       if (!affectedUser && incident.source_ticket?.created_by) {
-        const { data: creator } = await supabase.from('users').select('name').eq('id', incident.source_ticket.created_by).single()
-        affectedUser = creator?.name ?? null
+        const { data: creator } = await supabase.from('users').select('fullname').eq('id', incident.source_ticket.created_by).single()
+        affectedUser = creator?.fullname ?? null
       }
       const affectedAsset = incident.affected_asset ?? incident.source_ticket?.affected_system ?? null
 
@@ -149,7 +149,7 @@ router.get('/:id', authenticate, async (req, res) => {
       .from('incident_timeline')
       .select(`
         *,
-        user:users!incident_timeline_user_id_fkey(id, name, email)
+        user:users!incident_timeline_user_id_fkey(id, fullname, username)
       `)
       .eq('incident_id', req.params.id)
       .order('created_at', { ascending: true })
@@ -194,9 +194,9 @@ router.get('/:id', authenticate, async (req, res) => {
       affectedUser = incident.affected_user
     }
     if (!affectedUser && incident.source_ticket?.created_by) {
-      const { data: ticketCreator } = await supabase.from('users').select('id, name').eq('id', incident.source_ticket.created_by).single()
+      const { data: ticketCreator } = await supabase.from('users').select('id, fullname').eq('id', incident.source_ticket.created_by).single()
       if (ticketCreator) {
-        affectedUser = ticketCreator.name ?? null
+        affectedUser = ticketCreator.fullname ?? null
         affectedUserId = ticketCreator.id
       }
     }
@@ -430,7 +430,7 @@ router.put('/:id', authenticate, authorize('security_officer', 'admin'), async (
           incident_id: req.params.id,
           user_id: req.user.id,
           action: 'INCIDENT_ASSIGNED',
-          description: `Incident assigned to ${assignedUser?.name || 'Security Officer'} (${assignedUser?.role || 'security_officer'})`,
+          description: `Incident assigned to ${assignedUser?.fullname || 'Security Officer'} (${assignedUser?.role || 'security_officer'})`,
           is_internal: false // Visible to users
         }
       })
@@ -457,7 +457,7 @@ router.put('/:id', authenticate, authorize('security_officer', 'admin'), async (
                 user_id: adm.id,
                 type: 'INCIDENT_ASSIGNED',
                 title: 'Incident Assigned',
-                message: `Incident ${incNumber} was assigned to ${assignedUser?.name || 'Security Officer'}`,
+                message: `Incident ${incNumber} was assigned to ${assignedUser?.fullname || 'Security Officer'}`,
                 resource_type: 'incident',
                 resource_id: req.params.id
               }
@@ -518,7 +518,9 @@ router.put('/:id', authenticate, authorize('security_officer', 'admin'), async (
 // Add timeline entry
 router.post('/:id/timeline', authenticate, authorize('security_officer', 'admin'), async (req, res) => {
   try {
-    const { action, description, isInternal = true } = req.body
+    // Default to public so end users see investigation updates on the ticket page.
+    // Staff can still create internal-only entries by explicitly passing isInternal: true.
+    const { action, description, isInternal = false } = req.body
 
     // Validate required fields
     if (!action || !description) {

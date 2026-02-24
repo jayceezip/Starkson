@@ -95,7 +95,7 @@ router.get('/', authenticate, authorize('admin'), async (req, res) => {
       .from('audit_logs')
       .select(`
         *,
-        user:users!audit_logs_user_id_fkey(id, name, email)
+        user:users!audit_logs_user_id_fkey(id, fullname, username)
       `, { count: 'exact' })
       .order('created_at', { ascending: false })
     if (resourceType) q = q.eq('resource_type', resourceType)
@@ -118,8 +118,8 @@ router.get('/', authenticate, authorize('admin'), async (req, res) => {
       ipAddress: l.ip_address,
       userAgent: l.user_agent,
       createdAt: l.created_at,
-      userName: l.user?.name,
-      userEmail: l.user?.email,
+      userName: l.user?.fullname,
+      userUsername: l.user?.username,
       userId: l.user_id
     }))
 
@@ -139,7 +139,7 @@ router.get('/resource/:resourceType/:resourceId', authenticate, authorize('admin
       .from('audit_logs')
       .select(`
         *,
-        user:users!audit_logs_user_id_fkey(id, name, email)
+        user:users!audit_logs_user_id_fkey(id, fullname, username)
       `)
       .eq('resource_type', resourceType)
       .eq('resource_id', resourceId)
@@ -153,8 +153,8 @@ router.get('/resource/:resourceType/:resourceId', authenticate, authorize('admin
       action: l.action,
       details: l.details,
       createdAt: l.created_at,
-      userName: l.user?.name,
-      userEmail: l.user?.email
+      userName: l.user?.fullname,
+      userUsername: l.user?.username
     })))
   } catch (error) {
     console.error('Get resource audit error:', error)

@@ -1134,7 +1134,9 @@ export default function TicketDetailsPage() {
                       {securityOfficersLoading ? 'Loading…' : 'Select Security Officer'}
                     </option>
                     {securityOfficers.map((so) => (
-                      <option key={so.id} value={so.id}>{so.fullname}</option>
+                      <option key={so.id} value={so.id}>
+                        {so.fullname}{so.username ? ` (${so.username})` : ''}
+                      </option>
                     ))}
                   </select>
                   {!securityOfficersLoading && securityOfficers.length === 0 && (

@@ -428,7 +428,7 @@ router.get('/:recordType/:recordId', authenticate, async (req, res) => {
       .from('attachments')
       .select(`
         *,
-        uploaded_by_user:users!attachments_uploaded_by_fkey(id, name)
+        uploaded_by_user:users!attachments_uploaded_by_fkey(id, fullname)
       `)
       .eq('record_type', recordType)
       .eq('record_id', recordId)
