@@ -127,7 +127,7 @@ export default function AdminCreateUserPage() {
                   value={formData.username}
                   onChange={(e) => setFormData({ ...formData, username: e.target.value })} // Accepts any case as entered
                   className="w-full px-5 py-3.5 text-base border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-                  placeholder="e.g., Jerick, jerick, JERICK"
+                  placeholder="e.g., John Doe, john doe, JOHN DOE"
                   required
                 />
                 <p className="text-xs text-gray-500 mt-1">Usernames are case-sensitive and will be stored exactly as entered (e.g., Jerick, jerick, and JERICK are all different)</p>
