@@ -464,10 +464,13 @@ router.get('/:id', authenticate, async (req, res) => {
       assignedTo: ticket.assigned_to,
       slaDue: ticket.sla_due,
       // User names
-      createdByName: ticket.created_by_user?.name || 'Unknown',
-      createdByEmail: ticket.created_by_user?.email,
-      assignedToName: assignedToName || ticket.assigned_to_user?.name || null,
-      assignedToEmail: ticket.assigned_to_user?.email,
+      createdByName: ticket.created_by_user?.fullname || 'Unknown',
+      createdByUsername: ticket.created_by_user?.username,
+      assignedToName: assignedToName || ticket.assigned_to_user?.fullname || null,
+      assignedToUsername: ticket.assigned_to_user?.username,
+      // Backward-compat keys (username replaces old email)
+      createdByEmail: ticket.created_by_user?.username,
+      assignedToEmail: ticket.assigned_to_user?.username,
       // Conversion status
       isConverted: !!existingIncident,
       convertedIncidentId: existingIncident?.id || null,
@@ -840,6 +843,27 @@ router.post('/:id/comments', authenticate, async (req, res) => {
         is_internal: isInternal
       }
     })
+
+    // If this ticket is already converted to an incident, mirror PUBLIC comments into incident timeline
+    // so Security Officers can see user comments inside the incident.
+    if (!isInternal) {
+      const incident = await query('incidents', 'select', {
+        filters: [{ column: 'source_ticket_id', value: req.params.id }],
+        single: true
+      })
+      if (incident) {
+        const actionType = req.user.role === 'user' ? 'USER_COMMENT' : 'STAFF_COMMENT'
+        await query('incident_timeline', 'insert', {
+          data: {
+            incident_id: incident.id,
+            user_id: req.user.id,
+            action: actionType,
+            description: `[Ticket Comment] ${comment}`,
+            is_internal: false
+          }
+        })
+      }
+    }
 
     // Log audit with different action for internal notes
     await query('audit_logs', 'insert', {

@@ -16,7 +16,7 @@ interface AuditLog {
   details: unknown
   createdAt: string
   userName: string | null
-  userEmail: string | null
+  userUsername: string | null
 }
 
 export default function AdminAuditPage() {
@@ -202,7 +202,7 @@ export default function AdminAuditPage() {
     const tableData = allLogs.map((log) => [
       log.createdAt ? new Date(log.createdAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'short', timeStyle: 'medium' }) : '—',
       log.action || '—',
-      log.userName || log.userEmail || '—',
+      log.userName || log.userUsername || '—',
       (log.resourceType && log.resourceId) ? `${log.resourceType} / ${String(log.resourceId).slice(0, 8)}…` : '—',
       log.details != null ? (typeof log.details === 'object' ? JSON.stringify(log.details) : String(log.details)).slice(0, 40) : '—'
     ])
@@ -430,9 +430,9 @@ export default function AdminAuditPage() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2 text-sm">
                           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gray-400 to-gray-600 flex items-center justify-center text-white text-xs font-semibold">
-                            {(log.userName || log.userEmail || '?').charAt(0).toUpperCase()}
+                            {(log.userName || log.userUsername || '?').charAt(0).toUpperCase()}
                           </div>
-                          <span className="text-gray-700 font-medium">{log.userName || log.userEmail || 'System'}</span>
+                          <span className="text-gray-700 font-medium">{log.userName || log.userUsername || 'System'}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
