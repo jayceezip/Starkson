@@ -128,7 +128,7 @@ export default function ProfilePage() {
             <div className="p-10 sm:p-12">
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-8 mb-10">
                 <div className="flex-shrink-0 w-28 h-28 sm:w-36 sm:h-36 rounded-full bg-sky-100 flex items-center justify-center ring-4 ring-sky-50">
-                  <svg className="w-14 h-14 sm:w-20 sm:h-20 text-sky-600" fill="none" stroke="curruntentColor" viewBox="0 0 24 24">
+                  <svg className="w-14 h-14 sm:w-20 sm:h-20 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
                 </div>

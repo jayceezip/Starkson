@@ -60,7 +60,7 @@ export default function AdminCreateUserPage() {
     try {
       await api.post('/auth/register', {
         fullname: formData.fullname,
-        username: formData.username,
+        username: formData.username, // Admin can now enter in any case (will be stored as entered)
         password: formData.password,
         role: formData.role,
         branchAcronyms: formData.role === 'admin' ? [] : (formData.branchAcronyms.includes(ALL_BRANCHES_ACRONYM) ? [ALL_BRANCHES_ACRONYM] : formData.branchAcronyms.filter((a) => a !== ALL_BRANCHES_ACRONYM)),
@@ -125,11 +125,12 @@ export default function AdminCreateUserPage() {
                   id="create-username"
                   type="text"
                   value={formData.username}
-                  onChange={(e) => setFormData({ ...formData, username: e.target.value.toLowerCase().trim() })}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value })} // Accepts any case as entered
                   className="w-full px-5 py-3.5 text-base border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-                  placeholder="johndoe"
+                  placeholder="e.g., Jerick, jerick, JERICK"
                   required
                 />
+                <p className="text-xs text-gray-500 mt-1">Usernames are case-sensitive and will be stored exactly as entered (e.g., Jerick, jerick, and JERICK are all different)</p>
               </div>
 
               <div>

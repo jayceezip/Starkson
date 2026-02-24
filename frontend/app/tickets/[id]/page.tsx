@@ -1135,7 +1135,7 @@ export default function TicketDetailsPage() {
                     </option>
                     {securityOfficers.map((so) => (
                       <option key={so.id} value={so.id}>
-                        {so.fullname}{so.username ? ` (${so.username})` : ''}
+                        {so.fullname}
                       </option>
                     ))}
                   </select>

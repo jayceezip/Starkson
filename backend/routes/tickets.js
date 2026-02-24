@@ -844,6 +844,34 @@ router.post('/:id/comments', authenticate, async (req, res) => {
       }
     })
 
+    // Get the commenter's role and name for proper display in notifications
+    const { data: commenterData } = await supabase
+      .from('users')
+      .select('fullname, role')
+      .eq('id', req.user.id)
+      .single()
+
+    const commenterName = commenterData?.fullname || 'User'
+    const commenterRole = commenterData?.role || 'staff'
+
+    // Format the role for display
+    const getRoleTitle = (role) => {
+      switch (role) {
+        case 'admin':
+          return 'Admin'
+        case 'security_officer':
+          return 'Security Officer'
+        case 'it_support':
+          return 'IT Support'
+        case 'user':
+          return 'User'
+        default:
+          return 'Staff'
+      }
+    }
+
+    const roleTitle = getRoleTitle(commenterRole)
+
     // If this ticket is already converted to an incident, mirror PUBLIC comments into incident timeline
     // so Security Officers can see user comments inside the incident.
     if (!isInternal) {
@@ -852,7 +880,7 @@ router.post('/:id/comments', authenticate, async (req, res) => {
         single: true
       })
       if (incident) {
-        const actionType = req.user.role === 'user' ? 'USER_COMMENT' : 'STAFF_COMMENT'
+        const actionType = commenterRole === 'user' ? 'USER_COMMENT' : 'STAFF_COMMENT'
         await query('incident_timeline', 'insert', {
           data: {
             incident_id: incident.id,
@@ -878,7 +906,10 @@ router.post('/:id/comments', authenticate, async (req, res) => {
 
     // ONLY SEND NOTIFICATIONS FOR PUBLIC COMMENTS (isInternal = false)
     if (!isInternal) {
-      const isStaff = ['it_support', 'admin'].includes(req.user.role)
+      const isStaff = ['it_support', 'security_officer', 'admin'].includes(commenterRole)
+      
+      // Determine the commenter display name with role
+      const commenterDisplay = isStaff ? `${commenterName} (${roleTitle})` : commenterName
       
       // Notify ticket creator if commenter is not the creator
       if (ticket.created_by && ticket.created_by !== req.user.id) {
@@ -886,8 +917,8 @@ router.post('/:id/comments', authenticate, async (req, res) => {
           data: {
             user_id: ticket.created_by,
             type: 'TICKET_COMMENT',
-            title: isStaff ? 'Staff commented on your ticket' : 'New comment on your ticket',
-            message: `${isStaff ? 'IT Support' : 'A user'} commented on ticket ${ticket.ticket_number}`,
+            title: isStaff ? `${roleTitle} commented on your ticket` : 'New comment on your ticket',
+            message: `${commenterDisplay} commented on ticket ${ticket.ticket_number}`,
             resource_type: 'ticket',
             resource_id: ticket.id
           }
@@ -897,13 +928,13 @@ router.post('/:id/comments', authenticate, async (req, res) => {
       // Notify assigned staff if commenter is a user
       if (ticket.assigned_to && 
           ticket.assigned_to !== req.user.id && 
-          req.user.role === 'user') {
+          commenterRole === 'user') {
         await query('notifications', 'insert', {
           data: {
             user_id: ticket.assigned_to,
             type: 'TICKET_COMMENT',
             title: 'User commented on assigned ticket',
-            message: `A user commented on ticket ${ticket.ticket_number}`,
+            message: `${commenterName} commented on ticket ${ticket.ticket_number}`,
             resource_type: 'ticket',
             resource_id: ticket.id
           }
@@ -919,7 +950,6 @@ router.post('/:id/comments', authenticate, async (req, res) => {
     res.status(500).json({ message: 'Server error' })
   }
 })
-
 // Convert ticket to incident
 router.post('/:id/convert', authenticate, authorize('it_support', 'security_officer', 'admin'), async (req, res) => {
   try {

@@ -559,14 +559,31 @@ router.post('/:id/timeline', authenticate, authorize('security_officer', 'admin'
       }
     })
 
-    // Get the security officer's name
-    const { data: securityOfficer } = await supabase
+    // Get the user's role and name
+    const { data: userData } = await supabase
       .from('users')
-      .select('fullname')
+      .select('fullname, role')
       .eq('id', req.user.id)
       .single()
-    
-    const officerName = securityOfficer?.fullname || 'Security Officer'
+
+    const userName = userData?.fullname || 'User'
+    const userRole = userData?.role || 'staff'
+
+    // Format the role for display
+    const getRoleTitle = (role) => {
+      switch (role) {
+        case 'admin':
+          return 'Admin'
+        case 'security_officer':
+          return 'Security Officer'
+        case 'it_support':
+          return 'IT Support'
+        default:
+          return 'Staff'
+      }
+    }
+
+    const roleTitle = getRoleTitle(userRole)
 
     // NOTIFY THE TICKET CREATOR (USER) about the timeline addition
     if (incident.source_ticket_id) {
@@ -609,7 +626,7 @@ router.post('/:id/timeline', authenticate, authorize('security_officer', 'admin'
               user_id: sourceTicket.created_by,
               type: 'ADDED_INCIDENT_TIMELINE',  // New specific type
               title: 'Incident updated',
-              message: `${officerName} added a timeline entry to incident ${incidentNumber}: "${action}"`,
+              message: `${userName} (${roleTitle}) added a timeline entry to incident ${incidentNumber}: "${action}"`,
               resource_type: 'incident',
               resource_id: req.params.id,
               ticket_id: incident.source_ticket_id,
