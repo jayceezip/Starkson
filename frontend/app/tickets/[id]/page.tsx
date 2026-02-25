@@ -9,6 +9,7 @@ import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser, hasRole } from '@/lib/auth'
 import { formatPinoyDateTime } from '@/lib/date'
 import { getIncidentCategories } from '@/lib/maintenance'
+
 interface TimelineEntry {
   id: string
   action: string
@@ -197,6 +198,12 @@ export default function TicketDetailsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [incidentCategories, setIncidentCategories] = useState<string[]>([])
+  
+  // Refs for polling - updated type to handle string | string[] | undefined
+  const pollingIntervalRef = useRef<NodeJS.Timeout>()
+  const lastCommentIdsRef = useRef<Set<number>>(new Set())
+  const isPollingRef = useRef<boolean>(false)
+  const ticketIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (showConvertModal) {
@@ -219,30 +226,82 @@ export default function TicketDetailsPage() {
       .finally(() => setSecurityOfficersLoading(false))
   }, [showConvertModal])
 
-  const fetchTicket = useCallback(async () => {
-    if (!params.id) return
+  // Function to fetch only comments (lighter weight)
+const fetchCommentsOnly = useCallback(async () => {
+  if (!params.id) return
+  
+  // Handle case where params.id is an array (take first element)
+  const ticketId = Array.isArray(params.id) ? params.id[0] : params.id
+  if (!ticketId) return
+  
+  try {
+    const response = await api.get(`/tickets/${ticketId}/comments`)
+    const newComments = response.data as Comment[] // Type assertion here
     
-    setLoading(true)
-    setError(null)
-    
-    try {
-      const response = await api.get(`/tickets/${params.id}`)
-      setTicket(response.data)
-    } catch (error: any) {
-      console.error('Failed to fetch ticket:', error)
+    setTicket(prev => {
+      if (!prev) return prev
       
-      // Handle 404 or not found errors
-      if (error.response?.status === 404 || error.message?.includes('404')) {
-        setError('Ticket not found')
-      } else if (error.response?.status === 403) {
-        setError('You do not have permission to view this ticket')
-      } else {
-        setError('Failed to load ticket. Please try again.')
+      // Create a set of new comment IDs with proper typing
+      const newCommentIds = new Set<number>(newComments.map((c: Comment) => c.id))
+      
+      // Check if there are any new comments
+      const hasNewComments = Array.from(newCommentIds).some(id => !lastCommentIdsRef.current.has(id))
+      
+      if (hasNewComments) {
+        // Update the ref with new IDs
+        lastCommentIdsRef.current = newCommentIds
+        
+        // Return updated ticket with new comments
+        return {
+          ...prev,
+          comments: newComments
+        }
       }
-    } finally {
-      setLoading(false)
+      
+      return prev
+    })
+  } catch (error) {
+    // Silently fail - don't show errors to user
+    console.debug('Background comment fetch failed:', error)
+  }
+}, [params.id])
+
+  // Function to fetch full ticket (for status updates, etc.)
+const fetchTicket = useCallback(async () => {
+  if (!params.id) return
+  
+  // Handle case where params.id is an array (take first element)
+  const ticketId = Array.isArray(params.id) ? params.id[0] : params.id
+  if (!ticketId) return
+  
+  setLoading(true)
+  setError(null)
+  
+  try {
+    const response = await api.get(`/tickets/${ticketId}`)
+    const ticketData = response.data as Ticket // Type assertion here
+    setTicket(ticketData)
+    
+    // Update the ref with current comment IDs
+    if (ticketData.comments) {
+      lastCommentIdsRef.current = new Set<number>(ticketData.comments.map((c: Comment) => c.id))
     }
-  }, [params.id])
+    
+    ticketIdRef.current = ticketId
+  } catch (error: any) {
+    console.error('Failed to fetch ticket:', error)
+    
+    if (error.response?.status === 404 || error.message?.includes('404')) {
+      setError('Ticket not found')
+    } else if (error.response?.status === 403) {
+      setError('You do not have permission to view this ticket')
+    } else {
+      setError('Failed to load ticket. Please try again.')
+    }
+  } finally {
+    setLoading(false)
+  }
+}, [params.id])
 
   useEffect(() => {
     if (!mounted) return
@@ -254,6 +313,53 @@ export default function TicketDetailsPage() {
     
     fetchTicket()
   }, [params.id, user, router, mounted, fetchTicket])
+
+  // Start polling when component is mounted and we have a ticket ID
+  useEffect(() => {
+    if (!mounted || !user || !params.id) return
+
+    // Handle case where params.id is an array (take first element)
+    const ticketId = Array.isArray(params.id) ? params.id[0] : params.id
+    if (!ticketId) return
+
+    // Clear any existing interval
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+    }
+
+    // Start polling for comments every 2 seconds
+    pollingIntervalRef.current = setInterval(() => {
+      if (!isPollingRef.current) {
+        isPollingRef.current = true
+        fetchCommentsOnly().finally(() => {
+          isPollingRef.current = false
+        })
+      }
+    }, 2000)
+
+    // Cleanup on unmount or when ticket ID changes
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+        pollingIntervalRef.current = undefined
+      }
+    }
+  }, [mounted, user, params.id, fetchCommentsOnly])
+
+  // Force an immediate fetch when the component becomes visible again
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && params.id) {
+        fetchCommentsOnly()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [params.id, fetchCommentsOnly])
 
   // Initialize edit data when ticket loads
   useEffect(() => {
@@ -289,10 +395,14 @@ export default function TicketDetailsPage() {
     e.preventDefault()
     if (!comment.trim() && selectedFiles.length === 0) return
 
+    // Handle case where params.id is an array (take first element)
+    const ticketId = Array.isArray(params.id) ? params.id[0] : params.id
+    if (!ticketId) return
+
     setUploadingFiles(true)
     try {
       if (comment.trim()) {
-        await api.post(`/tickets/${params.id}/comments`, { comment, isInternal })
+        await api.post(`/tickets/${ticketId}/comments`, { comment, isInternal })
         setComment('')
         setIsInternal(false)
       }
@@ -306,7 +416,7 @@ export default function TicketDetailsPage() {
             uploadFormData.append('file', file)
             
             const token = localStorage.getItem('token')
-            const response = await fetch(`${getApiBaseUrl()}/attachments/ticket/${params.id}`, {
+            const response = await fetch(`${getApiBaseUrl()}/attachments/ticket/${ticketId}`, {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${token}`
@@ -339,7 +449,8 @@ export default function TicketDetailsPage() {
         }, 2000)
       }
 
-      fetchTicket()
+      // Immediately fetch comments after posting
+      await fetchCommentsOnly()
     } catch (error) {
       console.error('Failed to add comment/upload files:', error)
     } finally {
@@ -362,17 +473,27 @@ export default function TicketDetailsPage() {
   const executeStatusChange = async (newStatus: string) => {
     if (!ticket || updatingStatus) return;
     
+    // Handle case where params.id is an array (take first element)
+    const ticketId = Array.isArray(params.id) ? params.id[0] : params.id
+    if (!ticketId) return
+    
+    // Stop polling while updating
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+      pollingIntervalRef.current = undefined
+    }
+    
     setUpdatingStatus(true);
     try {
-      await api.put(`/tickets/${params.id}`, { status: newStatus })
+      await api.put(`/tickets/${ticketId}`, { status: newStatus })
       // Optimistically update the UI
       setTicket(prev => prev ? { ...prev, status: newStatus } : null)
-      // Fetch in background to sync with server
-      fetchTicket()
+      // Fetch full ticket to sync with server
+      await fetchTicket()
     } catch (error) {
       console.error('Failed to update status:', error)
       // Revert optimistic update on error
-      fetchTicket()
+      await fetchTicket()
     } finally {
       setUpdatingStatus(false);
       setPendingStatus(null);
@@ -405,6 +526,10 @@ export default function TicketDetailsPage() {
       return
     }
 
+    // Handle case where params.id is an array (take first element)
+    const ticketId = Array.isArray(params.id) ? params.id[0] : params.id
+    if (!ticketId) return
+
     setConverting(true)
     try {
       // Map display categories to database values
@@ -436,7 +561,7 @@ export default function TicketDetailsPage() {
       
       console.log('Sending payload:', payload) // Debug log
       
-      const response = await api.post(`/tickets/${params.id}/convert`, payload)
+      const response = await api.post(`/tickets/${ticketId}/convert`, payload)
       const { incidentId, incidentNumber } = response.data || {}
       setTicket((prev) => (prev ? {
         ...prev,
@@ -469,8 +594,12 @@ export default function TicketDetailsPage() {
       return
     }
 
+    // Handle case where params.id is an array (take first element)
+    const ticketId = Array.isArray(params.id) ? params.id[0] : params.id
+    if (!ticketId) return
+
     try {
-      await api.put(`/tickets/${params.id}`, editData)
+      await api.put(`/tickets/${ticketId}`, editData)
       setShowEditModal(false)
       fetchTicket()
     } catch (error: any) {
@@ -485,9 +614,13 @@ export default function TicketDetailsPage() {
       return
     }
 
+    // Handle case where params.id is an array (take first element)
+    const ticketId = Array.isArray(params.id) ? params.id[0] : params.id
+    if (!ticketId) return
+
     setDeleting(true)
     try {
-      await api.delete(`/tickets/${params.id}`)
+      await api.delete(`/tickets/${ticketId}`)
       router.push('/tickets')
     } catch (error: any) {
       console.error('Failed to delete ticket:', error)
@@ -1180,7 +1313,8 @@ export default function TicketDetailsPage() {
                       No incident categories configured. Using default options.
                     </p>
                   )}
-                </div>               <div>
+                </div>               
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Severity *</label>
                   <select
                     value={convertData.severity}

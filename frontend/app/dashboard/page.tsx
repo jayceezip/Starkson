@@ -71,7 +71,9 @@ function ActivityColumn({
           {items.map((item) => {
             const { label, href } = formatLabel(item)
             const commentClicked = isComment(item.action) && clickedCommentIds?.has(item.id)
-            const canClick = href && !(isComment(item.action) && commentClicked)
+            // Only comments should be clickable, not ticket actions
+            const canClick = isComment(item.action) && href && !commentClicked
+            
             return (
               <li
                 key={item.id}
@@ -94,13 +96,9 @@ function ActivityColumn({
                   {getIcon(item.action)}
                 </span>
                 <div className="min-w-0 flex-1">
-                  {canClick ? (
-                    <span className="text-sm font-medium text-gray-900 hover:text-sky-600 transition-colors line-clamp-2 block">
-                      {label}
-                    </span>
-                  ) : (
-                    <span className="text-sm font-medium text-gray-900 line-clamp-2">{label}</span>
-                  )}
+                  <span className="text-sm font-medium text-gray-900 line-clamp-2 block">
+                    {label}
+                  </span>
                   {typeof item.details === 'object' && item.details !== null && (item.details as Record<string, unknown>)?.message != null && (
                     <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{String((item.details as Record<string, unknown>).message)}</p>
                   )}

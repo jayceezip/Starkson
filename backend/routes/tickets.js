@@ -1473,4 +1473,55 @@ router.delete('/:id', authenticate, async (req, res) => {
   }
 })
 
+// Get comments for a ticket
+router.get('/:id/comments', authenticate, async (req, res) => {
+  try {
+    const ticket = await query('tickets', 'select', {
+      filters: [{ column: 'id', value: req.params.id }],
+      single: true
+    });
+
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+
+    // Get comments with user information
+    const { data: commentsData, error: commentsError } = await supabase
+      .from('ticket_comments')
+      .select(`
+        *,
+        user:users(id, fullname, username)
+      `)
+      .eq('ticket_id', req.params.id)
+      .order('created_at', { ascending: true });
+
+    if (commentsError) {
+      console.error('Error fetching comments:', commentsError);
+      return res.status(500).json({ message: 'Server error' });
+    }
+
+    let filteredComments = commentsData || [];
+
+    // Filter internal comments for regular users
+    if (req.user.role === 'user') {
+      filteredComments = filteredComments.filter(c => !c.is_internal);
+    }
+
+    // Format comments for frontend
+    const formattedComments = filteredComments.map(c => ({
+      id: c.id,
+      comment: c.comment,
+      isInternal: c.is_internal,
+      createdAt: c.created_at,
+      userId: c.user_id,
+      userName: c.user?.fullname || 'Unknown User',
+      userUsername: c.user?.username
+    }));
+
+    res.json(formattedComments);
+  } catch (error) {
+    console.error('Get comments error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 module.exports = router

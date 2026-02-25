@@ -61,6 +61,8 @@ const ModernIncidentStatusSelect = ({
   onChange: (value: string) => void; 
   disabled?: boolean;
 }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  
   const getStatusColor = (status: string) => {
     const colors: Record<string, { bg: string; text: string; dot: string; ring: string }> = {
       'new': { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500', ring: 'ring-blue-500' },
@@ -75,73 +77,91 @@ const ModernIncidentStatusSelect = ({
 
   const currentStatus = getStatusColor(value);
 
+  const handleStatusChange = (newStatus: string) => {
+    setIsOpen(false); // Close the dropdown first
+    onChange(newStatus); // Then call the parent's onChange
+  };
+
   return (
-    <Listbox value={value} onChange={onChange} disabled={disabled}>
-      <div className="relative mt-1">
-        <Listbox.Button className={`
-          relative w-full flex items-center justify-between gap-2 px-4 py-2.5
-          ${currentStatus.bg} ${currentStatus.text}
-          rounded-xl border border-transparent
-          hover:border-gray-200 hover:shadow-md
-          focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
-          transition-all duration-200 ease-in-out
-          ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-          font-medium text-left
-        `}>
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${currentStatus.dot}`} />
-            <span className="capitalize">{value.replace(/_/g, ' ')}</span>
-          </div>
-          <svg
-            className="w-4 h-4 transition-transform duration-200 ui-open:rotate-180"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </Listbox.Button>
-        
-        <Transition
-          as={Fragment}
-          leave="transition ease-in duration-100"
-          leaveFrom="opacity-100"
-          leaveTo="opacity-0"
-        >
-          <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-60 overflow-auto focus:outline-none">
-            {STATUS_OPTIONS.map((status) => {
-              const colors = getStatusColor(status);
-              return (
-                <Listbox.Option
-                  key={status}
-                  value={status}
-                  className={({ active }) => `
-                    relative cursor-pointer select-none py-2.5 px-4
-                    ${active ? 'bg-gray-50' : ''}
-                    transition-colors duration-150
-                  `}
-                >
-                  {({ selected }) => (
-                    <div className="flex items-center gap-3">
-                      <span className={`w-2 h-2 rounded-full ${colors.dot}`} />
-                      <span className={`flex-1 text-sm font-medium capitalize ${
-                        selected ? colors.text : 'text-gray-700'
-                      }`}>
-                        {status.replace(/_/g, ' ')}
-                      </span>
-                      {selected && (
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
+    <Listbox 
+      value={value} 
+      onChange={handleStatusChange} 
+      disabled={disabled}
+    >
+      {({ open }) => {
+        // Sync our internal state with Listbox's open state
+        if (open !== isOpen) {
+          setIsOpen(open);
+        }
+        return (
+          <div className="relative mt-1">
+            <Listbox.Button className={`
+              relative w-full flex items-center justify-between gap-2 px-4 py-2.5
+              ${currentStatus.bg} ${currentStatus.text}
+              rounded-xl border border-transparent
+              hover:border-gray-200 hover:shadow-md
+              focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
+              transition-all duration-200 ease-in-out
+              ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+              font-medium text-left
+            `}>
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${currentStatus.dot}`} />
+                <span className="capitalize">{value.replace(/_/g, ' ')}</span>
+              </div>
+              <svg
+                className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </Listbox.Button>
+            
+            <Transition
+              as={Fragment}
+              show={isOpen}
+              leave="transition ease-in duration-100"
+              leaveFrom="opacity-100"
+              leaveTo="opacity-0"
+            >
+              <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-60 overflow-auto focus:outline-none">
+                {STATUS_OPTIONS.map((status) => {
+                  const colors = getStatusColor(status);
+                  return (
+                    <Listbox.Option
+                      key={status}
+                      value={status}
+                      className={({ active }) => `
+                        relative cursor-pointer select-none py-2.5 px-4
+                        ${active ? 'bg-gray-50' : ''}
+                        transition-colors duration-150
+                      `}
+                    >
+                      {({ selected }) => (
+                        <div className="flex items-center gap-3">
+                          <span className={`w-2 h-2 rounded-full ${colors.dot}`} />
+                          <span className={`flex-1 text-sm font-medium capitalize ${
+                            selected ? colors.text : 'text-gray-700'
+                          }`}>
+                            {status.replace(/_/g, ' ')}
+                          </span>
+                          {selected && (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </div>
                       )}
-                    </div>
-                  )}
-                </Listbox.Option>
-              );
-            })}
-          </Listbox.Options>
-        </Transition>
-      </div>
+                    </Listbox.Option>
+                  );
+                })}
+              </Listbox.Options>
+            </Transition>
+          </div>
+        );
+      }}
     </Listbox>
   );
 };
@@ -517,12 +537,14 @@ export default function IncidentDetailsPage() {
                 <div className="space-y-4">
                   <div>
                     <span className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Status</span>
-                    {isReadOnly ? (
+                    {isReadOnly || incident.status === 'recovered' || incident.status === 'closed' ? (
                       <div className="flex items-center gap-2 mt-1.5">
                         <span className={`w-2.5 h-2.5 rounded-full ${getStatusColor(incident.status)}`} />
                         <p className="text-gray-900 font-medium capitalize">
                           {incident.status.replace(/_/g, ' ')}
                         </p>
+                        {incident.status === 'recovered'}
+                        {incident.status === 'closed'}
                       </div>
                     ) : (
                       <ModernIncidentStatusSelect
