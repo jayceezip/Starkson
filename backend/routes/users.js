@@ -21,6 +21,23 @@ router.get('/security-officers', authenticate, authorize('it_support', 'security
   }
 })
 
+// NEW ROUTE: Get admins only (for convert-to-incident assignment)
+router.get('/admins', authenticate, authorize('it_support', 'security_officer', 'admin'), async (req, res) => {
+  try {
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('id, fullname, username')
+      .eq('role', 'admin')
+      .eq('status', 'active')
+      .order('fullname', { ascending: true })
+    if (error) throw error
+    res.json(users || [])
+  } catch (error) {
+    console.error('Get admins error:', error)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
 // Get all users (admin only)
 router.get('/', authenticate, authorize('admin'), async (req, res) => {
   try {

@@ -8,6 +8,7 @@ import api, { getApiBaseUrl } from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser } from '@/lib/auth'
 import { formatPinoyDateTime } from '@/lib/date'
+import { getIncidentStatuses } from '@/lib/maintenance' // Added import
 
 interface Incident {
   id: number
@@ -49,33 +50,21 @@ interface Attachment {
   createdAt: string
 }
 
-const STATUS_OPTIONS = ['new', 'triaged', 'investigating', 'contained', 'recovered', 'closed']
-
-// Modern Status Select Component for Incidents
+// Modern Status Select Component for Incidents - COLORS REMOVED with dynamic options
 const ModernIncidentStatusSelect = ({ 
   value, 
   onChange, 
-  disabled 
+  disabled,
+  statusOptions 
 }: { 
   value: string; 
   onChange: (value: string) => void; 
   disabled?: boolean;
+  statusOptions: { value: string; label: string }[];
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, { bg: string; text: string; dot: string; ring: string }> = {
-      'new': { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500', ring: 'ring-blue-500' },
-      'triaged': { bg: 'bg-purple-50', text: 'text-purple-700', dot: 'bg-purple-500', ring: 'ring-purple-500' },
-      'investigating': { bg: 'bg-yellow-50', text: 'text-yellow-700', dot: 'bg-yellow-500', ring: 'ring-yellow-500' },
-      'contained': { bg: 'bg-orange-50', text: 'text-orange-700', dot: 'bg-orange-500', ring: 'ring-orange-500' },
-      'recovered': { bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500', ring: 'ring-green-500' },
-      'closed': { bg: 'bg-gray-50', text: 'text-gray-700', dot: 'bg-gray-500', ring: 'ring-gray-500' },
-    };
-    return colors[status] || { bg: 'bg-gray-50', text: 'text-gray-700', dot: 'bg-gray-500', ring: 'ring-gray-500' };
-  };
-
-  const currentStatus = getStatusColor(value);
+  const selectedOption = statusOptions.find(opt => opt.value === value) || { value: '', label: value?.replace(/_/g, ' ') || 'New' };
 
   const handleStatusChange = (newStatus: string) => {
     setIsOpen(false); // Close the dropdown first
@@ -97,20 +86,17 @@ const ModernIncidentStatusSelect = ({
           <div className="relative mt-1">
             <Listbox.Button className={`
               relative w-full flex items-center justify-between gap-2 px-4 py-2.5
-              ${currentStatus.bg} ${currentStatus.text}
-              rounded-xl border border-transparent
-              hover:border-gray-200 hover:shadow-md
+              bg-white text-gray-900
+              rounded-xl border border-gray-200
+              hover:border-gray-300 hover:shadow-md
               focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
               transition-all duration-200 ease-in-out
               ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
               font-medium text-left
             `}>
-              <div className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full ${currentStatus.dot}`} />
-                <span className="capitalize">{value.replace(/_/g, ' ')}</span>
-              </div>
+              <span className="capitalize">{selectedOption.label}</span>
               <svg
-                className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -127,36 +113,32 @@ const ModernIncidentStatusSelect = ({
               leaveTo="opacity-0"
             >
               <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-60 overflow-auto focus:outline-none">
-                {STATUS_OPTIONS.map((status) => {
-                  const colors = getStatusColor(status);
-                  return (
-                    <Listbox.Option
-                      key={status}
-                      value={status}
-                      className={({ active }) => `
-                        relative cursor-pointer select-none py-2.5 px-4
-                        ${active ? 'bg-gray-50' : ''}
-                        transition-colors duration-150
-                      `}
-                    >
-                      {({ selected }) => (
-                        <div className="flex items-center gap-3">
-                          <span className={`w-2 h-2 rounded-full ${colors.dot}`} />
-                          <span className={`flex-1 text-sm font-medium capitalize ${
-                            selected ? colors.text : 'text-gray-700'
-                          }`}>
-                            {status.replace(/_/g, ' ')}
-                          </span>
-                          {selected && (
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </div>
-                      )}
-                    </Listbox.Option>
-                  );
-                })}
+                {statusOptions.map((option) => (
+                  <Listbox.Option
+                    key={option.value}
+                    value={option.value}
+                    className={({ active }) => `
+                      relative cursor-pointer select-none py-2.5 px-4
+                      ${active ? 'bg-gray-50' : ''}
+                      transition-colors duration-150
+                    `}
+                  >
+                    {({ selected }) => (
+                      <div className="flex items-center justify-between">
+                        <span className={`flex-1 text-sm font-medium capitalize ${
+                          selected ? 'text-gray-900' : 'text-gray-700'
+                        }`}>
+                          {option.label}
+                        </span>
+                        {selected && (
+                          <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                    )}
+                  </Listbox.Option>
+                ))}
               </Listbox.Options>
             </Transition>
           </div>
@@ -199,11 +181,21 @@ export default function IncidentDetailsPage() {
   const [timelineEntry, setTimelineEntry] = useState({ action: '', description: '' })
   const [investigationModalOpen, setInvestigationModalOpen] = useState(false)
   const [investigationForm, setInvestigationForm] = useState({ rootCause: '', resolutionSummary: '' })
+  // NEW: State for dynamic status options
+  const [statusOptions, setStatusOptions] = useState<{ value: string; label: string }[]>([])
 
   useEffect(() => {
     setMounted(true)
     const currentUser = getStoredUser()
     setUser(currentUser)
+    
+    // Load dynamic incident statuses from maintenance
+    const statuses = getIncidentStatuses()
+    const options = statuses.map(status => ({
+      value: status.toLowerCase().replace(/\s+/g, '_'),
+      label: status
+    }))
+    setStatusOptions(options)
   }, [])
 
   const fetchIncident = useCallback(async () => {
@@ -321,16 +313,11 @@ export default function IncidentDetailsPage() {
     }
   }
 
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      'new': 'bg-blue-500',
-      'triaged': 'bg-purple-500',
-      'investigating': 'bg-yellow-500',
-      'contained': 'bg-orange-500',
-      'recovered': 'bg-green-500',
-      'closed': 'bg-gray-500',
-    };
-    return colors[status] || 'bg-gray-500';
+  // Helper function to get display label for status
+  const getStatusDisplayLabel = (statusValue: string) => {
+    const matchingOption = statusOptions.find(opt => opt.value === statusValue);
+    if (matchingOption) return matchingOption.label;
+    return statusValue ? statusValue.replace(/_/g, ' ') : 'new';
   };
 
   if (!mounted || !user || loading || !incident) {
@@ -539,18 +526,16 @@ export default function IncidentDetailsPage() {
                     <span className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Status</span>
                     {isReadOnly || incident.status === 'recovered' || incident.status === 'closed' ? (
                       <div className="flex items-center gap-2 mt-1.5">
-                        <span className={`w-2.5 h-2.5 rounded-full ${getStatusColor(incident.status)}`} />
-                        <p className="text-gray-900 font-medium capitalize">
-                          {incident.status.replace(/_/g, ' ')}
-                        </p>
-                        {incident.status === 'recovered'}
-                        {incident.status === 'closed'}
+                        <span className="text-gray-900 font-medium capitalize">
+                          {getStatusDisplayLabel(incident.status)}
+                        </span>
                       </div>
                     ) : (
                       <ModernIncidentStatusSelect
                         value={incident.status}
                         onChange={handleStatusChange}
                         disabled={updatingStatus}
+                        statusOptions={statusOptions}
                       />
                     )}
                   </div>

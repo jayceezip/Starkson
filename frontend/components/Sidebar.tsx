@@ -175,6 +175,7 @@ export default function Sidebar({
   }
 
   // Get notification icon
+  // Get notification icon
 const getNotificationIcon = (type: string) => {
   switch (type) {
     case 'ticket':
@@ -249,13 +250,12 @@ const getNotificationIcon = (type: string) => {
       >
         <div className="flex flex-col h-full w-full">
           {/* Brand + Notification bell + collapse toggle */}
-          <div className={`py-4 border-b border-gray-700 relative flex ${collapsed ? 'flex-col items-center' : 'flex-row items-center'} ${collapsed ? 'px-0' : 'px-4'} justify-between`} ref={notifRef}>
-            {/* Logo - Centered in both states */}
-            <div className={`flex items-center ${collapsed ? 'justify-center w-full' : 'flex-1 min-w-0'}`}>
-              <Link href="/dashboard" className={`block ${collapsed ? 'w-8 h-8' : 'w-32 h-10'} mx-auto`} title="STARKSON">
+          <div className={`py-4 border-b border-gray-700 relative flex items-center gap-2 ${collapsed ? 'px-0 justify-center flex-col' : 'px-4 justify-between'}`} ref={notifRef}>
+            <div className={`flex items-center ${collapsed ? 'flex-col gap-2' : 'flex-1 min-w-0'} justify-center`}>
+              <Link href="/dashboard" className={`block ${collapsed ? 'w-8 h-8' : 'w-32 h-10'}`} title="STARKSON">
                 {!logoError ? (
                   collapsed ? (
-                    /* SVG Logo for collapsed state - centered */
+                    /* SVG Logo for collapsed state */
                     <Image 
                       src={starkonSvgLogo}
                       alt="Starkson Logo"
@@ -266,13 +266,13 @@ const getNotificationIcon = (type: string) => {
                       priority
                     />
                   ) : (
-                    /* PNG Logo for expanded state - centered */
+                    /* PNG Logo for expanded state */
                     <Image 
                       src={starkonPngLogo}
                       alt="Starkson Logo"
                       width={128}
                       height={40}
-                      className="object-contain mx-auto"
+                      className="object-contain"
                       onError={() => setLogoError(true)}
                       priority
                     />
@@ -284,15 +284,13 @@ const getNotificationIcon = (type: string) => {
                 )}
               </Link>
             </div>
-            
-            {/* Notification Bell - Positioned below logo in collapsed state */}
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation()
                 setNotifOpen((o) => !o)
               }}
-              className={`relative flex-shrink-0 p-1.5 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white transition-colors ${collapsed ? 'mt-2' : ''}`}
+              className="relative flex-shrink-0 p-1.5 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
               aria-label="Notifications"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -306,7 +304,7 @@ const getNotificationIcon = (type: string) => {
               )}
             </button>
             {notifOpen && (
-              <div className={`absolute top-full mt-1 z-50 overflow-hidden flex flex-col max-h-[min(320px,60vh)] bg-gray-700 border border-gray-600 rounded-xl shadow-xl ${collapsed ? 'left-0 right-0 mx-1' : 'left-0 right-0 mx-2'}`}>
+              <div className={`absolute top-full mt-1 z-50 overflow-hidden flex flex-col max-h-[min(320px,60vh)] bg-gray-700 border border-gray-600 rounded-xl shadow-xl ${collapsed ? 'left-full ml-1 w-72' : 'left-0 right-0 mx-2'}`}>
                 <div className="px-3 py-2 border-b border-gray-600 flex items-center justify-between flex-shrink-0">
                   <span className="text-sm font-semibold text-white">
                     Notifications

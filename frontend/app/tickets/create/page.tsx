@@ -7,7 +7,7 @@ import api, { getApiBaseUrl } from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser, setStoredAuth } from '@/lib/auth'
 import { useBranches } from '@/lib/useBranches'
-import { getAffectedSystems, getCategories } from '@/lib/maintenance'
+import { getAffectedSystems, getCategories, getPriorities } from '@/lib/maintenance' // Added getPriorities
 import SelectDropdown from '@/components/SelectDropdown'
 
 const REQUEST_TYPES = [
@@ -19,18 +19,19 @@ const REQUEST_TYPES = [
   { value: 'general', label: 'General IT Assistance' },
 ]
 
-const PRIORITIES = [
-  { value: 'low', label: 'Low', color: 'bg-gray-100 text-gray-700 border-gray-200', dot: 'bg-gray-500' },
-  { value: 'medium', label: 'Medium', color: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-500' },
-  { value: 'high', label: 'High', color: 'bg-orange-50 text-orange-700 border-orange-200', dot: 'bg-orange-500' },
-  { value: 'urgent', label: 'Urgent', color: 'bg-red-50 text-red-700 border-red-200', dot: 'bg-red-500' },
-]
-
-// Modern Priority Select Component - FIXED
-const PrioritySelect = ({ value, onChange }: { value: string; onChange: (value: string) => void }) => {
+// Modern Priority Select Component - COLORS REMOVED with dynamic options
+const PrioritySelect = ({ 
+  value, 
+  onChange,
+  priorityOptions 
+}: { 
+  value: string; 
+  onChange: (value: string) => void;
+  priorityOptions: { value: string; label: string }[];
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const selectedPriority = PRIORITIES.find(p => p.value === value) || PRIORITIES[1];
+  const selectedPriority = priorityOptions.find(p => p.value === value) || priorityOptions[1] || { value: 'medium', label: 'Medium' };
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -50,19 +51,20 @@ const PrioritySelect = ({ value, onChange }: { value: string; onChange: (value: 
         onClick={() => setIsOpen(!isOpen)}
         className={`
           w-full flex items-center justify-between gap-2 px-4 py-2.5
-          ${selectedPriority.color}
-          rounded-xl border
-          hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+          bg-white text-gray-900
+          rounded-xl border border-gray-200
+          hover:border-gray-300 hover:shadow-md
+          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
           transition-all duration-200
           font-medium text-left
         `}
       >
         <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${selectedPriority.dot}`} />
+          <span className={`w-2 h-2 rounded-full bg-gray-500`} />
           <span>{selectedPriority.label}</span>
         </div>
         <svg
-          className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -73,7 +75,7 @@ const PrioritySelect = ({ value, onChange }: { value: string; onChange: (value: 
 
       {isOpen && (
         <div className="absolute z-40 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-60 overflow-auto animate-in fade-in slide-in-from-top-2 duration-200">
-          {PRIORITIES.map((priority) => (
+          {priorityOptions.map((priority) => (
             <button
               key={priority.value}
               type="button"
@@ -86,13 +88,13 @@ const PrioritySelect = ({ value, onChange }: { value: string; onChange: (value: 
                 text-sm font-medium
                 hover:bg-gray-50
                 transition-colors duration-150
-                ${value === priority.value ? priority.color : 'text-gray-700'}
+                ${value === priority.value ? 'bg-gray-100 text-gray-900' : 'text-gray-700'}
               `}
             >
-              <span className={`w-2 h-2 rounded-full ${priority.dot}`} />
+              <span className={`w-2 h-2 rounded-full bg-gray-500`} />
               <span className="flex-1 text-left">{priority.label}</span>
               {value === priority.value && (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               )}
@@ -196,6 +198,7 @@ export default function CreateTicketPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(getStoredUser())
   const [userLoaded, setUserLoaded] = useState(false)
+  const [priorityOptions, setPriorityOptions] = useState<{ value: string; label: string }[]>([])
 
   useEffect(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
@@ -240,7 +243,7 @@ export default function CreateTicketPage() {
     title: '',
     description: '',
     affectedSystem: '',
-    priority: 'medium',
+    priority: '',
     category: '',
     branchAcronym: defaultBranch,
   })
@@ -252,7 +255,22 @@ export default function CreateTicketPage() {
   useEffect(() => {
     setAffectedSystems(getAffectedSystems())
     setCategories(getCategories())
+    
+    // Load dynamic priorities
+    const priorities = getPriorities()
+    const formattedPriorities = priorities.map(p => ({
+      value: p.toLowerCase(),
+      label: p
+    }))
+    setPriorityOptions(formattedPriorities)
+    
+    // Set default priority if available
+    if (formattedPriorities.length > 0) {
+      const defaultPriority = formattedPriorities.find(p => p.value === 'medium') || formattedPriorities[0]
+      setFormData(prev => ({ ...prev, priority: defaultPriority.value }))
+    }
   }, [])
+
   const [files, setFiles] = useState<File[]>([])
   const [uploadStatus, setUploadStatus] = useState<Record<number, { status: 'pending' | 'uploading' | 'success' | 'error', message?: string }>>({})
   const [error, setError] = useState('')
@@ -334,6 +352,12 @@ export default function CreateTicketPage() {
       return
     }
 
+    if (!formData.priority) {
+      setError('Please select a priority')
+      setLoading(false)
+      return
+    }
+
     // Validate "Others" fields
     if (formData.affectedSystem === 'others' && !otherAffectedSystem.trim()) {
       setError('Please specify the affected system')
@@ -410,6 +434,17 @@ export default function CreateTicketPage() {
       setUploading(false)
     }
   }
+
+  // Helper function to get priority description
+  const getPriorityDescription = (priorityValue: string) => {
+    const priorityMap: Record<string, string> = {
+      'low': 'Non-urgent issue, can be scheduled',
+      'medium': 'Standard priority for most issues',
+      'high': 'Important issue needing quick resolution',
+      'urgent': 'Critical issue affecting business operations',
+    };
+    return priorityMap[priorityValue] || 'Select a priority level';
+  };
 
   return (
     <ProtectedRoute allowedRoles={['user', 'admin']}>
@@ -599,12 +634,10 @@ export default function CreateTicketPage() {
                   <PrioritySelect
                     value={formData.priority}
                     onChange={(value) => setFormData({ ...formData, priority: value })}
+                    priorityOptions={priorityOptions}
                   />
                   <p className="text-xs text-gray-500 mt-4">
-                    {formData.priority === 'urgent' && 'Critical issue affecting business operations'}
-                    {formData.priority === 'high' && 'Important issue needing quick resolution'}
-                    {formData.priority === 'medium' && 'Standard priority for most issues'}
-                    {formData.priority === 'low' && 'Non-urgent issue, can be scheduled'}
+                    {getPriorityDescription(formData.priority)}
                   </p>
                 </div>
               </div>

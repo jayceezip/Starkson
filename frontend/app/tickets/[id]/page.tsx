@@ -8,7 +8,7 @@ import api, { getApiBaseUrl } from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser, hasRole } from '@/lib/auth'
 import { formatPinoyDateTime } from '@/lib/date'
-import { getIncidentCategories } from '@/lib/maintenance'
+import { getIncidentCategories, getSeverities, getTicketStatuses } from '@/lib/maintenance' // Added getTicketStatuses
 
 interface TimelineEntry {
   id: string
@@ -74,52 +74,36 @@ interface Attachment {
   created_at?: string
 }
 
-const STATUS_OPTIONS = ['new', 'assigned', 'in_progress', 'waiting_for_user', 'resolved', 'closed']
-
-// Modern Status Select Component
+// Modern Status Select Component - COLORS REMOVED with dynamic options
 const ModernStatusSelect = ({ 
   value, 
   onChange, 
-  disabled 
+  disabled,
+  statusOptions
 }: { 
   value: string; 
   onChange: (value: string) => void; 
   disabled?: boolean;
+  statusOptions: { value: string; label: string }[];
 }) => {
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, { bg: string; text: string; dot: string; ring: string }> = {
-      'new': { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500', ring: 'ring-blue-500' },
-      'assigned': { bg: 'bg-purple-50', text: 'text-purple-700', dot: 'bg-purple-500', ring: 'ring-purple-500' },
-      'in_progress': { bg: 'bg-yellow-50', text: 'text-yellow-700', dot: 'bg-yellow-500', ring: 'ring-yellow-500' },
-      'waiting_for_user': { bg: 'bg-orange-50', text: 'text-orange-700', dot: 'bg-orange-500', ring: 'ring-orange-500' },
-      'resolved': { bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500', ring: 'ring-green-500' },
-      'closed': { bg: 'bg-gray-50', text: 'text-gray-700', dot: 'bg-gray-500', ring: 'ring-gray-500' },
-      'converted_to_incident': { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500', ring: 'ring-red-500' },
-    };
-    return colors[status] || { bg: 'bg-gray-50', text: 'text-gray-700', dot: 'bg-gray-500', ring: 'ring-gray-500' };
-  };
-
-  const currentStatus = getStatusColor(value);
+  const selectedOption = statusOptions.find(opt => opt.value === value) || { value: '', label: value?.replace(/_/g, ' ') || 'New' };
 
   return (
     <Listbox value={value} onChange={onChange} disabled={disabled}>
       <div className="relative mt-1">
         <Listbox.Button className={`
           relative w-full flex items-center justify-between gap-2 px-4 py-2.5
-          ${currentStatus.bg} ${currentStatus.text}
-          rounded-xl border border-transparent
-          hover:border-gray-200 hover:shadow-md
+          bg-white text-gray-900
+          rounded-xl border border-gray-200
+          hover:border-gray-300 hover:shadow-md
           focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
           transition-all duration-200 ease-in-out
           ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
           font-medium text-left
         `}>
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${currentStatus.dot}`} />
-            <span>{value.replace(/_/g, ' ')}</span>
-          </div>
+          <span>{selectedOption.label}</span>
           <svg
-            className="w-4 h-4 transition-transform duration-200 ui-open:rotate-180"
+            className="w-4 h-4 text-gray-500 transition-transform duration-200 ui-open:rotate-180"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -135,36 +119,32 @@ const ModernStatusSelect = ({
           leaveTo="opacity-0"
         >
           <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-60 overflow-auto focus:outline-none">
-            {STATUS_OPTIONS.map((status) => {
-              const colors = getStatusColor(status);
-              return (
-                <Listbox.Option
-                  key={status}
-                  value={status}
-                  className={({ active }) => `
-                    relative cursor-pointer select-none py-2.5 px-4
-                    ${active ? 'bg-gray-50' : ''}
-                    transition-colors duration-150
-                  `}
-                >
-                  {({ selected }) => (
-                    <div className="flex items-center gap-3">
-                      <span className={`w-2 h-2 rounded-full ${colors.dot}`} />
-                      <span className={`flex-1 text-sm font-medium ${
-                        selected ? colors.text : 'text-gray-700'
-                      }`}>
-                        {status.replace(/_/g, ' ')}
-                      </span>
-                      {selected && (
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                      )}
-                    </div>
-                  )}
-                </Listbox.Option>
-              );
-            })}
+            {statusOptions.map((option) => (
+              <Listbox.Option
+                key={option.value}
+                value={option.value}
+                className={({ active }) => `
+                  relative cursor-pointer select-none py-2.5 px-4
+                  ${active ? 'bg-gray-50' : ''}
+                  transition-colors duration-150
+                `}
+              >
+                {({ selected }) => (
+                  <div className="flex items-center justify-between">
+                    <span className={`flex-1 text-sm font-medium ${
+                      selected ? 'text-gray-900' : 'text-gray-700'
+                    }`}>
+                      {option.label}
+                    </span>
+                    {selected && (
+                      <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </div>
+                )}
+              </Listbox.Option>
+            ))}
           </Listbox.Options>
         </Transition>
       </div>
@@ -198,18 +178,34 @@ export default function TicketDetailsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [incidentCategories, setIncidentCategories] = useState<string[]>([])
-  
+  const [severities, setSeverities] = useState<string[]>([])
+  // NEW: Add state for ticket statuses
+  const [ticketStatuses, setTicketStatuses] = useState<{ value: string; label: string }[]>([])
+
   // Refs for polling - updated type to handle string | string[] | undefined
   const pollingIntervalRef = useRef<NodeJS.Timeout>()
   const lastCommentIdsRef = useRef<Set<number>>(new Set())
   const isPollingRef = useRef<boolean>(false)
   const ticketIdRef = useRef<string | null>(null)
 
+  // MODIFIED: Fetch all maintenance data when component mounts
   useEffect(() => {
-    if (showConvertModal) {
+    if (mounted) {
+      // Get incident categories
       setIncidentCategories(getIncidentCategories())
+      
+      // Get severities
+      setSeverities(getSeverities())
+      
+      // Get ticket statuses and format them for the dropdown
+      const statuses = getTicketStatuses()
+      const formattedStatuses = statuses.map(status => ({
+        value: status.toLowerCase().replace(/\s+/g, '_'),
+        label: status
+      }))
+      setTicketStatuses(formattedStatuses)
     }
-  }, [showConvertModal])
+  }, [mounted])
 
   useEffect(() => {
     setMounted(true)
@@ -217,11 +213,40 @@ export default function TicketDetailsPage() {
     setUser(currentUser)
   }, [])
 
+  // Fetch incident categories and severities when convert modal opens (refresh)
+  useEffect(() => {
+    if (showConvertModal) {
+      setIncidentCategories(getIncidentCategories())
+      setSeverities(getSeverities())
+    }
+  }, [showConvertModal])
+
+  // MODIFIED: Fetch both security officers and admins when convert modal opens
   useEffect(() => {
     if (!showConvertModal) return
     setSecurityOfficersLoading(true)
-    api.get('/users/security-officers')
-      .then((res) => setSecurityOfficers(Array.isArray(res.data) ? res.data : []))
+    
+    // Fetch both security officers and admins
+    Promise.all([
+      api.get('/users/security-officers'),
+      api.get('/users/admins')
+    ])
+      .then(([securityRes, adminsRes]) => {
+        const securityOfficers = Array.isArray(securityRes.data) ? securityRes.data : []
+        const admins = Array.isArray(adminsRes.data) ? adminsRes.data : []
+        
+        // Combine both arrays and remove duplicates based on id
+        const combined = [...securityOfficers, ...admins]
+        const uniqueUsers = combined.reduce((acc: any[], current) => {
+          const exists = acc.find(user => user.id === current.id)
+          if (!exists) {
+            acc.push(current)
+          }
+          return acc
+        }, [])
+        
+        setSecurityOfficers(uniqueUsers)
+      })
       .catch(() => setSecurityOfficers([]))
       .finally(() => setSecurityOfficersLoading(false))
   }, [showConvertModal])
@@ -647,6 +672,13 @@ const fetchTicket = useCallback(async () => {
     return status.replace(/ /g, '_');
   };
 
+  // Helper function to get display label for a status value
+  const getStatusDisplayLabel = (statusValue: string) => {
+    const matchingOption = ticketStatuses.find(opt => opt.value === statusValue);
+    if (matchingOption) return matchingOption.label;
+    return statusValue ? statusValue.replace(/_/g, ' ') : 'New';
+  };
+
   // Show error state if ticket not found or permission denied
   if (!mounted || !user || loading) {
     return (
@@ -1061,12 +1093,13 @@ const fetchTicket = useCallback(async () => {
                         value={ticket.status}
                         onChange={handleStatusChange}
                         disabled={updatingStatus}
+                        statusOptions={ticketStatuses}
                       />
                     ) : (
                       <div className="flex items-center gap-2 mt-1.5">
                         <span className={`w-2.5 h-2.5 rounded-full ${getStatusColor(ticket.status)}`} />
                         <p className="text-gray-900 font-medium capitalize">
-                          {ticket.status ? ticket.status.replace(/_/g, ' ') : 'New'}
+                          {getStatusDisplayLabel(ticket.status)}
                         </p>
                       </div>
                     )}
@@ -1255,7 +1288,7 @@ const fetchTicket = useCallback(async () => {
               <h2 className="text-xl font-bold mb-4 text-red-600">Convert Ticket to Incident</h2>
               <form onSubmit={handleConvertToIncident} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Assign to Security Officer *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Assign to Security Officer or Admin </label>
                   <select
                     value={convertData.assignedTo}
                     onChange={(e) => setConvertData({ ...convertData, assignedTo: e.target.value })}
@@ -1264,7 +1297,7 @@ const fetchTicket = useCallback(async () => {
                     disabled={securityOfficersLoading}
                   >
                     <option value="">
-                      {securityOfficersLoading ? 'Loading…' : 'Select Security Officer'}
+                      {securityOfficersLoading ? 'Loading…' : 'Select User'}
                     </option>
                     {securityOfficers.map((so) => (
                       <option key={so.id} value={so.id}>
@@ -1273,7 +1306,7 @@ const fetchTicket = useCallback(async () => {
                     ))}
                   </select>
                   {!securityOfficersLoading && securityOfficers.length === 0 && (
-                    <p className="text-xs text-amber-600 mt-1">No active Security Officers found. Add one in User Management.</p>
+                    <p className="text-xs text-amber-600 mt-1">No active Security Officers or Admins found. Add one in User Management.</p>
                   )}
                 </div>
                 <div>
@@ -1322,11 +1355,31 @@ const fetchTicket = useCallback(async () => {
                     className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
                     required
                   >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="critical">Critical</option>
+                    <option value="">Select severity</option>
+                    {severities.length > 0 ? (
+                      severities.map((severity) => {
+                        const dbValue = severity.toLowerCase()
+                        return (
+                          <option key={severity} value={dbValue}>
+                            {severity}
+                          </option>
+                        )
+                      })
+                    ) : (
+                      // Fallback options if no severities are configured
+                      <>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                      </>
+                    )}
                   </select>
+                  {severities.length === 0 && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      No severities configured. Using default options.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>

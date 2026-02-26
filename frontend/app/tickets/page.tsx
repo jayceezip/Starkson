@@ -9,6 +9,7 @@ import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser, hasRole } from '@/lib/auth'
 import { formatPinoyDateTime } from '@/lib/date'
 import { REAL_BRANCHES } from '@/lib/branches'
+import { getTicketStatuses, getPriorities } from '@/lib/maintenance' // Added getPriorities
 
 interface Ticket {
   id: number
@@ -27,25 +28,6 @@ interface Ticket {
 
 const PAGE_SIZE = 10
 
-const TICKET_STATUS_OPTIONS = [
-  { value: '', label: 'All statuses' },
-  { value: 'new', label: 'New' },
-  { value: 'assigned', label: 'Assigned' },
-  { value: 'in_progress', label: 'In progress' },
-  { value: 'waiting_for_user', label: 'Waiting for user' },
-  { value: 'resolved', label: 'Resolved' },
-  { value: 'closed', label: 'Closed' },
-  { value: 'converted_to_incident', label: 'Converted to incident' },
-]
-
-const TICKET_PRIORITY_OPTIONS = [
-  { value: '', label: 'All priorities' },
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'urgent', label: 'Urgent' },
-]
-
 export default function TicketsPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
@@ -55,11 +37,40 @@ export default function TicketsPage() {
   const [page, setPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
   const [filters, setFilters] = useState({ status: '', priority: '', branch: '' })
+  const [statusOptions, setStatusOptions] = useState<{ value: string; label: string }[]>([
+    { value: '', label: 'All statuses' }
+  ])
+  // NEW: State for dynamic priority options
+  const [priorityOptions, setPriorityOptions] = useState<{ value: string; label: string }[]>([
+    { value: '', label: 'All priorities' }
+  ])
 
   useEffect(() => {
     setMounted(true)
     const currentUser = getStoredUser()
     setUser(currentUser)
+    
+    // Load dynamic status options from maintenance
+    const statuses = getTicketStatuses()
+    const statusOpts = [
+      { value: '', label: 'All statuses' },
+      ...statuses.map(status => ({
+        value: status.toLowerCase().replace(/\s+/g, '_'),
+        label: status
+      }))
+    ]
+    setStatusOptions(statusOpts)
+
+    // NEW: Load dynamic priority options from maintenance
+    const priorities = getPriorities()
+    const priorityOpts = [
+      { value: '', label: 'All priorities' },
+      ...priorities.map(priority => ({
+        value: priority.toLowerCase(),
+        label: priority
+      }))
+    ]
+    setPriorityOptions(priorityOpts)
   }, [])
 
   const fetchTickets = useCallback(async (showLoading = true) => {
@@ -74,7 +85,19 @@ export default function TicketsPage() {
       if (filters.branch) params.append('branch_acronym', filters.branch)
       const response = await api.get(`/tickets?${params.toString()}`)
       const list = Array.isArray(response.data) ? response.data : []
-      setTickets(list.sort((a, b) => new Date((b as Ticket).createdAt || 0).getTime() - new Date((a as Ticket).createdAt || 0).getTime()))
+      
+      // Normalize the status and priority values to match the filter format
+      const normalizedList = list.map((ticket: any) => ({
+        ...ticket,
+        // Ensure status is in the same format as filter values (lowercase with underscores)
+        status: ticket.status ? ticket.status.toLowerCase().replace(/\s+/g, '_') : 'new',
+        // Ensure priority is in the same format as filter values (lowercase)
+        priority: ticket.priority ? ticket.priority.toLowerCase() : 'medium'
+      }))
+      
+      setTickets(normalizedList.sort((a, b) => 
+        new Date((b as Ticket).createdAt || 0).getTime() - new Date((a as Ticket).createdAt || 0).getTime()
+      ))
     } catch (error) {
       console.error('Failed to fetch tickets:', error)
     } finally {
@@ -148,45 +171,38 @@ export default function TicketsPage() {
     if (page > totalPages && totalPages >= 1) setPage(totalPages)
   }, [filteredTickets.length, totalPages, page])
 
-  // Status colors aligned with the ModernStatusSelect component
+  // UPDATED: Only converted_to_incident has red color, others are gray
   const getStatusColor = (status: string) => {
-    const colors: Record<string, { bg: string; text: string; dot: string }> = {
-      'new': { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500' },
-      'assigned': { bg: 'bg-purple-50', text: 'text-purple-700', dot: 'bg-purple-500' },
-      'in_progress': { bg: 'bg-yellow-50', text: 'text-yellow-700', dot: 'bg-yellow-500' },
-      'waiting for user': { bg: 'bg-orange-50', text: 'text-orange-700', dot: 'bg-orange-500' },
-      'waiting_for_user': { bg: 'bg-orange-50', text: 'text-orange-700', dot: 'bg-orange-500' },
-      'resolved': { bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500' },
-      'closed': { bg: 'bg-gray-50', text: 'text-gray-700', dot: 'bg-gray-500' },
-      'converted_to_incident': { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' },
-    };
+    // Only converted_to_incident gets special coloring
+    if (status === 'converted_to_incident') {
+      return { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' };
+    }
     
-    // Handle both underscore and space formats
-    const normalizedStatus = status.replace(/ /g, '_');
-    const colorKey = colors[status] ? status : 
-                    colors[normalizedStatus] ? normalizedStatus : 
-                    'closed';
-    
-    return colors[colorKey] || colors.closed;
+    // All other statuses are gray
+    return { bg: 'bg-gray-100', text: 'text-gray-800', dot: 'bg-gray-500' };
   }
 
+  // Helper function to get display label for status
   const getStatusLabel = (status: string) => {
     if (status === 'converted_to_incident') return 'Converted to Incident'
+    // Try to find a matching label in status options
+    const matchingOption = statusOptions.find(opt => opt.value === status)
+    if (matchingOption) return matchingOption.label
     return status ? status.replace(/_/g, ' ') : 'new'
   }
 
-  const getPriorityColor = (priority: string) => {
-    const colors: Record<string, { bg: string; text: string; dot: string }> = {
-      low: { bg: 'bg-gray-50', text: 'text-gray-700', dot: 'bg-gray-500' },
-      medium: { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500' },
-      high: { bg: 'bg-orange-50', text: 'text-orange-700', dot: 'bg-orange-500' },
-      urgent: { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' },
-    }
-    return colors[priority] || colors.medium
+  // NEW: Helper function to get display label for priority
+  const getPriorityLabel = (priority: string) => {
+    // Try to find a matching label in priority options
+    const matchingOption = priorityOptions.find(opt => opt.value === priority)
+    if (matchingOption) return matchingOption.label
+    return priority ? priority : 'medium'
   }
 
-  const getPriorityLabel = (priority: string) => {
-    return priority ? priority : 'medium'
+  // Priority now uses consistent gray styling (no colors)
+  const getPriorityColor = (priority: string) => {
+    // All priorities use the same gray styling
+    return { bg: 'bg-gray-100', text: 'text-gray-800', dot: 'bg-gray-500' };
   }
 
   const isSLABreached = (slaDue: string | undefined) => {
@@ -247,12 +263,12 @@ export default function TicketsPage() {
                 <Listbox value={filters.status} onChange={(value) => { setFilters((f) => ({ ...f, status: value })); setPage(1) }}>
                   <div className="relative">
                     <Listbox.Button className="relative w-full flex items-center justify-between gap-2 px-4 py-2.5 bg-white text-gray-900 rounded-xl border border-gray-200 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-medium text-left">
-                      <span>{TICKET_STATUS_OPTIONS.find((o) => o.value === filters.status)?.label ?? 'All statuses'}</span>
+                      <span>{statusOptions.find((o) => o.value === filters.status)?.label ?? 'All statuses'}</span>
                       <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                     </Listbox.Button>
                     <Transition as={Fragment} leave="transition ease-in duration-100" leaveFrom="opacity-100" leaveTo="opacity-0">
                       <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-60 overflow-auto">
-                        {TICKET_STATUS_OPTIONS.map((opt) => (
+                        {statusOptions.map((opt) => (
                           <Listbox.Option key={opt.value || 'all'} value={opt.value} className={({ active }) => `cursor-pointer py-2.5 px-4 ${active ? 'bg-gray-50' : ''}`}>
                             {opt.label}
                           </Listbox.Option>
@@ -267,12 +283,12 @@ export default function TicketsPage() {
                 <Listbox value={filters.priority} onChange={(value) => { setFilters((f) => ({ ...f, priority: value })); setPage(1) }}>
                   <div className="relative">
                     <Listbox.Button className="relative w-full flex items-center justify-between gap-2 px-4 py-2.5 bg-white text-gray-900 rounded-xl border border-gray-200 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-medium text-left">
-                      <span>{TICKET_PRIORITY_OPTIONS.find((o) => o.value === filters.priority)?.label ?? 'All priorities'}</span>
+                      <span>{priorityOptions.find((o) => o.value === filters.priority)?.label ?? 'All priorities'}</span>
                       <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                     </Listbox.Button>
                     <Transition as={Fragment} leave="transition ease-in duration-100" leaveFrom="opacity-100" leaveTo="opacity-0">
                       <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-60 overflow-auto">
-                        {TICKET_PRIORITY_OPTIONS.map((opt) => (
+                        {priorityOptions.map((opt) => (
                           <Listbox.Option key={opt.value || 'all'} value={opt.value} className={({ active }) => `cursor-pointer py-2.5 px-4 ${active ? 'bg-gray-50' : ''}`}>
                             {opt.label}
                           </Listbox.Option>
@@ -328,7 +344,7 @@ export default function TicketsPage() {
                       </div>
                       <input
                         type="search"
-                        placeholder="Search tickets by #, title, type, status, priority, assignee..."
+                        placeholder="Search tickets by #, title, type, status, priority, assignee, created by..."
                         value={searchQuery}
                         onChange={(e) => { setSearchQuery(e.target.value); setPage(1) }}
                         className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow"
@@ -368,6 +384,7 @@ export default function TicketsPage() {
                           <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Title</th>
                           <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
                           <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Priority</th>
+                          <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Created By</th>
                           {hasRole(user, 'it_support', 'admin') && (
                             <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Assigned To</th>
                           )}
@@ -400,7 +417,9 @@ export default function TicketsPage() {
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="flex items-center gap-2">
                                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium ${statusColors.bg} ${statusColors.text}`}>
-                                    <span className={`w-1.5 h-1.5 rounded-full ${statusColors.dot}`} />
+                                    {ticket.status === 'converted_to_incident' ? (
+                                      <span className={`w-1.5 h-1.5 rounded-full ${statusColors.dot}`} />
+                                    ) : null}
                                     {getStatusLabel(ticket.status || 'new')}
                                   </span>
                                   {ticket.status === 'converted_to_incident' && ticket.convertedIncidentId && (
@@ -423,6 +442,9 @@ export default function TicketsPage() {
                                   <span className={`w-1.5 h-1.5 rounded-full ${priorityColors.dot}`} />
                                   {getPriorityLabel(ticket.priority || 'medium')}
                                 </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                {ticket.createdByName || <span className="text-gray-400">Unknown</span>}
                               </td>
                               {hasRole(user, 'it_support', 'admin') && (
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
