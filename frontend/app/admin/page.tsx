@@ -8,6 +8,14 @@ import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser } from '@/lib/auth'
 import MaintenanceModal from '@/components/MaintenanceModal'
 
+function downloadBlob (blob: Blob, filename: string) {
+  const link = document.createElement('a')
+  link.href = window.URL.createObjectURL(blob)
+  link.download = filename
+  link.click()
+  window.URL.revokeObjectURL(link.href)
+}
+
 export default function AdminPanelPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
@@ -19,6 +27,8 @@ export default function AdminPanelPage() {
     totalIncidents: 0,
     systemHealth: 'operational',
   })
+  const [exportingTickets, setExportingTickets] = useState(false)
+  const [exportingIncidents, setExportingIncidents] = useState(false)
   const [metrics, setMetrics] = useState<{
     ticketsThisWeek: { label: string; count: number }[]
     incidentStatus: { status: string; count: number }[]
@@ -166,6 +176,135 @@ export default function AdminPanelPage() {
         </div>
 
         <MaintenanceModal isOpen={maintenanceModalOpen} onClose={() => setMaintenanceModalOpen(false)} />
+
+        {/* Admin-only exports: Tickets & Incidents (CSV or PDF) */}
+        <h2 className="panel-section-title">Exports</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="panel-card hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <span className="flex items-center justify-center w-10 h-10 rounded-lg bg-emerald-100 text-emerald-600">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </span>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Export Tickets</h3>
+                  <p className="text-sm text-gray-500">Download all tickets</p>
+                </div>
+              </div>
+              {exportingTickets && (
+                <span className="animate-spin rounded-full h-6 w-6 border-2 border-gray-200 border-t-emerald-600" />
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  setExportingTickets(true)
+                  try {
+                    const res = await api.get('/admin/export/tickets', { responseType: 'blob' })
+                    const disp = res.headers['content-disposition']
+                    const filename = disp ? (disp.match(/filename="?([^";]+)"?/)?.[1] || 'tickets-export.csv') : 'tickets-export.csv'
+                    downloadBlob(new Blob([res.data], { type: 'text/csv;charset=utf-8' }), filename)
+                  } catch (e) {
+                    console.error('Export tickets failed:', e)
+                    alert('Failed to export tickets')
+                  } finally {
+                    setExportingTickets(false)
+                  }
+                }}
+                disabled={exportingTickets}
+                className="flex-1 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+              >
+                CSV
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setExportingTickets(true)
+                  try {
+                    const res = await api.get('/admin/export/tickets?format=pdf', { responseType: 'blob' })
+                    const disp = res.headers['content-disposition']
+                    const filename = disp ? (disp.match(/filename="?([^";]+)"?/)?.[1] || 'tickets-export.pdf') : 'tickets-export.pdf'
+                    downloadBlob(new Blob([res.data], { type: 'application/pdf' }), filename)
+                  } catch (e: any) {
+                    console.error('Export tickets failed:', e)
+                    alert(e.response?.data?.message || 'Failed to export tickets')
+                  } finally {
+                    setExportingTickets(false)
+                  }
+                }}
+                disabled={exportingTickets}
+                className="flex-1 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+              >
+                PDF
+              </button>
+            </div>
+          </div>
+          <div className="panel-card hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <span className="flex items-center justify-center w-10 h-10 rounded-lg bg-amber-100 text-amber-600">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </span>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Export Incidents</h3>
+                  <p className="text-sm text-gray-500">Download all incidents</p>
+                </div>
+              </div>
+              {exportingIncidents && (
+                <span className="animate-spin rounded-full h-6 w-6 border-2 border-gray-200 border-t-amber-600" />
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  setExportingIncidents(true)
+                  try {
+                    const res = await api.get('/admin/export/incidents', { responseType: 'blob' })
+                    const disp = res.headers['content-disposition']
+                    const filename = disp ? (disp.match(/filename="?([^";]+)"?/)?.[1] || 'incidents-export.csv') : 'incidents-export.csv'
+                    downloadBlob(new Blob([res.data], { type: 'text/csv;charset=utf-8' }), filename)
+                  } catch (e) {
+                    console.error('Export incidents failed:', e)
+                    alert('Failed to export incidents')
+                  } finally {
+                    setExportingIncidents(false)
+                  }
+                }}
+                disabled={exportingIncidents}
+                className="flex-1 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+              >
+                CSV
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setExportingIncidents(true)
+                  try {
+                    const res = await api.get('/admin/export/incidents?format=pdf', { responseType: 'blob' })
+                    const disp = res.headers['content-disposition']
+                    const filename = disp ? (disp.match(/filename="?([^";]+)"?/)?.[1] || 'incidents-export.pdf') : 'incidents-export.pdf'
+                    downloadBlob(new Blob([res.data], { type: 'application/pdf' }), filename)
+                  } catch (e: any) {
+                    console.error('Export incidents failed:', e)
+                    alert(e.response?.data?.message || 'Failed to export incidents')
+                  } finally {
+                    setExportingIncidents(false)
+                  }
+                }}
+                disabled={exportingIncidents}
+                className="flex-1 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+              >
+                PDF
+              </button>
+            </div>
+          </div>
+        </div>
 
         {/* System Metrics - chart style cards (no Uptime per user request) */}
         <h2 className="panel-section-title">System Metrics</h2>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import api from '@/lib/api'
@@ -34,6 +34,9 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [roleFilter, setRoleFilter] = useState<string>('')
+  const [branchFilter, setBranchFilter] = useState<string>('')
+  const [exporting, setExporting] = useState(false)
   const [editingRole, setEditingRole] = useState<string | null>(null)
   const [newRole, setNewRole] = useState<string>('')
   const [editingBranches, setEditingBranches] = useState<string | null>(null)
@@ -51,16 +54,21 @@ export default function AdminUsersPage() {
     setUser(getStoredUser())
   }, [])
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
+    setLoading(true)
     try {
-      const res = await api.get('/users')
+      const params = new URLSearchParams()
+      if (roleFilter) params.set('role', roleFilter)
+      if (branchFilter) params.set('branch_acronym', branchFilter)
+      const url = params.toString() ? `/users?${params.toString()}` : '/users'
+      const res = await api.get(url)
       setUsers(Array.isArray(res.data) ? res.data : [])
     } catch (e) {
       console.error('Failed to fetch users:', e)
     } finally {
       setLoading(false)
     }
-  }
+  }, [roleFilter, branchFilter])
 
   useEffect(() => {
     if (!mounted || !user) return
@@ -69,15 +77,16 @@ export default function AdminUsersPage() {
       return
     }
     fetchUsers()
-  }, [mounted, user, router])
+  }, [mounted, user, router, fetchUsers])
 
-  // Keyword search: match fullname, username, role (case-insensitive)
-  const keywords = searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean)
-  const filteredUsers = keywords.length === 0
+  // Search by name (fullname) and username only (case-insensitive)
+  const searchTrim = searchQuery.trim().toLowerCase()
+  const filteredUsers = !searchTrim
     ? users
     : users.filter((u) => {
-        const searchText = [u.fullname, u.username, u.role, u.status, (u.branchAcronyms || []).join(' ')].filter(Boolean).join(' ').toLowerCase()
-        return keywords.every((kw) => searchText.includes(kw))
+        const fullname = (u.fullname || '').toLowerCase()
+        const username = (u.username || '').toLowerCase()
+        return fullname.includes(searchTrim) || username.includes(searchTrim)
       })
 
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE))
@@ -183,6 +192,33 @@ export default function AdminUsersPage() {
       : 'bg-gray-100 text-gray-800 border-gray-200'
   }
 
+  const handleExportUsers = async (format: 'csv' | 'pdf') => {
+    setExporting(true)
+    try {
+      const params = new URLSearchParams()
+      if (roleFilter) params.set('role', roleFilter)
+      if (branchFilter) params.set('branch_acronym', branchFilter)
+      params.set('format', format)
+      const url = `/admin/export/users?${params.toString()}`
+      const res = await api.get(url, { responseType: 'blob' })
+      const disp = res.headers['content-disposition']
+      const defaultName = format === 'pdf' ? 'users-export.pdf' : 'users-export.csv'
+      const filename = disp ? (disp.match(/filename="?([^";]+)"?/)?.[1] || defaultName) : defaultName
+      const mime = format === 'pdf' ? 'application/pdf' : 'text/csv;charset=utf-8'
+      const blob = new Blob([res.data], { type: mime })
+      const link = document.createElement('a')
+      link.href = window.URL.createObjectURL(blob)
+      link.download = filename
+      link.click()
+      window.URL.revokeObjectURL(link.href)
+    } catch (e: any) {
+      console.error('Export failed:', e)
+      alert(e.response?.data?.message || 'Failed to export users')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <ProtectedRoute allowedRoles={['admin']}>
       <div className="min-h-screen bg-[#f5f5f7] pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
@@ -196,50 +232,112 @@ export default function AdminUsersPage() {
             </Link>
             <h1 className="text-3xl font-bold text-gray-900 tracking-tight">User Management</h1>
           </div>
-          <Link
-            href="/admin/users/create"
-            className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-3.5 text-base font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors shadow-sm"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Create an account
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="inline-flex rounded-xl border border-gray-300 bg-white shadow-sm overflow-hidden">
+              <span className="inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold text-gray-700 border-r border-gray-200 bg-gray-50">
+                {exporting ? (
+                  <span className="animate-spin rounded-full h-4 w-4 border-2 border-gray-200 border-t-blue-600" />
+                ) : (
+                  <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                )}
+                {exporting ? 'Exporting...' : 'Export users'}
+              </span>
+              <button
+                type="button"
+                onClick={() => handleExportUsers('csv')}
+                disabled={exporting || users.length === 0}
+                className="px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset disabled:opacity-50 disabled:pointer-events-none"
+              >
+                CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExportUsers('pdf')}
+                disabled={exporting || users.length === 0}
+                className="px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 border-l border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset disabled:opacity-50 disabled:pointer-events-none"
+              >
+                PDF
+              </button>
+            </div>
+            <Link
+              href="/admin/users/create"
+              className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-3.5 text-base font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors shadow-sm"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Create an account
+            </Link>
+          </div>
         </div>
         <p className="text-gray-600 mb-8 text-base">Manage user accounts, assign roles, and monitor account status across the platform.</p>
 
-        {/* Stats & Search */}
+        {/* Filters, Search & Export */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <label htmlFor="user-search" className="block text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-              <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              Search users
-            </label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="role-filter" className="block text-sm font-semibold text-gray-700 mb-2">Filter by role</label>
+                <select
+                  id="role-filter"
+                  value={roleFilter}
+                  onChange={(e) => setRoleFilter(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">All roles</option>
+                  {ROLES.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="branch-filter" className="block text-sm font-semibold text-gray-700 mb-2">Filter by branch</label>
+                <select
+                  id="branch-filter"
+                  value={branchFilter}
+                  onChange={(e) => setBranchFilter(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">All branches</option>
+                  {realBranches.map((b) => (
+                    <option key={b.acronym} value={b.acronym}>{b.acronym} – {b.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label htmlFor="user-search" className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
-              </span>
-              <input
-                id="user-search"
-                type="search"
-                placeholder="Search by fullname, username, role, or status..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-11 pr-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm focus:shadow-md"
-              />
+                Search by name or username
+              </label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </span>
+                <input
+                  id="user-search"
+                  type="search"
+                  placeholder="Type name or username..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-11 pr-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm focus:shadow-md"
+                />
+              </div>
+              {searchQuery.trim() && (
+                <p className="mt-2 text-sm text-gray-600 flex items-center gap-1.5">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''} match
+                </p>
+              )}
             </div>
-            {searchQuery.trim() && (
-              <p className="mt-3 text-sm text-gray-600 flex items-center gap-1.5">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                {filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''} match your search
-              </p>
-            )}
           </div>
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl shadow-sm border border-blue-100 p-6 flex flex-col justify-center">
             <div className="flex items-center gap-3 mb-2">
