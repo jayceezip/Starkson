@@ -21,17 +21,33 @@ router.get('/security-officers', authenticate, authorize('it_support', 'security
   }
 })
 
-// Get all users (admin only)
+// Get all users (admin only); optional filters: role, branch_acronym
 router.get('/', authenticate, authorize('admin'), async (req, res) => {
   try {
-    const { data: users, error } = await supabase
+    const { role, branch_acronym } = req.query
+    let query = supabase
       .from('users')
       .select('id, username, fullname, role, status, branch_acronyms, created_at, updated_at')
       .order('created_at', { ascending: false })
 
+    if (role && typeof role === 'string' && ['user', 'it_support', 'security_officer', 'admin'].includes(role)) {
+      query = query.eq('role', role)
+    }
+
+    const { data: rawUsers, error } = await query
     if (error) throw error
 
-    res.json((users || []).map(u => ({
+    // Filter by branch in memory: show users whose branch_acronyms includes branch_acronym or 'ALL'
+    let users = rawUsers || []
+    if (branch_acronym && typeof branch_acronym === 'string' && branch_acronym.trim()) {
+      const branch = branch_acronym.trim()
+      users = users.filter((u) => {
+        const arr = Array.isArray(u.branch_acronyms) ? u.branch_acronyms : []
+        return arr.includes(branch) || arr.includes('ALL')
+      })
+    }
+
+    res.json(users.map(u => ({
       ...u,
       branchAcronyms: Array.isArray(u.branch_acronyms) ? u.branch_acronyms : [],
       createdAt: u.created_at,
