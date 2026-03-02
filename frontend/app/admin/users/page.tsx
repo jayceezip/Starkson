@@ -62,7 +62,16 @@ export default function AdminUsersPage() {
       if (branchFilter) params.set('branch_acronym', branchFilter)
       const url = params.toString() ? `/users?${params.toString()}` : '/users'
       const res = await api.get(url)
-      setUsers(Array.isArray(res.data) ? res.data : [])
+      const fetchedUsers = Array.isArray(res.data) ? res.data : []
+      
+      // Sort users alphabetically by fullname
+      const sortedUsers = [...fetchedUsers].sort((a, b) => {
+        const nameA = (a.fullname || '').toLowerCase()
+        const nameB = (b.fullname || '').toLowerCase()
+        return nameA.localeCompare(nameB)
+      })
+      
+      setUsers(sortedUsers)
     } catch (e) {
       console.error('Failed to fetch users:', e)
     } finally {
@@ -136,13 +145,18 @@ export default function AdminUsersPage() {
     }
     setSavingBranches(true)
     try {
+      // Clean up the branch acronyms - if ALL is selected, send only ALL
+      const branchesToSend = editingBranchAcronyms.includes(ALL_BRANCHES_ACRONYM)
+        ? [ALL_BRANCHES_ACRONYM]
+        : editingBranchAcronyms
+
       await api.put(`/users/${userId}/branches`, {
-        branchAcronyms: editingBranchAcronyms.includes(ALL_BRANCHES_ACRONYM)
-          ? [ALL_BRANCHES_ACRONYM]
-          : editingBranchAcronyms,
+        branchAcronyms: branchesToSend,
       })
       setEditingBranches(null)
-      fetchUsers()
+      
+      // Refresh users and ensure they're sorted
+      await fetchUsers()
     } catch (e) {
       console.error('Failed to update branches:', e)
       alert('Failed to update branches')
@@ -193,31 +207,147 @@ export default function AdminUsersPage() {
   }
 
   const handleExportUsers = async (format: 'csv' | 'pdf') => {
-    setExporting(true)
-    try {
-      const params = new URLSearchParams()
-      if (roleFilter) params.set('role', roleFilter)
-      if (branchFilter) params.set('branch_acronym', branchFilter)
-      params.set('format', format)
+  setExporting(true)
+  try {
+    const params = new URLSearchParams()
+    if (roleFilter) params.set('role', roleFilter)
+    if (branchFilter) params.set('branch_acronym', branchFilter)
+    params.set('format', format)
+    
+    if (format === 'pdf') {
+      // For PDF, we'll generate it client-side with the header
+      const [jsPDFModule, autoTableModule] = await Promise.all([
+        import('jspdf'),
+        import('jspdf-autotable')
+      ]);
+      
+      const jsPDF = jsPDFModule.default;
+      const autoTable = (autoTableModule as any).default ?? (autoTableModule as any).autoTable;
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+      // Add logo
+      const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/STARKSON-LG.png` : '';
+      let startY = 14;
+      let logoEndX = 14; // Default X position if no logo
+      
+      if (logoUrl) {
+        try {
+          const imgResp = await fetch(logoUrl);
+          const imgBlob = await imgResp.blob();
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(imgBlob);
+          });
+          const imgW = 45;
+          const imgH = 45;
+          doc.addImage(base64, 'PNG', 14, 2, imgW, imgH);
+          // Calculate where the logo ends (x + width) plus a margin
+          logoEndX = 14 + imgW + 5; // 5mm margin after logo
+          startY = 24;
+        } catch {
+          startY = 14;
+          logoEndX = 14;
+        }
+      }
+      
+      // Title
+      doc.setFontSize(16);
+      doc.text('Users Report', logoEndX, startY);
+      
+      // Generation info
+      doc.setFontSize(10);
+      let infoY = startY + 7;
+      doc.text(`Generated: ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })} (PH time) | Total users: ${filteredUsers.length}`, logoEndX, infoY);
+      
+      // Add filter information if applicable
+      infoY += 7;
+      const filters = [];
+      if (roleFilter) {
+        const roleLabel = ROLES.find(r => r.value === roleFilter)?.label || roleFilter;
+        filters.push(`Role: ${roleLabel}`);
+      }
+      if (branchFilter) {
+        const branch = realBranches.find(b => b.acronym === branchFilter);
+        filters.push(`Branch: ${branch ? `${branch.acronym} – ${branch.name}` : branchFilter}`);
+      }
+      if (searchQuery.trim()) {
+        filters.push(`Search: "${searchQuery}"`);
+      }
+      
+      if (filters.length > 0) {
+        doc.text(`Filters: ${filters.join(' | ')}`, logoEndX, infoY);
+        infoY += 7;
+      }
+
+      // Table data - use filteredUsers (ALL filtered users) instead of paginatedUsers
+      const tableData = filteredUsers.map((u) => [
+        u.fullname,
+        u.username,
+        u.role?.replace('_', ' ') || 'user',
+        u.branchAcronyms && u.branchAcronyms.length > 0
+          ? u.branchAcronyms.includes('ALL')
+            ? 'All Branches'
+            : u.branchAcronyms
+                .filter(acronym => acronym !== 'ALL')
+                .sort((a, b) => a.localeCompare(b))
+                .join(', ')
+          : '—',
+        u.status || 'active',
+      ]);
+
+      autoTable(doc, {
+        head: [['Fullname', 'Username', 'Role', 'Branches', 'Status']],
+        body: tableData,
+        startY: infoY + 5,
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [66, 66, 66] },
+        columnStyles: {
+          0: { cellWidth: 45 }, // Fullname
+          1: { cellWidth: 30 }, // Username
+          2: { cellWidth: 25 }, // Role
+          3: { cellWidth: 55 }, // Branches
+          4: { cellWidth: 20 }, // Status
+        },
+        // Add page number at the bottom of each page
+        didDrawPage: (data: any) => {
+          // Add page number for the current page only
+          const pageNumber = doc.getCurrentPageInfo().pageNumber;
+          const pageCount = doc.getNumberOfPages();
+          doc.setFontSize(8);
+          doc.text(
+            `Page ${pageNumber} of ${pageCount}`,
+            doc.internal.pageSize.width / 2,
+            doc.internal.pageSize.height - 10,
+            { align: 'center' }
+          );
+        }
+      });
+
+      doc.save(`users_${new Date().toISOString().split('T')[0]}.pdf`);
+    } else {
+      // CSV export (keep existing logic)
       const url = `/admin/export/users?${params.toString()}`
       const res = await api.get(url, { responseType: 'blob' })
       const disp = res.headers['content-disposition']
-      const defaultName = format === 'pdf' ? 'users-export.pdf' : 'users-export.csv'
+      const defaultName = 'users-export.csv'
       const filename = disp ? (disp.match(/filename="?([^";]+)"?/)?.[1] || defaultName) : defaultName
-      const mime = format === 'pdf' ? 'application/pdf' : 'text/csv;charset=utf-8'
+      const mime = 'text/csv;charset=utf-8'
       const blob = new Blob([res.data], { type: mime })
       const link = document.createElement('a')
       link.href = window.URL.createObjectURL(blob)
       link.download = filename
       link.click()
       window.URL.revokeObjectURL(link.href)
-    } catch (e: any) {
-      console.error('Export failed:', e)
-      alert(e.response?.data?.message || 'Failed to export users')
-    } finally {
-      setExporting(false)
     }
+  } catch (e: any) {
+    console.error('Export failed:', e)
+    alert(e.response?.data?.message || 'Failed to export users')
+  } finally {
+    setExporting(false)
   }
+}
 
   return (
     <ProtectedRoute allowedRoles={['admin']}>
@@ -444,7 +574,10 @@ export default function AdminUsersPage() {
                               {u.branchAcronyms && u.branchAcronyms.length > 0
                                 ? u.branchAcronyms.includes('ALL')
                                   ? 'All Branches'
-                                  : u.branchAcronyms.join(', ')
+                                  : u.branchAcronyms
+                                      .filter(acronym => acronym !== 'ALL')
+                                      .sort((a, b) => a.localeCompare(b))
+                                      .join(', ')
                                 : '—'}
                             </span>
                             <button

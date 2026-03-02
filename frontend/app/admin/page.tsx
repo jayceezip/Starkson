@@ -83,6 +83,362 @@ export default function AdminPanelPage() {
     }
   }, [user, router, mounted])
 
+  const fetchAllTickets = async () => {
+    // Fetch tickets in batches to get all data
+    let allTickets: any[] = [];
+    let page = 1;
+    const pageSize = 100;
+    
+    while (true) {
+      try {
+        const response = await api.get(`/tickets?page=${page}&limit=${pageSize}`);
+        
+        // Handle different response structures
+        let tickets = [];
+        let totalPages = 1;
+        
+        if (response.data && Array.isArray(response.data)) {
+          // If response is directly an array
+          tickets = response.data;
+          totalPages = 1; // Assume single page
+        } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
+          // If response has data property
+          tickets = response.data.data;
+          totalPages = response.data.pagination?.totalPages || 1;
+        } else if (response.data && response.data.tickets && Array.isArray(response.data.tickets)) {
+          // If response has tickets property
+          tickets = response.data.tickets;
+          totalPages = response.data.pagination?.totalPages || 1;
+        } else {
+          console.error('Unexpected tickets response format:', response.data);
+          break;
+        }
+        
+        if (tickets.length > 0) {
+          allTickets = [...allTickets, ...tickets];
+          
+          if (page < totalPages) {
+            page++;
+          } else {
+            break;
+          }
+        } else {
+          break;
+        }
+      } catch (error) {
+        console.error('Failed to fetch tickets batch:', error);
+        break;
+      }
+    }
+    
+    return allTickets;
+  };
+
+  const fetchAllIncidents = async () => {
+    // Fetch incidents in batches to get all data
+    let allIncidents: any[] = [];
+    let page = 1;
+    const pageSize = 100;
+    
+    while (true) {
+      try {
+        const response = await api.get(`/incidents?page=${page}&limit=${pageSize}`);
+        
+        // Handle different response structures
+        let incidents = [];
+        let totalPages = 1;
+        
+        if (response.data && Array.isArray(response.data)) {
+          // If response is directly an array
+          incidents = response.data;
+          totalPages = 1; // Assume single page
+        } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
+          // If response has data property
+          incidents = response.data.data;
+          totalPages = response.data.pagination?.totalPages || 1;
+        } else if (response.data && response.data.incidents && Array.isArray(response.data.incidents)) {
+          // If response has incidents property
+          incidents = response.data.incidents;
+          totalPages = response.data.pagination?.totalPages || 1;
+        } else {
+          console.error('Unexpected incidents response format:', response.data);
+          break;
+        }
+        
+        if (incidents.length > 0) {
+          allIncidents = [...allIncidents, ...incidents];
+          
+          if (page < totalPages) {
+            page++;
+          } else {
+            break;
+          }
+        } else {
+          break;
+        }
+      } catch (error) {
+        console.error('Failed to fetch incidents batch:', error);
+        break;
+      }
+    }
+    
+    return allIncidents;
+  };
+
+  const handleExportTickets = async (format: 'csv' | 'pdf') => {
+    setExportingTickets(true)
+    try {
+      if (format === 'pdf') {
+        try {
+          // For PDF, generate client-side with header
+          const [jsPDFModule, autoTableModule] = await Promise.all([
+            import('jspdf'),
+            import('jspdf-autotable')
+          ]);
+          
+          const jsPDF = jsPDFModule.default;
+          const autoTable = (autoTableModule as any).default ?? (autoTableModule as any).autoTable;
+          const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+          // Fetch all tickets data by batching
+          let tickets = [];
+          try {
+            tickets = await fetchAllTickets();
+            console.log('Fetched tickets:', tickets.length); // Debug log
+          } catch (fetchError) {
+            console.error('Failed to fetch tickets data:', fetchError);
+            alert('Failed to fetch tickets data. Please try CSV export instead.');
+            setExportingTickets(false);
+            return;
+          }
+
+          if (tickets.length === 0) {
+            alert('No tickets found to export.');
+            setExportingTickets(false);
+            return;
+          }
+
+          // Add logo
+          const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/STARKSON-LG.png` : '';
+          let startY = 14;
+          let logoEndX = 14;
+          
+          if (logoUrl) {
+            try {
+              const imgResp = await fetch(logoUrl);
+              const imgBlob = await imgResp.blob();
+              const base64 = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(imgBlob);
+              });
+              const imgW = 45;
+              const imgH = 45;
+              doc.addImage(base64, 'PNG', 14, 2, imgW, imgH);
+              logoEndX = 14 + imgW + 5;
+              startY = 24;
+            } catch {
+              startY = 14;
+              logoEndX = 14;
+            }
+          }
+          
+          // Title
+          doc.setFontSize(16);
+          doc.text('Tickets Report', logoEndX, startY);
+          
+          // Generation info
+          doc.setFontSize(10);
+          let infoY = startY + 7;
+          doc.text(`Generated: ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })} (PH time) | Total tickets: ${tickets.length}`, logoEndX, infoY);
+
+          // Table data
+          const tableData = tickets.map((t: any) => [
+            t.ticketNumber || t.ticket_number || '—',
+            t.title || '—',
+            t.status || '—',
+            t.priority || '—',
+            t.category || '—',
+            t.assignedTo || t.assigned_to || 'Unassigned',
+            t.createdAt || t.created_at ? new Date(t.createdAt || t.created_at).toLocaleDateString() : '—',
+          ]);
+
+          autoTable(doc, {
+            head: [['Ticket #', 'Title', 'Status', 'Priority', 'Category', 'Assigned To', 'Created']],
+            body: tableData,
+            startY: infoY + 5,
+            styles: { fontSize: 7, cellPadding: 1.5 },
+            headStyles: { fillColor: [66, 66, 66] },
+            columnStyles: {
+              0: { cellWidth: 25 },
+              1: { cellWidth: 45 },
+              2: { cellWidth: 20 },
+              3: { cellWidth: 20 },
+              4: { cellWidth: 25 },
+              5: { cellWidth: 30 },
+              6: { cellWidth: 20 },
+            },
+            didDrawPage: (data: any) => {
+              const pageNumber = doc.getCurrentPageInfo().pageNumber;
+              const pageCount = doc.getNumberOfPages();
+              doc.setFontSize(8);
+              doc.text(
+                `Page ${pageNumber} of ${pageCount}`,
+                doc.internal.pageSize.width / 2,
+                doc.internal.pageSize.height - 10,
+                { align: 'center' }
+              );
+            }
+          });
+
+          doc.save(`tickets_${new Date().toISOString().split('T')[0]}.pdf`);
+        } catch (pdfError) {
+          console.error('PDF generation failed:', pdfError);
+          alert('PDF generation failed. Please try CSV export instead.');
+        }
+      } else {
+        // CSV export - use existing endpoint
+        const res = await api.get('/admin/export/tickets', { responseType: 'blob' });
+        const disp = res.headers['content-disposition'];
+        const filename = disp ? (disp.match(/filename="?([^";]+)"?/)?.[1] || 'tickets-export.csv') : 'tickets-export.csv';
+        downloadBlob(new Blob([res.data], { type: 'text/csv;charset=utf-8' }), filename);
+      }
+    } catch (e) {
+      console.error('Export tickets failed:', e);
+      alert('Failed to export tickets. Please try again.');
+    } finally {
+      setExportingTickets(false);
+    }
+  };
+
+  const handleExportIncidents = async (format: 'csv' | 'pdf') => {
+    setExportingIncidents(true);
+    try {
+      if (format === 'pdf') {
+        try {
+          // For PDF, generate client-side with header
+          const [jsPDFModule, autoTableModule] = await Promise.all([
+            import('jspdf'),
+            import('jspdf-autotable')
+          ]);
+          
+          const jsPDF = jsPDFModule.default;
+          const autoTable = (autoTableModule as any).default ?? (autoTableModule as any).autoTable;
+          const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+          // Fetch all incidents data by batching
+          let incidents = [];
+          try {
+            incidents = await fetchAllIncidents();
+            console.log('Fetched incidents:', incidents.length); // Debug log
+          } catch (fetchError) {
+            console.error('Failed to fetch incidents data:', fetchError);
+            alert('Failed to fetch incidents data. Please try CSV export instead.');
+            setExportingIncidents(false);
+            return;
+          }
+
+          if (incidents.length === 0) {
+            alert('No incidents found to export.');
+            setExportingIncidents(false);
+            return;
+          }
+
+          // Add logo
+          const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/STARKSON-LG.png` : '';
+          let startY = 14;
+          let logoEndX = 14;
+          
+          if (logoUrl) {
+            try {
+              const imgResp = await fetch(logoUrl);
+              const imgBlob = await imgResp.blob();
+              const base64 = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(imgBlob);
+              });
+              const imgW = 45;
+              const imgH = 45;
+              doc.addImage(base64, 'PNG', 14, 2, imgW, imgH);
+              logoEndX = 14 + imgW + 5;
+              startY = 24;
+            } catch {
+              startY = 14;
+              logoEndX = 14;
+            }
+          }
+          
+          // Title
+          doc.setFontSize(16);
+          doc.text('Incidents Report', logoEndX, startY);
+          
+          // Generation info
+          doc.setFontSize(10);
+          let infoY = startY + 7;
+          doc.text(`Generated: ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })} (PH time) | Total incidents: ${incidents.length}`, logoEndX, infoY);
+
+          // Table data
+          const tableData = incidents.map((i: any) => [
+            i.incidentNumber || i.incident_number || '—',
+            i.title || '—',
+            i.status || '—',
+            i.severity || '—',
+            i.category || '—',
+            i.assignedTo || i.assigned_to || 'Unassigned',
+            i.createdAt || i.created_at ? new Date(i.createdAt || i.created_at).toLocaleDateString() : '—',
+          ]);
+
+          autoTable(doc, {
+            head: [['Incident #', 'Title', 'Status', 'Severity', 'Category', 'Assigned To', 'Created']],
+            body: tableData,
+            startY: infoY + 5,
+            styles: { fontSize: 7, cellPadding: 1.5 },
+            headStyles: { fillColor: [66, 66, 66] },
+            columnStyles: {
+              0: { cellWidth: 25 },
+              1: { cellWidth: 45 },
+              2: { cellWidth: 20 },
+              3: { cellWidth: 20 },
+              4: { cellWidth: 25 },
+              5: { cellWidth: 30 },
+              6: { cellWidth: 20 },
+            },
+            didDrawPage: (data: any) => {
+              const pageNumber = doc.getCurrentPageInfo().pageNumber;
+              const pageCount = doc.getNumberOfPages();
+              doc.setFontSize(8);
+              doc.text(
+                `Page ${pageNumber} of ${pageCount}`,
+                doc.internal.pageSize.width / 2,
+                doc.internal.pageSize.height - 10,
+                { align: 'center' }
+              );
+            }
+          });
+
+          doc.save(`incidents_${new Date().toISOString().split('T')[0]}.pdf`);
+        } catch (pdfError) {
+          console.error('PDF generation failed:', pdfError);
+          alert('PDF generation failed. Please try CSV export instead.');
+        }
+      } else {
+        // CSV export - use existing endpoint
+        const res = await api.get('/admin/export/incidents', { responseType: 'blob' });
+        const disp = res.headers['content-disposition'];
+        const filename = disp ? (disp.match(/filename="?([^";]+)"?/)?.[1] || 'incidents-export.csv') : 'incidents-export.csv';
+        downloadBlob(new Blob([res.data], { type: 'text/csv;charset=utf-8' }), filename);
+      }
+    } catch (e: any) {
+      console.error('Export incidents failed:', e);
+      alert(e.response?.data?.message || 'Failed to export incidents');
+    } finally {
+      setExportingIncidents(false);
+    }
+  };
+
   if (!mounted || !user) {
     return (
       <ProtectedRoute allowedRoles={['admin']}>
@@ -200,20 +556,7 @@ export default function AdminPanelPage() {
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={async () => {
-                  setExportingTickets(true)
-                  try {
-                    const res = await api.get('/admin/export/tickets', { responseType: 'blob' })
-                    const disp = res.headers['content-disposition']
-                    const filename = disp ? (disp.match(/filename="?([^";]+)"?/)?.[1] || 'tickets-export.csv') : 'tickets-export.csv'
-                    downloadBlob(new Blob([res.data], { type: 'text/csv;charset=utf-8' }), filename)
-                  } catch (e) {
-                    console.error('Export tickets failed:', e)
-                    alert('Failed to export tickets')
-                  } finally {
-                    setExportingTickets(false)
-                  }
-                }}
+                onClick={() => handleExportTickets('csv')}
                 disabled={exportingTickets}
                 className="flex-1 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-60"
               >
@@ -221,20 +564,7 @@ export default function AdminPanelPage() {
               </button>
               <button
                 type="button"
-                onClick={async () => {
-                  setExportingTickets(true)
-                  try {
-                    const res = await api.get('/admin/export/tickets?format=pdf', { responseType: 'blob' })
-                    const disp = res.headers['content-disposition']
-                    const filename = disp ? (disp.match(/filename="?([^";]+)"?/)?.[1] || 'tickets-export.pdf') : 'tickets-export.pdf'
-                    downloadBlob(new Blob([res.data], { type: 'application/pdf' }), filename)
-                  } catch (e: any) {
-                    console.error('Export tickets failed:', e)
-                    alert(e.response?.data?.message || 'Failed to export tickets')
-                  } finally {
-                    setExportingTickets(false)
-                  }
-                }}
+                onClick={() => handleExportTickets('pdf')}
                 disabled={exportingTickets}
                 className="flex-1 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-60"
               >
@@ -262,20 +592,7 @@ export default function AdminPanelPage() {
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={async () => {
-                  setExportingIncidents(true)
-                  try {
-                    const res = await api.get('/admin/export/incidents', { responseType: 'blob' })
-                    const disp = res.headers['content-disposition']
-                    const filename = disp ? (disp.match(/filename="?([^";]+)"?/)?.[1] || 'incidents-export.csv') : 'incidents-export.csv'
-                    downloadBlob(new Blob([res.data], { type: 'text/csv;charset=utf-8' }), filename)
-                  } catch (e) {
-                    console.error('Export incidents failed:', e)
-                    alert('Failed to export incidents')
-                  } finally {
-                    setExportingIncidents(false)
-                  }
-                }}
+                onClick={() => handleExportIncidents('csv')}
                 disabled={exportingIncidents}
                 className="flex-1 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-60"
               >
@@ -283,20 +600,7 @@ export default function AdminPanelPage() {
               </button>
               <button
                 type="button"
-                onClick={async () => {
-                  setExportingIncidents(true)
-                  try {
-                    const res = await api.get('/admin/export/incidents?format=pdf', { responseType: 'blob' })
-                    const disp = res.headers['content-disposition']
-                    const filename = disp ? (disp.match(/filename="?([^";]+)"?/)?.[1] || 'incidents-export.pdf') : 'incidents-export.pdf'
-                    downloadBlob(new Blob([res.data], { type: 'application/pdf' }), filename)
-                  } catch (e: any) {
-                    console.error('Export incidents failed:', e)
-                    alert(e.response?.data?.message || 'Failed to export incidents')
-                  } finally {
-                    setExportingIncidents(false)
-                  }
-                }}
+                onClick={() => handleExportIncidents('pdf')}
                 disabled={exportingIncidents}
                 className="flex-1 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-60"
               >
@@ -306,10 +610,10 @@ export default function AdminPanelPage() {
           </div>
         </div>
 
-        {/* System Metrics - chart style cards (no Uptime per user request) */}
+        {/* System Metrics - chart style cards */}
         <h2 className="panel-section-title">System Metrics</h2>
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          {/* Tickets this week - bar resets each week; list below = last week's tickets */}
+          {/* Tickets this week */}
           <div className="panel-card">
             <div className="flex items-center justify-between mb-3">
               <div>
@@ -363,7 +667,7 @@ export default function AdminPanelPage() {
             </p>
           </div>
 
-          {/* Incidents by status - pie chart + legend */}
+          {/* Incidents by status */}
           <div className="panel-card">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">
@@ -422,7 +726,7 @@ export default function AdminPanelPage() {
             </div>
           </div>
 
-          {/* Resolved vs open - stacked bar */}
+          {/* Resolved vs open */}
           <div className="panel-card">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">
@@ -491,7 +795,7 @@ export default function AdminPanelPage() {
             </p>
           </div>
 
-          {/* SLA performance - radial style & legend */}
+          {/* SLA performance */}
           <div className="panel-card">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">
