@@ -705,10 +705,11 @@ export default function MaintenanceModal({
             {!manageType ? (
               /* Step 1: Choose what to manage */
               <div className="space-y-4">
-                {/* For Tickets Section */}
+                {/* For Users Section - Moved to the top */}
                 <div>
-                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">For Tickets</h3>
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">For Users</h3>
                   <div className="space-y-2">
+                    {/* Manage Branches Button */}
                     <button
                       type="button"
                       onClick={() => setManageType('branches')}
@@ -734,7 +735,13 @@ export default function MaintenanceModal({
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                       </svg>
                     </button>
+                  </div>
+                </div>
 
+                {/* For Tickets Section */}
+                <div>
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">For Tickets</h3>
+                  <div className="space-y-2">
                     <button
                       type="button"
                       onClick={() => setManageType('category')}
