@@ -20,11 +20,12 @@ const EXPORT_PAGE_SIZE = 1000
 
 router.get('/export', authenticate, authorize('admin'), async (req, res) => {
   try {
-    const { startDate, endDate, format = 'csv', resourceType, action } = req.query
+    const { startDate, endDate, format = 'csv', resourceType, action, search } = req.query
 
     const logs = []
     let offset = 0
     let hasMore = true
+    const searchTerm = search && String(search).trim() ? String(search).trim() : null
 
     while (hasMore) {
       let q = supabase
@@ -47,7 +48,8 @@ router.get('/export', authenticate, authorize('admin'), async (req, res) => {
 
       if (error) throw error
       if (!page || page.length === 0) break
-      logs.push(...page)
+      const toAdd = searchTerm ? page.filter((l) => auditLogMatchesSearch(l, searchTerm)) : page
+      logs.push(...toAdd)
       hasMore = page.length === EXPORT_PAGE_SIZE
       offset += EXPORT_PAGE_SIZE
     }
@@ -84,10 +86,25 @@ router.get('/export', authenticate, authorize('admin'), async (req, res) => {
   }
 })
 
+// Helper: match search term against resource_id or details (ticket number, branch, etc.)
+function auditLogMatchesSearch(log, searchTerm) {
+  if (!searchTerm || !String(searchTerm).trim()) return true
+  const s = String(searchTerm).trim().toLowerCase()
+  if (log.resource_id && String(log.resource_id).toLowerCase().includes(s)) return true
+  if (log.details != null) {
+    const detailsStr = typeof log.details === 'object' ? JSON.stringify(log.details) : String(log.details)
+    if (detailsStr.toLowerCase().includes(s)) return true
+  }
+  return false
+}
+
 // Get audit logs (admin only) - immutable activity logs, who/when/what
+// Optional query: search (matches resource_id, ticket number, branch, etc. in details)
 router.get('/', authenticate, authorize('admin'), async (req, res) => {
   try {
-    const { limit = 200, offset = 0, resourceType, resourceId, action, startDate, endDate } = req.query
+    const { limit = 200, offset = 0, resourceType, resourceId, action, startDate, endDate, search } = req.query
+    const limitNum = Math.min(parseInt(limit, 10) || 200, 500)
+    const offsetNum = Math.max(0, parseInt(offset, 10) || 0)
 
     const startISO = startOfDayPHT(startDate)
     const endISO = endOfDayPHT(endDate)
@@ -96,18 +113,33 @@ router.get('/', authenticate, authorize('admin'), async (req, res) => {
       .select(`
         *,
         user:users!audit_logs_user_id_fkey(id, fullname, username)
-      `, { count: 'exact' })
+      `, search ? undefined : { count: 'exact' })
       .order('created_at', { ascending: false })
     if (resourceType) q = q.eq('resource_type', resourceType)
     if (resourceId) q = q.eq('resource_id', resourceId)
     if (action) q = q.eq('action', action)
     if (startISO) q = q.gte('created_at', startISO)
     if (endISO) q = q.lte('created_at', endISO)
-    q = q.range(parseInt(offset, 10) || 0, (parseInt(offset, 10) || 0) + (parseInt(limit, 10) || 200) - 1)
 
-    const { data: logs, error, count } = await q
+    let logs
+    let total
 
-    if (error) throw error
+    if (search && String(search).trim()) {
+      // When search is provided, fetch more rows then filter in memory (resource_id + details text)
+      const fetchLimit = 5000
+      q = q.range(0, fetchLimit - 1)
+      const { data: rawLogs, error } = await q
+      if (error) throw error
+      const filtered = (rawLogs || []).filter((l) => auditLogMatchesSearch(l, search))
+      total = filtered.length
+      logs = filtered.slice(offsetNum, offsetNum + limitNum)
+    } else {
+      q = q.range(offsetNum, offsetNum + limitNum - 1)
+      const { data: rawLogs, error, count } = await q
+      if (error) throw error
+      logs = rawLogs || []
+      total = count ?? logs.length
+    }
 
     const list = (logs || []).map(l => ({
       id: l.id,
@@ -123,7 +155,7 @@ router.get('/', authenticate, authorize('admin'), async (req, res) => {
       userId: l.user_id
     }))
 
-    res.json({ logs: list, total: count ?? list.length })
+    res.json({ logs: list, total })
   } catch (error) {
     console.error('Get audit logs error:', error)
     res.status(500).json({ message: 'Server error' })

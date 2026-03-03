@@ -278,6 +278,7 @@ function IncidentsPageContent() {
   const [categoryOptions, setCategoryOptions] = useState<{ value: string; label: string }[]>([
     { value: '', label: 'All categories' }
   ])
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -431,6 +432,70 @@ function IncidentsPageContent() {
     return category ? category.replace(/_/g, ' ') : ''
   }
 
+  const csvEscape = (val: unknown) => {
+    if (val == null) return ''
+    const s = String(val)
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+
+  const handleExportIncidentsCSV = () => {
+    const headers = ['Incident #', 'Title', 'Category', 'Severity', 'Status', 'Affected Asset', 'Affected User', 'Source Ticket', 'Created']
+    const rows = filteredIncidents.map((inc) => [
+      inc.incidentNumber || `#${inc.id}`,
+      inc.title || '',
+      getCategoryLabel(inc.category || ''),
+      getSeverityLabel(inc.severity || 'medium'),
+      getStatusLabel(inc.status || 'new'),
+      inc.affectedAsset || '',
+      inc.affectedUser || '',
+      inc.sourceTicketNumber || '',
+      inc.createdAt ? new Date(inc.createdAt).toISOString() : '',
+    ])
+    const csv = ['\uFEFF' + headers.map(csvEscape).join(','), ...rows.map((r) => r.map(csvEscape).join(','))].join('\r\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `incidents-export-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
+  const handleExportIncidentsPDF = async () => {
+    setExporting(true)
+    try {
+      const [jsPDFModule, autoTableModule] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
+      const jsPDF = jsPDFModule.default
+      const autoTable = (autoTableModule as any).default ?? (autoTableModule as any).autoTable
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+      const tableData = filteredIncidents.map((inc) => [
+        inc.incidentNumber || `#${inc.id}`,
+        (inc.title || '').slice(0, 35),
+        getCategoryLabel(inc.category || ''),
+        getSeverityLabel(inc.severity || 'medium'),
+        getStatusLabel(inc.status || 'new'),
+        inc.createdAt ? new Date(inc.createdAt).toLocaleDateString() : '—',
+      ])
+      doc.setFontSize(14)
+      doc.text('Incidents Export', 14, 12)
+      doc.setFontSize(10)
+      doc.text(`Generated: ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })} (PH time) | Total: ${filteredIncidents.length}`, 14, 18)
+      autoTable(doc, {
+        head: [['Incident #', 'Title', 'Category', 'Severity', 'Status', 'Created']],
+        body: tableData,
+        startY: 22,
+        styles: { fontSize: 7, cellPadding: 1.5 },
+        headStyles: { fillColor: [66, 66, 66] },
+      })
+      doc.save(`incidents-export-${new Date().toISOString().slice(0, 10)}.pdf`)
+    } catch (e) {
+      console.error('PDF export failed:', e)
+      alert('Failed to generate PDF.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   if (!mounted || !user) {
     return (
       <ProtectedRoute allowedRoles={['security_officer', 'admin']}>
@@ -525,6 +590,31 @@ function IncidentsPageContent() {
                 </Listbox>
               </div>
             </div>
+            {hasRole(user, 'security_officer', 'admin') && (
+              <div className="mt-4 pt-4 border-t border-gray-200 flex flex-wrap gap-2 items-center">
+                <span className="text-xs font-medium text-gray-500">Export current view (filters + search):</span>
+                <button
+                  type="button"
+                  onClick={handleExportIncidentsCSV}
+                  disabled={exporting || filteredIncidents.length === 0}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                  Export CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportIncidentsPDF}
+                  disabled={exporting || filteredIncidents.length === 0}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {exporting ? <span className="animate-spin rounded-full h-4 w-4 border-2 border-gray-200 border-t-red-600" /> : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+                  )}
+                  Export PDF
+                </button>
+              </div>
+            )}
           </div>
 
           {loading ? (

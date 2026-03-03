@@ -27,7 +27,7 @@ export default function AdminAuditPage() {
   const [data, setData] = useState<{ logs: AuditLog[]; total: number }>({ logs: [], total: 0 })
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
-  const [filters, setFilters] = useState({ resourceType: '', action: '', startDate: '', endDate: '' })
+  const [filters, setFilters] = useState({ resourceType: '', action: '', startDate: '', endDate: '', search: '' })
 
   const toYmdManila = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' })
   const setDatePreset = (preset: 'today' | 'this_week' | 'this_month' | 'last_month' | 'all') => {
@@ -85,6 +85,7 @@ export default function AdminAuditPage() {
       if (filters.action) params.set('action', filters.action)
       if (filters.startDate) params.set('startDate', filters.startDate)
       if (filters.endDate) params.set('endDate', filters.endDate)
+      if (filters.search.trim()) params.set('search', filters.search.trim())
       params.set('limit', String(PAGE_SIZE))
       params.set('offset', String((page - 1) * PAGE_SIZE))
       const res = await api.get(`/audit?${params.toString()}`)
@@ -103,7 +104,7 @@ export default function AdminAuditPage() {
       return
     }
     fetchLogs()
-  }, [mounted, user, router, page, filters.resourceType, filters.action, filters.startDate, filters.endDate])
+  }, [mounted, user, router, page, filters.resourceType, filters.action, filters.startDate, filters.endDate, filters.search])
 
   const totalPages = Math.max(1, Math.ceil(data.total / PAGE_SIZE))
   const startRow = data.total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
@@ -116,6 +117,7 @@ export default function AdminAuditPage() {
     if (filters.action) params.set('action', filters.action)
     if (filters.startDate) params.set('startDate', filters.startDate)
     if (filters.endDate) params.set('endDate', filters.endDate)
+    if (filters.search.trim()) params.set('search', filters.search.trim())
     params.set('format', format)
     const url = `${getApiBaseUrl()}/audit/export?${params.toString()}`
     try {
@@ -142,6 +144,7 @@ export default function AdminAuditPage() {
       if (filters.action) params.set('action', filters.action)
       if (filters.startDate) params.set('startDate', filters.startDate)
       if (filters.endDate) params.set('endDate', filters.endDate)
+      if (filters.search.trim()) params.set('search', filters.search.trim())
       params.set('limit', String(chunkSize))
       params.set('offset', String(offset))
       const res = await api.get(`/audit?${params.toString()}`)
@@ -261,7 +264,7 @@ export default function AdminAuditPage() {
             </svg>
             <p className="text-sm font-semibold text-gray-700">Filters & Export</p>
           </div>
-          <p className="text-xs text-gray-500 mb-2">Date range is in <strong>Philippine time (PHT)</strong> and applies to both the list and export (CSV, JSON, PDF).</p>
+          <p className="text-xs text-gray-500 mb-2">Date range is in <strong>Philippine time (PHT)</strong>. List and export (CSV, JSON, PDF) use the current filters including search (ticket ID, branch, ticket number).</p>
           <div className="flex flex-wrap gap-2 mb-4">
             <span className="text-xs font-medium text-gray-600 self-center mr-1">Quick range:</span>
             <button type="button" onClick={() => setDatePreset('today')} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200">Today</button>
@@ -270,7 +273,22 @@ export default function AdminAuditPage() {
             <button type="button" onClick={() => setDatePreset('last_month')} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200">Last month</button>
             <button type="button" onClick={() => setDatePreset('all')} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200">All time</button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-2 flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                Search (ticket ID, branch, ticket #)
+              </label>
+              <input
+                type="text"
+                value={filters.search}
+                onChange={(e) => { setFilters({ ...filters, search: e.target.value }); setPage(1) }}
+                placeholder="e.g. D01-000001, branch code, ticket number"
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm focus:shadow-md"
+              />
+            </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-2 flex items-center gap-1.5">
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
