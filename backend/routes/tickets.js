@@ -951,6 +951,8 @@ router.post('/:id/comments', authenticate, async (req, res) => {
   }
 })
 // Convert ticket to incident
+// Convert ticket to incident
+// Convert ticket to incident
 router.post('/:id/convert', authenticate, authorize('it_support', 'security_officer', 'admin'), async (req, res) => {
   try {
     const { category, severity, description, assignedTo: requestedAssignedTo } = req.body
@@ -996,14 +998,53 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
     const incidentNumber = `INC-${branchAcronym}-${String(nextSeq).padStart(6, '0')}`
     console.log('🔢 Generated incident number:', incidentNumber)
 
-    // Assign incident to Security Officer (if available)
+    // Assign incident to the selected user (could be admin or security officer)
     let assignedToId = null
+    let assignedUserRole = null
+    let assignedUserName = null
+    
     if (requestedAssignedTo) {
-      const { data: so } = await supabase.from('users').select('id').eq('id', requestedAssignedTo).eq('role', 'security_officer').eq('status', 'active').single()
-      if (so) assignedToId = so.id
+      // Get the user details including role
+      const { data: assignedUser, error: userError } = await supabase
+        .from('users')
+        .select('id, fullname, role')
+        .eq('id', requestedAssignedTo)
+        .eq('status', 'active')
+        .single()
+      
+      if (userError) {
+        console.error('Error fetching assigned user:', userError)
+      } else if (assignedUser) {
+        assignedToId = assignedUser.id
+        assignedUserRole = assignedUser.role
+        assignedUserName = assignedUser.fullname
+        console.log('✅ Assigned to user:', { id: assignedToId, role: assignedUserRole, name: assignedUserName })
+      }
     }
-    if (!assignedToId) assignedToId = await findSecurityOfficer()
-    console.log('🔍 Incident assignment check:', { assignedToId, ticketNumber: ticket.ticket_number })
+    
+    // If no user was selected or user not found, fallback to finding a security officer
+    if (!assignedToId) {
+      assignedToId = await findSecurityOfficer()
+      if (assignedToId) {
+        // Get the found security officer's details
+        const { data: secOfficer } = await supabase
+          .from('users')
+          .select('fullname, role')
+          .eq('id', assignedToId)
+          .single()
+        if (secOfficer) {
+          assignedUserRole = secOfficer.role
+          assignedUserName = secOfficer.fullname
+        }
+      }
+    }
+    
+    console.log('🔍 Incident assignment check:', { 
+      assignedToId, 
+      assignedUserRole,
+      assignedUserName,
+      ticketNumber: ticket.ticket_number 
+    })
 
     // From database: Affected Asset = ticket.affected_system; Affected User = link to ticket creator by id
     const affectedAsset = ticket.affected_system != null && String(ticket.affected_system).trim() !== ''
@@ -1042,8 +1083,8 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
       if (insertError.code === '23505' && insertError.details?.includes('incident_number')) {
         console.log('⚠️ Duplicate incident number detected, retrying with next number...')
         // Retry with incremented number
-        const retryNumber = nextNumber + 1
-        const retryIncidentNumber = `INC-${year}-${String(retryNumber).padStart(6, '0')}`
+        const retryNumber = nextSeq + 1
+        const retryIncidentNumber = `INC-${branchAcronym}-${String(retryNumber).padStart(6, '0')}`
         incidentData.incident_number = retryIncidentNumber
         
         const { data: retryIncident, error: retryError } = await supabase
@@ -1068,13 +1109,13 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
           status: result.status 
         })
         
-        // Continue with retry result...
-        // (The rest of the code will use `result` variable)
-        // But we need to update the incidentNumber variable for notifications
         const finalIncidentNumber = retryIncidentNumber
         
-        // Create notification for assigned Security Officer
+        // Create notification ONLY for the assigned user
         if (assignedToId) {
+          // Get role title for notification
+          const roleTitle = assignedUserRole === 'admin' ? 'Admin' : 'Security Officer'
+          
           await query('notifications', 'insert', {
             data: {
               user_id: assignedToId,
@@ -1085,27 +1126,11 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
               resource_id: result.id
             }
           })
-          // Notify Admin
-          const { data: adminUsers } = await supabase.from('users').select('id').eq('role', 'admin').eq('status', 'active')
-          if (adminUsers && adminUsers.length > 0) {
-            for (const adm of adminUsers) {
-              if (adm.id !== req.user.id) {
-                await query('notifications', 'insert', {
-                  data: {
-                    user_id: adm.id,
-                    type: 'INCIDENT_ASSIGNED',
-                    title: 'Incident Assigned',
-                    message: `Incident ${finalIncidentNumber} converted from ticket ${ticket.ticket_number} was assigned to Security Officer`,
-                    resource_type: 'incident',
-                    resource_id: result.id
-                  }
-                })
-              }
-            }
-          }
+          
+          console.log(`✅ Notification sent to assigned ${roleTitle}:`, assignedToId)
         }
 
-        // Copy ticket comments to incident timeline (keep ticket and comments)
+        // Copy ticket comments to incident timeline
         const retryTicketComments = await query('ticket_comments', 'select', {
           filters: [{ column: 'ticket_id', value: req.params.id }]
         })
@@ -1129,7 +1154,7 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
           console.log(`📋 Copied ${retryTicketComments.length} ticket comments to incident timeline (retry)`)
         }
 
-        // Keep ticket: set status to converted_to_incident (never delete)
+        // Keep ticket: set status to converted_to_incident
         const { error: updateTicketErr } = await supabase
           .from('tickets')
           .update({ status: 'converted_to_incident', updated_at: new Date().toISOString() })
@@ -1178,20 +1203,16 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
           }
         })
         
-        // Add timeline entry for Security Officer assignment
-        if (assignedToId) {
-          const { data: secOfficer } = await supabase
-            .from('users')
-            .select('fullname')
-            .eq('id', assignedToId)
-            .single()
+        // Add timeline entry for assignment with correct role
+        if (assignedToId && assignedUserName) {
+          const roleDisplay = assignedUserRole === 'admin' ? 'Admin' : 'Security Officer'
           
           await query('incident_timeline', 'insert', {
             data: {
               incident_id: result.id,
               user_id: req.user.id,
               action: 'INCIDENT_ASSIGNED',
-              description: `Incident assigned to Security Officer: ${secOfficer?.fullname || 'Security Officer'}`,
+              description: `Incident assigned to ${roleDisplay}: ${assignedUserName}`,
               is_internal: false
             }
           })
@@ -1239,8 +1260,11 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
       }
     }
 
-    // Create notification for assigned Security Officer
+    // Create notification ONLY for the assigned user (whether admin or security officer)
     if (assignedToId) {
+      // Get role title for notification
+      const roleTitle = assignedUserRole === 'admin' ? 'Admin' : 'Security Officer'
+      
       await query('notifications', 'insert', {
         data: {
           user_id: assignedToId,
@@ -1251,27 +1275,14 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
           resource_id: result.id
         }
       })
-      // Notify Admin of incident assignment (so Admin sees all incidents in recent activity/notifications)
-      const { data: adminUsers } = await supabase.from('users').select('id').eq('role', 'admin').eq('status', 'active')
-      if (adminUsers && adminUsers.length > 0) {
-        for (const adm of adminUsers) {
-          if (adm.id !== req.user.id) {
-            await query('notifications', 'insert', {
-              data: {
-                user_id: adm.id,
-                type: 'INCIDENT_ASSIGNED',
-                title: 'Incident Assigned',
-                message: `Incident ${incidentNumber} converted from ticket ${ticket.ticket_number} was assigned to Security Officer`,
-                resource_type: 'incident',
-                resource_id: result.id
-              }
-            })
-          }
-        }
-      }
+      
+      console.log(`✅ Notification sent to assigned ${roleTitle}:`, assignedToId)
+      
+      // DO NOT notify other admins or security officers - only the assigned user gets notified
+      // This prevents security officers from getting notifications when an admin is assigned
     }
 
-    // Copy ticket comments to incident timeline so Security Officers can see user comments (keep ticket comments)
+    // Copy ticket comments to incident timeline
     const ticketComments = await query('ticket_comments', 'select', {
       filters: [{ column: 'ticket_id', value: req.params.id }]
     })
@@ -1295,13 +1306,13 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
       console.log(`📋 Copied ${ticketComments.length} ticket comments to incident timeline`)
     }
 
-    // Keep ticket: set status to converted_to_incident and link via incident.source_ticket_id (never delete)
+    // Keep ticket: set status to converted_to_incident
     const { error: updateTicketError } = await supabase
       .from('tickets')
       .update({ status: 'converted_to_incident', updated_at: new Date().toISOString() })
       .eq('id', ticket.id)
     if (updateTicketError) {
-      console.error('Ticket status update failed (run migration_ticket_converted_status.sql):', updateTicketError)
+      console.error('Ticket status update failed:', updateTicketError)
       return res.status(500).json({
         message: 'Incident was created but ticket status could not be updated. Please run the database migration to add status "converted_to_incident".',
         incidentId: result.id,
@@ -1310,7 +1321,7 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
     }
     console.log('✅ Ticket kept with status converted_to_incident:', { ticketId: ticket.id, ticketNumber: ticket.ticket_number })
 
-    // Notify ticket creator that their ticket was converted to an incident
+    // Notify ticket creator
     if (ticket.created_by) {
       await query('notifications', 'insert', {
         data: {
@@ -1340,25 +1351,21 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
         user_id: req.user.id,
         action: 'CREATED_FROM_TICKET',
         description: `Incident created from ticket ${ticket.ticket_number}`,
-        is_internal: false // Visible to users
+        is_internal: false
       }
     })
     
-    // Add timeline entry for Security Officer assignment
-    if (assignedToId) {
-      const { data: secOfficer } = await supabase
-        .from('users')
-        .select('fullname')
-        .eq('id', assignedToId)
-        .single()
+    // Add timeline entry for assignment with correct role
+    if (assignedToId && assignedUserName) {
+      const roleDisplay = assignedUserRole === 'admin' ? 'Admin' : 'Security Officer'
       
       await query('incident_timeline', 'insert', {
         data: {
           incident_id: result.id,
           user_id: req.user.id,
           action: 'INCIDENT_ASSIGNED',
-          description: `Incident assigned to Security Officer: ${secOfficer?.fullname || 'Security Officer'}`,
-          is_internal: false // Visible to users
+          description: `Incident assigned to ${roleDisplay}: ${assignedUserName}`,
+          is_internal: false
         }
       })
     }
@@ -1380,7 +1387,6 @@ router.post('/:id/convert', authenticate, authorize('it_support', 'security_offi
     res.status(500).json({ message: 'Server error' })
   }
 })
-
 // Delete ticket
 router.delete('/:id', authenticate, async (req, res) => {
   try {
@@ -1524,4 +1530,41 @@ router.get('/:id/comments', authenticate, async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
+// Add to your tickets route file
+router.get('/:id/status', authenticate, async (req, res) => {
+  try {
+    const { data: ticket, error } = await supabase
+      .from('tickets')
+      .select('status')
+      .eq('id', req.params.id)
+      .single()
+
+    if (error || !ticket) {
+      return res.status(404).json({ message: 'Ticket not found' })
+    }
+
+    res.json({ status: ticket.status })
+  } catch (error) {
+    console.error('Get status error:', error)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+// Add to your attachments route file
+router.get('/ticket/:ticketId', authenticate, async (req, res) => {
+  try {
+    const { data: attachments, error } = await supabase
+      .from('attachments')
+      .select('*')
+      .eq('record_type', 'ticket')
+      .eq('record_id', req.params.ticketId)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+
+    res.json(attachments || [])
+  } catch (error) {
+    console.error('Get attachments error:', error)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
 module.exports = router

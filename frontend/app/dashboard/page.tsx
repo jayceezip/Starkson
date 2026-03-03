@@ -186,15 +186,15 @@ export default function DashboardPage() {
   const [user, setUser] = useState<any>(null)
   const [mounted, setMounted] = useState(false)
   const [stats, setStats] = useState({
-  tickets: 0,
-  incidents: 0,
-  openTickets: 0,
-  resolvedTickets: 0,
-  // Security Officer specific stats
-  assignedIncidents: 0,
-  openIncidents: 0,
-  resolvedIncidents: 0, // Make sure this is here
-})
+    tickets: 0,
+    incidents: 0,
+    openTickets: 0,
+    resolvedTickets: 0,
+    // Security Officer specific stats
+    assignedIncidents: 0,
+    openIncidents: 0,
+    resolvedIncidents: 0,
+  })
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [activityLoading, setActivityLoading] = useState(true)
   const [clickedCommentIds, setClickedCommentIds] = useState<Set<string>>(new Set())
@@ -479,9 +479,9 @@ export default function DashboardPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
-                <h3 className="panel-card-title uppercase tracking-wide">Resolved</h3>
+                <h3 className="panel-card-title uppercase tracking-wide">Resolved & Recovered</h3>
                 <p className="panel-card-value">{stats.resolvedTickets}</p>
-                <p className="text-sm text-gray-500 mt-1">Successfully closed</p>
+                <p className="text-sm text-gray-500 mt-1">Resolved tickets & incidents</p>
               </div>
             </>
           ) : isSecurityOfficer ? (
@@ -513,7 +513,7 @@ export default function DashboardPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
-                <h3 className="panel-card-title uppercase tracking-wide">Resolved</h3>
+                <h3 className="panel-card-title uppercase tracking-wide">Resolved & Recovered</h3>
                 <p className="panel-card-value">{stats.resolvedIncidents || 0}</p>
                 <p className="text-sm text-gray-500 mt-1">Recovered & closed incidents</p>
               </div>
@@ -527,9 +527,19 @@ export default function DashboardPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                 </div>
-                <h3 className="panel-card-title uppercase tracking-wide">Total Tickets</h3>
+                <h3 className="panel-card-title uppercase tracking-wide">My Tickets</h3>
                 <p className="panel-card-value">{stats.tickets}</p>
-                <p className="text-sm text-gray-500 mt-1">All time tickets</p>
+                <p className="text-sm text-gray-500 mt-1">Total tickets created</p>
+              </div>
+              <div className="panel-card relative">
+                <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-red-100 text-red-600">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <h3 className="panel-card-title uppercase tracking-wide">My Incidents</h3>
+                <p className="panel-card-value">{stats.incidents}</p>
+                <p className="text-sm text-gray-500 mt-1">Security incidents from your tickets</p>
               </div>
               <div className="panel-card relative">
                 <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-amber-100 text-amber-600">
@@ -547,19 +557,9 @@ export default function DashboardPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
-                <h3 className="panel-card-title uppercase tracking-wide">Resolved</h3>
+                <h3 className="panel-card-title uppercase tracking-wide">Resolved & Recovered</h3>
                 <p className="panel-card-value">{stats.resolvedTickets}</p>
-                <p className="text-sm text-gray-500 mt-1">Successfully closed</p>
-              </div>
-              <div className="panel-card relative">
-                <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-red-100 text-red-600">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                </div>
-                <h3 className="panel-card-title uppercase tracking-wide">Incidents</h3>
-                <p className="panel-card-value">{stats.incidents}</p>
-                <p className="text-sm text-gray-500 mt-1">Security incidents</p>
+                <p className="text-sm text-gray-500 mt-1">Resolved tickets & incidents</p>
               </div>
             </>
           )}

@@ -8,7 +8,7 @@ import api, { getApiBaseUrl } from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser, hasRole } from '@/lib/auth'
 import { formatPinoyDateTime } from '@/lib/date'
-import { getIncidentCategories, getSeverities, getTicketStatuses } from '@/lib/maintenance' // Added getTicketStatuses
+import { getIncidentCategories, getSeverities, getTicketStatuses } from '@/lib/maintenance'
 
 interface TimelineEntry {
   id: string
@@ -74,7 +74,7 @@ interface Attachment {
   created_at?: string
 }
 
-// Modern Status Select Component - COLORS REMOVED with dynamic options
+// Modern Status Select Component with dynamic options
 const ModernStatusSelect = ({ 
   value, 
   onChange, 
@@ -179,25 +179,22 @@ export default function TicketDetailsPage() {
   const [deleting, setDeleting] = useState(false)
   const [incidentCategories, setIncidentCategories] = useState<string[]>([])
   const [severities, setSeverities] = useState<string[]>([])
-  // NEW: Add state for ticket statuses
   const [ticketStatuses, setTicketStatuses] = useState<{ value: string; label: string }[]>([])
 
-  // Refs for polling - updated type to handle string | string[] | undefined
+  // Refs for polling
   const pollingIntervalRef = useRef<NodeJS.Timeout>()
   const lastCommentIdsRef = useRef<Set<number>>(new Set())
+  const lastAttachmentIdsRef = useRef<Set<number>>(new Set())
+  const lastStatusRef = useRef<string>('')
   const isPollingRef = useRef<boolean>(false)
   const ticketIdRef = useRef<string | null>(null)
 
-  // MODIFIED: Fetch all maintenance data when component mounts
+  // Fetch all maintenance data when component mounts
   useEffect(() => {
     if (mounted) {
-      // Get incident categories
       setIncidentCategories(getIncidentCategories())
-      
-      // Get severities
       setSeverities(getSeverities())
       
-      // Get ticket statuses and format them for the dropdown
       const statuses = getTicketStatuses()
       const formattedStatuses = statuses.map(status => ({
         value: status.toLowerCase().replace(/\s+/g, '_'),
@@ -213,7 +210,7 @@ export default function TicketDetailsPage() {
     setUser(currentUser)
   }, [])
 
-  // Fetch incident categories and severities when convert modal opens (refresh)
+  // Fetch incident categories and severities when convert modal opens
   useEffect(() => {
     if (showConvertModal) {
       setIncidentCategories(getIncidentCategories())
@@ -221,12 +218,11 @@ export default function TicketDetailsPage() {
     }
   }, [showConvertModal])
 
-  // MODIFIED: Fetch both security officers and admins when convert modal opens
+  // Fetch both security officers and admins when convert modal opens
   useEffect(() => {
     if (!showConvertModal) return
     setSecurityOfficersLoading(true)
     
-    // Fetch both security officers and admins
     Promise.all([
       api.get('/users/security-officers'),
       api.get('/users/admins')
@@ -235,7 +231,6 @@ export default function TicketDetailsPage() {
         const securityOfficers = Array.isArray(securityRes.data) ? securityRes.data : []
         const admins = Array.isArray(adminsRes.data) ? adminsRes.data : []
         
-        // Combine both arrays and remove duplicates based on id
         const combined = [...securityOfficers, ...admins]
         const uniqueUsers = combined.reduce((acc: any[], current) => {
           const exists = acc.find(user => user.id === current.id)
@@ -252,81 +247,142 @@ export default function TicketDetailsPage() {
   }, [showConvertModal])
 
   // Function to fetch only comments (lighter weight)
-const fetchCommentsOnly = useCallback(async () => {
-  if (!params.id) return
-  
-  // Handle case where params.id is an array (take first element)
-  const ticketId = Array.isArray(params.id) ? params.id[0] : params.id
-  if (!ticketId) return
-  
-  try {
-    const response = await api.get(`/tickets/${ticketId}/comments`)
-    const newComments = response.data as Comment[] // Type assertion here
+  const fetchCommentsOnly = useCallback(async () => {
+    if (!params.id) return
     
-    setTicket(prev => {
-      if (!prev) return prev
+    const ticketId = Array.isArray(params.id) ? params.id[0] : params.id
+    if (!ticketId) return
+    
+    try {
+      const response = await api.get(`/tickets/${ticketId}/comments`)
+      const newComments = response.data as Comment[]
       
-      // Create a set of new comment IDs with proper typing
-      const newCommentIds = new Set<number>(newComments.map((c: Comment) => c.id))
-      
-      // Check if there are any new comments
-      const hasNewComments = Array.from(newCommentIds).some(id => !lastCommentIdsRef.current.has(id))
-      
-      if (hasNewComments) {
-        // Update the ref with new IDs
-        lastCommentIdsRef.current = newCommentIds
+      setTicket(prev => {
+        if (!prev) return prev
         
-        // Return updated ticket with new comments
-        return {
-          ...prev,
-          comments: newComments
+        const newCommentIds = new Set<number>(newComments.map((c: Comment) => c.id))
+        
+        const hasNewComments = Array.from(newCommentIds).some(id => !lastCommentIdsRef.current.has(id))
+        
+        if (hasNewComments) {
+          lastCommentIdsRef.current = newCommentIds
+          
+          return {
+            ...prev,
+            comments: newComments
+          }
         }
-      }
-      
-      return prev
-    })
-  } catch (error) {
-    // Silently fail - don't show errors to user
-    console.debug('Background comment fetch failed:', error)
-  }
-}, [params.id])
+        
+        return prev
+      })
+    } catch (error) {
+      console.debug('Background comment fetch failed:', error)
+    }
+  }, [params.id])
 
-  // Function to fetch full ticket (for status updates, etc.)
-const fetchTicket = useCallback(async () => {
-  if (!params.id) return
-  
-  // Handle case where params.id is an array (take first element)
-  const ticketId = Array.isArray(params.id) ? params.id[0] : params.id
-  if (!ticketId) return
-  
-  setLoading(true)
-  setError(null)
-  
-  try {
-    const response = await api.get(`/tickets/${ticketId}`)
-    const ticketData = response.data as Ticket // Type assertion here
-    setTicket(ticketData)
+  // Function to fetch attachments only (lighter weight)
+  const fetchAttachmentsOnly = useCallback(async () => {
+    if (!params.id) return
     
-    // Update the ref with current comment IDs
-    if (ticketData.comments) {
-      lastCommentIdsRef.current = new Set<number>(ticketData.comments.map((c: Comment) => c.id))
+    const ticketId = Array.isArray(params.id) ? params.id[0] : params.id
+    if (!ticketId) return
+    
+    try {
+      const response = await api.get(`/attachments/ticket/${ticketId}`)
+      const newAttachments = response.data as Attachment[]
+      
+      setTicket(prev => {
+        if (!prev) return prev
+        
+        const newAttachmentIds = new Set<number>(newAttachments.map((a: Attachment) => a.id))
+        
+        const hasNewAttachments = Array.from(newAttachmentIds).some(id => !lastAttachmentIdsRef.current.has(id))
+        
+        if (hasNewAttachments) {
+          lastAttachmentIdsRef.current = newAttachmentIds
+          
+          return {
+            ...prev,
+            attachments: newAttachments
+          }
+        }
+        
+        return prev
+      })
+    } catch (error) {
+      console.debug('Background attachment fetch failed:', error)
     }
+  }, [params.id])
+
+  // Function to fetch status only (lighter weight)
+  const fetchStatusOnly = useCallback(async () => {
+    if (!params.id) return
     
-    ticketIdRef.current = ticketId
-  } catch (error: any) {
-    console.error('Failed to fetch ticket:', error)
+    const ticketId = Array.isArray(params.id) ? params.id[0] : params.id
+    if (!ticketId) return
     
-    if (error.response?.status === 404 || error.message?.includes('404')) {
-      setError('Ticket not found')
-    } else if (error.response?.status === 403) {
-      setError('You do not have permission to view this ticket')
-    } else {
-      setError('Failed to load ticket. Please try again.')
+    try {
+      const response = await api.get(`/tickets/${ticketId}/status`)
+      const { status } = response.data as { status: string }
+      
+      setTicket(prev => {
+        if (!prev) return prev
+        
+        if (status !== lastStatusRef.current) {
+          lastStatusRef.current = status
+          
+          return {
+            ...prev,
+            status
+          }
+        }
+        
+        return prev
+      })
+    } catch (error) {
+      console.debug('Background status fetch failed:', error)
     }
-  } finally {
-    setLoading(false)
-  }
-}, [params.id])
+  }, [params.id])
+
+  // Function to fetch full ticket (for initial load)
+  const fetchTicket = useCallback(async () => {
+    if (!params.id) return
+    
+    const ticketId = Array.isArray(params.id) ? params.id[0] : params.id
+    if (!ticketId) return
+    
+    setLoading(true)
+    setError(null)
+    
+    try {
+      const response = await api.get(`/tickets/${ticketId}`)
+      const ticketData = response.data as Ticket
+      setTicket(ticketData)
+      
+      // Update refs with current IDs
+      if (ticketData.comments) {
+        lastCommentIdsRef.current = new Set<number>(ticketData.comments.map((c: Comment) => c.id))
+      }
+      if (ticketData.attachments) {
+        lastAttachmentIdsRef.current = new Set<number>(ticketData.attachments.map((a: Attachment) => a.id))
+      }
+      lastStatusRef.current = ticketData.status
+      
+      ticketIdRef.current = ticketId
+    } catch (error: any) {
+      console.error('Failed to fetch ticket:', error)
+      
+      if (error.response?.status === 404 || error.message?.includes('404')) {
+        setError('Ticket not found')
+      } else if (error.response?.status === 403) {
+        setError('You do not have permission to view this ticket')
+      } else {
+        setError('Failed to load ticket. Please try again.')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [params.id])
 
   useEffect(() => {
     if (!mounted) return
@@ -339,11 +395,10 @@ const fetchTicket = useCallback(async () => {
     fetchTicket()
   }, [params.id, user, router, mounted, fetchTicket])
 
-  // Start polling when component is mounted and we have a ticket ID
+  // Start polling when component is mounted
   useEffect(() => {
     if (!mounted || !user || !params.id) return
 
-    // Handle case where params.id is an array (take first element)
     const ticketId = Array.isArray(params.id) ? params.id[0] : params.id
     if (!ticketId) return
 
@@ -352,11 +407,15 @@ const fetchTicket = useCallback(async () => {
       clearInterval(pollingIntervalRef.current)
     }
 
-    // Start polling for comments every 2 seconds
+    // Start polling for updates every 2 seconds
     pollingIntervalRef.current = setInterval(() => {
       if (!isPollingRef.current) {
         isPollingRef.current = true
-        fetchCommentsOnly().finally(() => {
+        Promise.all([
+          fetchCommentsOnly(),
+          fetchAttachmentsOnly(),
+          fetchStatusOnly()
+        ]).finally(() => {
           isPollingRef.current = false
         })
       }
@@ -369,13 +428,17 @@ const fetchTicket = useCallback(async () => {
         pollingIntervalRef.current = undefined
       }
     }
-  }, [mounted, user, params.id, fetchCommentsOnly])
+  }, [mounted, user, params.id, fetchCommentsOnly, fetchAttachmentsOnly, fetchStatusOnly])
 
   // Force an immediate fetch when the component becomes visible again
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && params.id) {
-        fetchCommentsOnly()
+        Promise.all([
+          fetchCommentsOnly(),
+          fetchAttachmentsOnly(),
+          fetchStatusOnly()
+        ])
       }
     }
 
@@ -384,7 +447,7 @@ const fetchTicket = useCallback(async () => {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [params.id, fetchCommentsOnly])
+  }, [params.id, fetchCommentsOnly, fetchAttachmentsOnly, fetchStatusOnly])
 
   // Initialize edit data when ticket loads
   useEffect(() => {
@@ -416,77 +479,89 @@ const fetchTicket = useCallback(async () => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index))
   }
 
-  const handleAddComment = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!comment.trim() && selectedFiles.length === 0) return
+  const handleAddComment = async (e?: React.FormEvent | React.KeyboardEvent) => {
+    if (e) {
+      e.preventDefault();
+    }
+    
+    if (!comment.trim() && selectedFiles.length === 0) return;
 
-    // Handle case where params.id is an array (take first element)
-    const ticketId = Array.isArray(params.id) ? params.id[0] : params.id
-    if (!ticketId) return
+    const ticketId = Array.isArray(params.id) ? params.id[0] : params.id;
+    if (!ticketId) return;
 
-    setUploadingFiles(true)
+    setUploadingFiles(true);
     try {
       if (comment.trim()) {
-        await api.post(`/tickets/${ticketId}/comments`, { comment, isInternal })
-        setComment('')
-        setIsInternal(false)
+        await api.post(`/tickets/${ticketId}/comments`, { comment, isInternal });
+        setComment('');
+        setIsInternal(false);
       }
 
       if (selectedFiles.length > 0) {
         const uploadPromises = selectedFiles.map(async (file, index) => {
-          setFileUploadStatus(prev => ({ ...prev, [index]: { status: 'uploading' } }))
+          setFileUploadStatus(prev => ({ ...prev, [index]: { status: 'uploading' } }));
           
           try {
-            const uploadFormData = new FormData()
-            uploadFormData.append('file', file)
+            const uploadFormData = new FormData();
+            uploadFormData.append('file', file);
             
-            const token = localStorage.getItem('token')
+            const token = localStorage.getItem('token');
             const response = await fetch(`${getApiBaseUrl()}/attachments/ticket/${ticketId}`, {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${token}`
               },
               body: uploadFormData
-            })
+            });
             
             if (response.ok) {
-              setFileUploadStatus(prev => ({ ...prev, [index]: { status: 'success', message: 'Uploaded successfully' } }))
+              setFileUploadStatus(prev => ({ ...prev, [index]: { status: 'success', message: 'Uploaded successfully' } }));
             } else {
-              const errorData = await response.json().catch(() => ({}))
-              setFileUploadStatus(prev => ({ ...prev, [index]: { status: 'error', message: errorData.message || 'Upload failed' } }))
-              throw new Error(errorData.message || 'Upload failed')
+              const errorData = await response.json().catch(() => ({}));
+              setFileUploadStatus(prev => ({ ...prev, [index]: { status: 'error', message: errorData.message || 'Upload failed' } }));
+              throw new Error(errorData.message || 'Upload failed');
             }
           } catch (err: any) {
-            setFileUploadStatus(prev => ({ ...prev, [index]: { status: 'error', message: err.message || 'Upload failed' } }))
-            throw err
+            setFileUploadStatus(prev => ({ ...prev, [index]: { status: 'error', message: err.message || 'Upload failed' } }));
+            throw err;
           }
-        })
+        });
         
         try {
-          await Promise.all(uploadPromises)
+          await Promise.all(uploadPromises);
         } catch (err) {
-          console.error('Some file uploads failed:', err)
+          console.error('Some file uploads failed:', err);
         }
         
         setTimeout(() => {
-          setSelectedFiles([])
-          setFileUploadStatus({})
-        }, 2000)
+          setSelectedFiles([]);
+          setFileUploadStatus({});
+        }, 2000);
       }
 
-      // Immediately fetch comments after posting
-      await fetchCommentsOnly()
+      // Immediately fetch updates after posting
+      await Promise.all([
+        fetchCommentsOnly(),
+        fetchAttachmentsOnly()
+      ]);
     } catch (error) {
-      console.error('Failed to add comment/upload files:', error)
+      console.error('Failed to add comment/upload files:', error);
     } finally {
-      setUploadingFiles(false)
+      setUploadingFiles(false);
     }
-  }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault(); // Prevent default to avoid newline
+      handleAddComment(e);
+    }
+    // If Shift+Enter is pressed, let the default behavior happen (new line)
+  };
 
   const handleStatusChange = async (newStatus: string) => {
     if (!ticket || updatingStatus) return;
     
-    // Show confirmation modal for resolved and closed statuses
     if (newStatus === 'resolved' || newStatus === 'closed') {
       setPendingStatus(newStatus);
       setShowStatusConfirmModal(true);
@@ -498,27 +573,18 @@ const fetchTicket = useCallback(async () => {
   const executeStatusChange = async (newStatus: string) => {
     if (!ticket || updatingStatus) return;
     
-    // Handle case where params.id is an array (take first element)
     const ticketId = Array.isArray(params.id) ? params.id[0] : params.id
     if (!ticketId) return
-    
-    // Stop polling while updating
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current)
-      pollingIntervalRef.current = undefined
-    }
     
     setUpdatingStatus(true);
     try {
       await api.put(`/tickets/${ticketId}`, { status: newStatus })
       // Optimistically update the UI
       setTicket(prev => prev ? { ...prev, status: newStatus } : null)
-      // Fetch full ticket to sync with server
-      await fetchTicket()
+      lastStatusRef.current = newStatus
     } catch (error) {
       console.error('Failed to update status:', error)
-      // Revert optimistic update on error
-      await fetchTicket()
+      await fetchStatusOnly()
     } finally {
       setUpdatingStatus(false);
       setPendingStatus(null);
@@ -551,13 +617,11 @@ const fetchTicket = useCallback(async () => {
       return
     }
 
-    // Handle case where params.id is an array (take first element)
     const ticketId = Array.isArray(params.id) ? params.id[0] : params.id
     if (!ticketId) return
 
     setConverting(true)
     try {
-      // Map display categories to database values
       const categoryMap: Record<string, string> = {
         'Phishing': 'phishing',
         'Malware': 'malware',
@@ -568,12 +632,10 @@ const fetchTicket = useCallback(async () => {
         'Other': 'other'
       }
 
-      // Get the selected category display name from the select
       const selectedDisplayName = incidentCategories.find(
         cat => cat.toLowerCase().replace(/\s+/g, '_') === convertData.category
       ) || convertData.category
 
-      // Map to database value or use the raw value if it's already in the correct format
       const dbCategoryValue = categoryMap[selectedDisplayName] || convertData.category
 
       const payload: Record<string, string> = { 
@@ -583,8 +645,6 @@ const fetchTicket = useCallback(async () => {
       }
       
       if (convertData.assignedTo) payload.assignedTo = convertData.assignedTo
-      
-      console.log('Sending payload:', payload) // Debug log
       
       const response = await api.post(`/tickets/${ticketId}/convert`, payload)
       const { incidentId, incidentNumber } = response.data || {}
@@ -599,7 +659,6 @@ const fetchTicket = useCallback(async () => {
       fetchTicket()
     } catch (error: any) {
       console.error('Failed to convert ticket:', error)
-      console.error('Error details:', error.response?.data) // Debug log
       const errorMessage = error.response?.data?.message || 'Failed to convert ticket. It may have already been converted.'
       alert(errorMessage)
       if (error.response?.status === 400 && error.response?.data?.incidentId) {
@@ -619,7 +678,6 @@ const fetchTicket = useCallback(async () => {
       return
     }
 
-    // Handle case where params.id is an array (take first element)
     const ticketId = Array.isArray(params.id) ? params.id[0] : params.id
     if (!ticketId) return
 
@@ -639,7 +697,6 @@ const fetchTicket = useCallback(async () => {
       return
     }
 
-    // Handle case where params.id is an array (take first element)
     const ticketId = Array.isArray(params.id) ? params.id[0] : params.id
     if (!ticketId) return
 
@@ -668,18 +725,12 @@ const fetchTicket = useCallback(async () => {
     return colors[status] || 'bg-gray-500';
   };
 
-  const normalizeStatus = (status: string) => {
-    return status.replace(/ /g, '_');
-  };
-
-  // Helper function to get display label for a status value
   const getStatusDisplayLabel = (statusValue: string) => {
     const matchingOption = ticketStatuses.find(opt => opt.value === statusValue);
     if (matchingOption) return matchingOption.label;
     return statusValue ? statusValue.replace(/_/g, ' ') : 'New';
   };
 
-  // Show error state if ticket not found or permission denied
   if (!mounted || !user || loading) {
     return (
       <ProtectedRoute>
@@ -885,9 +936,11 @@ const fetchTicket = useCallback(async () => {
                   <textarea
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
+                    onKeyDown={handleKeyDown}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y min-h-[88px]"
                     rows={3}
-                    placeholder="Add a comment..."
+                    placeholder="Add a comment... (Press Enter to post, Shift+Enter for new line)"
+                    disabled={uploadingFiles}
                   />
                   
                   <div>
@@ -898,6 +951,7 @@ const fetchTicket = useCallback(async () => {
                       onChange={handleFileChange}
                       className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 file:transition-colors"
                       accept="image/*,.pdf,.doc,.docx,.txt,.log,.csv"
+                      disabled={uploadingFiles}
                     />
                     <p className="text-xs text-gray-500 mt-1.5">Images, PDF, DOC, DOCX, TXT, LOG, CSV (max 10MB per file)</p>
                     
@@ -970,6 +1024,7 @@ const fetchTicket = useCallback(async () => {
                         checked={isInternal}
                         onChange={(e) => setIsInternal(e.target.checked)}
                         className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        disabled={uploadingFiles}
                       />
                       <span className="text-sm text-gray-600">Internal note (not visible to user)</span>
                     </label>
@@ -1320,7 +1375,6 @@ const fetchTicket = useCallback(async () => {
                     <option value="">Select category</option>
                     {incidentCategories.length > 0 ? (
                       incidentCategories.map((category) => {
-                        // Store the display name in the state, we'll map it when sending
                         const dbValue = category.toLowerCase().replace(/\s+/g, '_')
                         return (
                           <option key={category} value={dbValue}>
@@ -1329,7 +1383,6 @@ const fetchTicket = useCallback(async () => {
                         )
                       })
                     ) : (
-                      // Fallback options if no categories are configured
                       <>
                         <option value="phishing">Phishing</option>
                         <option value="malware">Malware</option>
@@ -1366,7 +1419,6 @@ const fetchTicket = useCallback(async () => {
                         )
                       })
                     ) : (
-                      // Fallback options if no severities are configured
                       <>
                         <option value="low">Low</option>
                         <option value="medium">Medium</option>
