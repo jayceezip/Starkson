@@ -10,6 +10,10 @@ router.get('/stats', authenticate, async (req, res) => {
 
     // Initialize counters
     let incidentsCount = 0
+    let ticketsCount = 0
+    let openTicketsCount = 0
+    let resolvedTicketsCount = 0  // Added for admin resolved tickets
+    let resolvedIncidentsCount = 0 // Added for admin resolved incidents
     let assignedIncidents = 0
     let openIncidents = 0
     let resolvedIncidents = 0
@@ -32,6 +36,49 @@ router.get('/stats', authenticate, async (req, res) => {
         .select('*', { count: 'exact', head: true })
       if (!incidentsError) incidentsCount = incCount || 0
       console.log('Total incidents count:', incidentsCount)
+      
+      // For admin, also get ticket stats and resolved incidents
+      if (req.user.role === 'admin') {
+        // Get all tickets for admin
+        const { data: allTickets, error: ticketsError } = await supabase
+          .from('tickets')
+          .select('status')
+        
+        if (!ticketsError && allTickets) {
+          ticketsCount = allTickets.length
+          
+          // OPEN TICKETS: Tickets that are not resolved, closed, or converted
+          openTicketsCount = allTickets.filter(t => 
+            !['closed', 'resolved', 'converted_to_incident'].includes(t.status)
+          ).length
+          
+          // RESOLVED TICKETS: Tickets with resolved or closed status
+          resolvedTicketsCount = allTickets.filter(t => 
+            ['closed', 'resolved'].includes(t.status)
+          ).length
+          
+          console.log('Admin tickets breakdown:', {
+            total: ticketsCount,
+            openTickets: openTicketsCount,
+            resolvedTickets: resolvedTicketsCount
+          })
+        } else {
+          console.error('Error fetching tickets for admin:', ticketsError)
+        }
+        
+        // Get resolved incidents count for admin (recovered or closed)
+        const { count: resolvedIncCount, error: resolvedIncError } = await supabase
+          .from('incidents')
+          .select('*', { count: 'exact', head: true })
+          .in('status', ['recovered', 'closed'])
+        
+        if (!resolvedIncError) {
+          resolvedIncidentsCount = resolvedIncCount || 0
+          console.log('Admin resolved incidents count:', resolvedIncidentsCount)
+        } else {
+          console.error('Error fetching resolved incidents for admin:', resolvedIncError)
+        }
+      }
       
       if (req.user.role === 'security_officer') {
         // ALL incidents assigned to current user
@@ -191,7 +238,47 @@ router.get('/stats', authenticate, async (req, res) => {
     }
     
     // Set stats based on user role
-    if (req.user.role === 'user') {
+    if (req.user.role === 'admin') {
+      // For admin - show all incidents and tickets
+      response.tickets = ticketsCount || 0
+      response.incidents = incidentsCount || 0
+      response.openTickets = openTicketsCount || 0
+      
+      // RESOLVED & RECOVERED: Resolved tickets + resolved incidents
+      response.resolvedTickets = (resolvedTicketsCount || 0) + (resolvedIncidentsCount || 0)
+      
+      console.log('Final admin stats:', {
+        tickets: response.tickets,
+        incidents: response.incidents,
+        openTickets: response.openTickets,
+        resolvedTickets: response.resolvedTickets,
+        resolvedTicketsBreakdown: {
+          fromTickets: resolvedTicketsCount,
+          fromIncidents: resolvedIncidentsCount
+        },
+        assignedIncidents: response.assignedIncidents,
+        openIncidents: response.openIncidents,
+        resolvedIncidents: response.resolvedIncidents
+      })
+    } else if (req.user.role === 'security_officer') {
+      // For security officer - keep incident-specific stats
+      response.incidents = incidentsCount || 0
+      response.assignedIncidents = assignedIncidents || 0
+      response.openIncidents = openIncidents || 0
+      response.resolvedIncidents = resolvedIncidents || 0
+      
+      // For security officer, resolvedTickets could show their resolved incidents
+      // or you might want to keep it separate
+      response.resolvedTickets = resolvedIncidents || 0
+      
+      console.log('Final security officer stats:', {
+        totalIncidents: response.incidents,
+        assignedIncidents: response.assignedIncidents,
+        openIncidents: response.openIncidents,
+        resolvedIncidents: response.resolvedIncidents,
+        resolvedTickets: response.resolvedTickets
+      })
+    } else if (req.user.role === 'user') {
       // MY TICKETS: Only show tickets that are NOT resolved/closed and NOT converted
       response.tickets = userOpenTickets || 0
       
