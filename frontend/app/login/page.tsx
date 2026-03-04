@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -15,10 +15,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+  const hasCheckedAuth = useRef(false)
 
   useEffect(() => {
+    if (hasCheckedAuth.current) return
+    hasCheckedAuth.current = true
     if (getStoredToken()) {
-      router.push('/dashboard')
+      router.replace('/dashboard')
     }
   }, [router])
 
