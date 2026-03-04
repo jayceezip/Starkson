@@ -939,7 +939,7 @@ export default function TicketDetailsPage() {
                     onKeyDown={handleKeyDown}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y min-h-[88px]"
                     rows={3}
-                    placeholder="Add a comment... (Press Enter to post, Shift+Enter for new line)"
+                    placeholder="Add a comment..."
                     disabled={uploadingFiles}
                   />
                   
