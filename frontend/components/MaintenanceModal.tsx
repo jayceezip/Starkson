@@ -1,7 +1,6 @@
 'use client'
 
-import { Fragment, useState, useEffect } from 'react'
-import { Listbox, Transition } from '@headlessui/react'
+import { useState, useEffect } from 'react'
 import api from '@/lib/api'
 import {
   getAffectedSystems,
@@ -1207,12 +1206,12 @@ function BranchDeleteForm({
   onDelete: (acronym: string) => void | Promise<void>
   loading: boolean
 }) {
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selected, setSelected] = useState('')
 
   const handleDelete = async () => {
     if (!selected) return
     await onDelete(selected)
-    setSelected(null)
+    setSelected('')
   }
 
   const realBranches = branches.filter((b) => b.acronym !== 'ALL')
@@ -1227,81 +1226,18 @@ function BranchDeleteForm({
   return (
     <div className="space-y-4">
       <label className="block text-sm font-medium text-gray-700">Select branch to delete</label>
-      <Listbox value={selected} onChange={setSelected}>
-        <div className="relative">
-          <Listbox.Button className="relative w-full flex items-center justify-between gap-2 px-4 py-2.5 bg-white text-gray-900 rounded-xl border border-gray-200 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer text-left">
-            <span className="truncate">
-              {selected
-                ? (() => {
-                    const match = realBranches.find((b) => b.acronym === selected)
-                    return match ? `${match.acronym} – ${match.name}` : selected
-                  })()
-                : 'Select...'}
-            </span>
-            <svg
-              className="w-4 h-4 text-gray-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </Listbox.Button>
-          <Transition
-            as={Fragment}
-            leave="transition ease-in duration-100"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
-            <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-60 overflow-auto focus:outline-none">
-              <Listbox.Option
-                value={null}
-                className={({ active }) =>
-                  `cursor-pointer select-none py-2.5 px-4 text-sm ${
-                    active ? 'bg-gray-50' : ''
-                  }`
-                }
-              >
-                Select...
-              </Listbox.Option>
-              {realBranches.map((b) => (
-                <Listbox.Option
-                  key={b.acronym}
-                  value={b.acronym}
-                  className={({ active, selected }) =>
-                    `cursor-pointer select-none py-2.5 px-4 text-sm flex items-center justify-between ${
-                      active ? 'bg-gray-50' : ''
-                    }`
-                  }
-                >
-                  {({ selected }) => (
-                    <>
-                      <span className="truncate">
-                        {b.acronym} – {b.name}
-                      </span>
-                      {selected && (
-                        <svg
-                          className="w-4 h-4 text-blue-600 flex-shrink-0 ml-2"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M5 13l4 4L19 7"
-                          />
-                        </svg>
-                      )}
-                    </>
-                  )}
-                </Listbox.Option>
-              ))}
-            </Listbox.Options>
-          </Transition>
-        </div>
-      </Listbox>
+      <select
+        value={selected}
+        onChange={(e) => setSelected(e.target.value)}
+        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+      >
+        <option value="">Select...</option>
+        {realBranches.map((b) => (
+          <option key={b.acronym} value={b.acronym}>
+            {b.acronym} – {b.name}
+          </option>
+        ))}
+      </select>
       <button
         type="button"
         onClick={handleDelete}
