@@ -46,7 +46,7 @@ const TICKET_STATUSES_DEFAULT = [
   'Converted to Incident',
 ]
 
-// NEW: Default Priorities
+// Default Priorities
 const PRIORITIES_DEFAULT = [
   'Low',
   'Medium',
@@ -68,10 +68,11 @@ const STORAGE_KEY_CATEGORIES = 'starkson_categories'
 const STORAGE_KEY_INCIDENT_CATEGORIES = 'starkson_incident_categories'
 const STORAGE_KEY_SEVERITIES = 'starkson_severities'
 const STORAGE_KEY_TICKET_STATUSES = 'starkson_ticket_statuses'
-const STORAGE_KEY_PRIORITIES = 'starkson_priorities' // NEW
-const STORAGE_KEY_INCIDENT_STATUSES = 'starkson_incident_statuses' // NEW
+const STORAGE_KEY_PRIORITIES = 'starkson_priorities'
+const STORAGE_KEY_INCIDENT_STATUSES = 'starkson_incident_statuses'
 
-export const INCIDENT_STATUSES_DEFAULTS = INCIDENT_STATUSES_DEFAULT // NEW
+export const INCIDENT_STATUSES_DEFAULTS = INCIDENT_STATUSES_DEFAULT
+
 function getFromStorage<T>(key: string, defaultValue: T[]): T[] {
   if (typeof window === 'undefined') return defaultValue
   try {
@@ -95,12 +96,40 @@ function setToStorage<T>(key: string, value: T[]): void {
   }
 }
 
+// Initialize default values if they don't exist
+export function initializeDefaults(): void {
+  if (typeof window === 'undefined') return
+  
+  // Only set defaults if no data exists
+  if (!localStorage.getItem(STORAGE_KEY_AFFECTED)) {
+    setAffectedSystems(AFFECTED_SYSTEMS_DEFAULT)
+  }
+  if (!localStorage.getItem(STORAGE_KEY_CATEGORIES)) {
+    setCategories(CATEGORIES_DEFAULT)
+  }
+  if (!localStorage.getItem(STORAGE_KEY_PRIORITIES)) {
+    setPriorities(PRIORITIES_DEFAULT)
+  }
+  if (!localStorage.getItem(STORAGE_KEY_INCIDENT_CATEGORIES)) {
+    setIncidentCategories(INCIDENT_CATEGORIES_DEFAULT)
+  }
+  if (!localStorage.getItem(STORAGE_KEY_SEVERITIES)) {
+    setSeverities(SEVERITIES_DEFAULT)
+  }
+  if (!localStorage.getItem(STORAGE_KEY_TICKET_STATUSES)) {
+    setTicketStatuses(TICKET_STATUSES_DEFAULT)
+  }
+  if (!localStorage.getItem(STORAGE_KEY_INCIDENT_STATUSES)) {
+    setIncidentStatuses(INCIDENT_STATUSES_DEFAULT)
+  }
+}
+
 export const AFFECTED_SYSTEMS_DEFAULTS = AFFECTED_SYSTEMS_DEFAULT
 export const CATEGORIES_DEFAULTS = CATEGORIES_DEFAULT
 export const INCIDENT_CATEGORIES_DEFAULTS = INCIDENT_CATEGORIES_DEFAULT
 export const SEVERITIES_DEFAULTS = SEVERITIES_DEFAULT
 export const TICKET_STATUSES_DEFAULTS = TICKET_STATUSES_DEFAULT
-export const PRIORITIES_DEFAULTS = PRIORITIES_DEFAULT // NEW
+export const PRIORITIES_DEFAULTS = PRIORITIES_DEFAULT
 
 export function getAffectedSystems(): string[] {
   return getFromStorage(STORAGE_KEY_AFFECTED, AFFECTED_SYSTEMS_DEFAULT)
@@ -145,7 +174,7 @@ export function setTicketStatuses(list: string[]): void {
   setToStorage(STORAGE_KEY_TICKET_STATUSES, list)
 }
 
-// NEW: Priorities
+// Priorities
 export function getPriorities(): string[] {
   return getFromStorage(STORAGE_KEY_PRIORITIES, PRIORITIES_DEFAULT)
 }
@@ -160,4 +189,58 @@ export function getIncidentStatuses(): string[] {
 
 export function setIncidentStatuses(list: string[]): void {
   setToStorage(STORAGE_KEY_INCIDENT_STATUSES, list)
+}
+
+// Function to fetch/refresh all maintenance data from localStorage
+export function fetchMaintenanceData(): {
+  affectedSystems: string[];
+  categories: string[];
+  priorities: string[];
+  incidentCategories: string[];
+  severities: string[];
+  ticketStatuses: string[];
+  incidentStatuses: string[];
+} {
+  // Force a read from localStorage for all data types
+  const affectedSystems = getFromStorage(STORAGE_KEY_AFFECTED, AFFECTED_SYSTEMS_DEFAULT);
+  const categories = getFromStorage(STORAGE_KEY_CATEGORIES, CATEGORIES_DEFAULT);
+  const priorities = getFromStorage(STORAGE_KEY_PRIORITIES, PRIORITIES_DEFAULT);
+  const incidentCategories = getFromStorage(STORAGE_KEY_INCIDENT_CATEGORIES, INCIDENT_CATEGORIES_DEFAULT);
+  const severities = getFromStorage(STORAGE_KEY_SEVERITIES, SEVERITIES_DEFAULT);
+  const ticketStatuses = getFromStorage(STORAGE_KEY_TICKET_STATUSES, TICKET_STATUSES_DEFAULT);
+  const incidentStatuses = getFromStorage(STORAGE_KEY_INCIDENT_STATUSES, INCIDENT_STATUSES_DEFAULT);
+  
+  return {
+    affectedSystems,
+    categories,
+    priorities,
+    incidentCategories,
+    severities,
+    ticketStatuses,
+    incidentStatuses
+  };
+}
+
+// Optional: Function to reset all data to defaults
+export function resetAllToDefaults(): void {
+  setAffectedSystems(AFFECTED_SYSTEMS_DEFAULT);
+  setCategories(CATEGORIES_DEFAULT);
+  setPriorities(PRIORITIES_DEFAULT);
+  setIncidentCategories(INCIDENT_CATEGORIES_DEFAULT);
+  setSeverities(SEVERITIES_DEFAULT);
+  setTicketStatuses(TICKET_STATUSES_DEFAULT);
+  setIncidentStatuses(INCIDENT_STATUSES_DEFAULT);
+}
+
+// Optional: Function to get all data at once (useful for debugging)
+export function getAllMaintenanceData(): Record<string, string[]> {
+  return {
+    affectedSystems: getAffectedSystems(),
+    categories: getCategories(),
+    priorities: getPriorities(),
+    incidentCategories: getIncidentCategories(),
+    severities: getSeverities(),
+    ticketStatuses: getTicketStatuses(),
+    incidentStatuses: getIncidentStatuses()
+  };
 }

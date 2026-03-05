@@ -7,7 +7,7 @@ import api, { getApiBaseUrl } from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser, setStoredAuth } from '@/lib/auth'
 import { useBranches } from '@/lib/useBranches'
-import { getAffectedSystems, getCategories, getPriorities } from '@/lib/maintenance' // Added getPriorities
+import { getAffectedSystems, getCategories, getPriorities, fetchMaintenanceData, initializeDefaults } from '@/lib/maintenance'
 import SelectDropdown from '@/components/SelectDropdown'
 
 const REQUEST_TYPES = [
@@ -199,6 +199,7 @@ export default function CreateTicketPage() {
   const [user, setUser] = useState<any>(getStoredUser())
   const [userLoaded, setUserLoaded] = useState(false)
   const [priorityOptions, setPriorityOptions] = useState<{ value: string; label: string }[]>([])
+  const [isLoadingMaintenance, setIsLoadingMaintenance] = useState(true)
 
   useEffect(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
@@ -252,24 +253,60 @@ export default function CreateTicketPage() {
   const [otherAffectedSystem, setOtherAffectedSystem] = useState('')
   const [otherCategory, setOtherCategory] = useState('')
 
+  // Initialize defaults on mount
   useEffect(() => {
-    setAffectedSystems(getAffectedSystems())
-    setCategories(getCategories())
-    
-    // Load dynamic priorities
-    const priorities = getPriorities()
-    const formattedPriorities = priorities.map(p => ({
-      value: p.toLowerCase(),
-      label: p
-    }))
-    setPriorityOptions(formattedPriorities)
-    
-    // Set default priority if available
-    if (formattedPriorities.length > 0) {
-      const defaultPriority = formattedPriorities.find(p => p.value === 'medium') || formattedPriorities[0]
-      setFormData(prev => ({ ...prev, priority: defaultPriority.value }))
+    initializeDefaults()
+    // Also log what's in localStorage for debugging
+    if (process.env.NODE_ENV === 'development') {
+      console.log('localStorage categories:', localStorage.getItem('starkson_categories'))
+      console.log('localStorage affected systems:', localStorage.getItem('starkson_affected_systems'))
+      console.log('localStorage priorities:', localStorage.getItem('starkson_priorities'))
     }
   }, [])
+
+  // Load maintenance data with refresh
+  const loadMaintenanceData = useCallback(async () => {
+    setIsLoadingMaintenance(true)
+    try {
+      // Force refresh the maintenance data from localStorage
+      const data = fetchMaintenanceData()
+      
+      console.log('Loaded affected systems:', data.affectedSystems) // Debug log
+      console.log('Loaded categories:', data.categories) // Debug log
+      console.log('Loaded priorities:', data.priorities) // Debug log
+      
+      setAffectedSystems(data.affectedSystems)
+      setCategories(data.categories)
+      
+      // Format priorities
+      const formattedPriorities = data.priorities.map(p => ({
+        value: p.toLowerCase().replace(/\s+/g, '_'),
+        label: p
+      }))
+      setPriorityOptions(formattedPriorities)
+      
+      // Set default priority if available
+      if (formattedPriorities.length > 0) {
+        // Try to find 'medium' or use the first one
+        const defaultPriority = formattedPriorities.find(p => p.value === 'medium') || formattedPriorities[0]
+        setFormData(prev => ({ ...prev, priority: defaultPriority.value }))
+      }
+    } catch (error) {
+      console.error('Error loading maintenance data:', error)
+    } finally {
+      setIsLoadingMaintenance(false)
+    }
+  }, [])
+
+  // Load data on mount and when user changes
+  useEffect(() => {
+    loadMaintenanceData()
+    
+    // Set up an interval to refresh data every 30 seconds
+    const interval = setInterval(loadMaintenanceData, 30000)
+    
+    return () => clearInterval(interval)
+  }, [loadMaintenanceData])
 
   const [files, setFiles] = useState<File[]>([])
   const [uploadStatus, setUploadStatus] = useState<Record<number, { status: 'pending' | 'uploading' | 'success' | 'error', message?: string }>>({})
@@ -277,6 +314,13 @@ export default function CreateTicketPage() {
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [dragActive, setDragActive] = useState(false)
+
+  // Update branch acronym when defaultBranch changes
+  useEffect(() => {
+    if (defaultBranch && !formData.branchAcronym) {
+      setFormData(prev => ({ ...prev, branchAcronym: defaultBranch }))
+    }
+  }, [defaultBranch, formData.branchAcronym])
 
   // Create options with "Others" at the end
   const affectedSystemOptions = [
@@ -469,6 +513,17 @@ export default function CreateTicketPage() {
             </p>
           </div>
 
+          {/* Loading state */}
+          {isLoadingMaintenance && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-center gap-3">
+              <svg className="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <p className="text-sm text-blue-700">Loading maintenance data...</p>
+            </div>
+          )}
+
           {/* No branches assigned: show message and block ticket creation */}
           {userLoaded && noBranchesAssigned && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 mb-6">
@@ -476,6 +531,28 @@ export default function CreateTicketPage() {
               <p className="text-sm text-amber-700 mt-1">
                 Your account does not have any branch assigned yet. Contact your administrator to assign you to a branch so you can create tickets.
               </p>
+            </div>
+          )}
+
+          {/* Debug info - remove in production */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-6 text-xs">
+              <p><strong>Debug:</strong> Affected Systems: {affectedSystems.length} items, Categories: {categories.length} items, Priorities: {priorityOptions.length} items</p>
+              {affectedSystems.length > 0 && (
+                <div className="mt-1">
+                  <p><strong>Affected Systems:</strong> {affectedSystems.join(', ')}</p>
+                </div>
+              )}
+              {categories.length > 0 && (
+                <div className="mt-1">
+                  <p><strong>Categories:</strong> {categories.join(', ')}</p>
+                </div>
+              )}
+              {priorityOptions.length > 0 && (
+                <div className="mt-1">
+                  <p><strong>Priorities:</strong> {priorityOptions.map(p => p.label).join(', ')}</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -585,7 +662,7 @@ export default function CreateTicketPage() {
                       value={formData.affectedSystem}
                       onChange={(v) => setFormData({ ...formData, affectedSystem: v })}
                       options={affectedSystemOptions}
-                      placeholder="Select affected system"
+                      placeholder={isLoadingMaintenance ? "Loading..." : "Select affected system"}
                     />
                     {formData.affectedSystem === 'others' && (
                       <input
@@ -604,7 +681,7 @@ export default function CreateTicketPage() {
                       value={formData.category}
                       onChange={(v) => setFormData({ ...formData, category: v })}
                       options={categoryOptions}
-                      placeholder="Select category"
+                      placeholder={isLoadingMaintenance ? "Loading..." : "Select category"}
                     />
                     {formData.category === 'others' && (
                       <input
@@ -746,7 +823,7 @@ export default function CreateTicketPage() {
               </button>
               <button
                 type="submit"
-                disabled={loading || uploading || noBranchesAssigned}
+                disabled={loading || uploading || noBranchesAssigned || isLoadingMaintenance}
                 className={`
                   inline-flex items-center gap-2 px-6 py-2.5 rounded-xl font-medium text-white
                   bg-gradient-to-r from-blue-600 to-blue-700
