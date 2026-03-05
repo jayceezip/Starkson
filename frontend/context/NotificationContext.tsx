@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react'
 import api from '@/lib/api'
-import { getStoredUser } from '@/lib/auth'
+import { getStoredUser, getStoredToken } from '@/lib/auth'
 
 interface Notification {
   id: string
@@ -43,7 +43,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   const fetchNotifications = useCallback(async (showLoading = true) => {
     const user = getStoredUser()
-    if (!user) {
+    const token = getStoredToken()
+    if (!user || !token) {
       setNotifications([])
       setUnreadCount(0)
       setLoading(false)

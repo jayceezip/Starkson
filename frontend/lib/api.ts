@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { clearStoredAuth } from '@/lib/auth'
 
 // Get the base API URL from environment variable
 export const getApiBaseUrl = () => {
@@ -33,7 +34,9 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token')
+      // Clear both token and user so providers (e.g. NotificationProvider) don't
+      // refetch on next load and trigger another 401 → redirect loop
+      clearStoredAuth()
       window.location.href = '/login'
     }
     return Promise.reject(error)
