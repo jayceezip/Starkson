@@ -24,6 +24,7 @@ app.use('/api/audit', require('./routes/audit'))
 app.use('/api/dashboard', require('./routes/dashboard'))
 app.use('/api/staff', require('./routes/staff'))
 app.use('/api/admin', require('./routes/admin'))
+app.use('/api/maintenance', require('./routes/maintenance'))
 // Attachments route - register before other routes that might conflict
 app.use('/api/attachments', require('./routes/attachments'))
 app.use('/api/sla', require('./routes/sla'))

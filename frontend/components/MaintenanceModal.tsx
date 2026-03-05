@@ -4,19 +4,15 @@ import { useState, useEffect } from 'react'
 import api from '@/lib/api'
 import {
   getAffectedSystems,
-  setAffectedSystems,
   getCategories,
-  setCategories,
   getIncidentCategories,
-  setIncidentCategories,
   getSeverities,
-  setSeverities,
   getTicketStatuses,
-  setTicketStatuses,
   getPriorities,
-  setPriorities,
   getIncidentStatuses,
-  setIncidentStatuses,
+  addMaintenanceItem,
+  deleteMaintenanceItem,
+  clearMaintenanceCache,
 } from '@/lib/maintenance'
 
 type Branch = { acronym: string; name: string }
@@ -378,6 +374,7 @@ export default function MaintenanceModal({
   const [branchesLoading, setBranchesLoading] = useState(false)
   const [branchError, setBranchError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState('')
   // State for view branches modal
   const [showViewBranchesModal, setShowViewBranchesModal] = useState(false)
 
@@ -399,210 +396,322 @@ export default function MaintenanceModal({
     if (isOpen) {
       setManageType(null)
       setActionType(null)
-      setCategoriesState(getCategories())
-      setAffectedSystemsState(getAffectedSystems())
-      setIncidentCategoriesState(getIncidentCategories())
-      setSeveritiesState(getSeverities())
-      setTicketStatusesState(getTicketStatuses())
-      setPrioritiesState(getPriorities())
-      setIncidentStatusesState(getIncidentStatuses())
+      loadMaintenanceData()
       fetchBranches()
       setSuccessMessage('')
+      setErrorMessage('')
     }
   }, [isOpen])
 
-  const refreshLists = () => {
-    setCategoriesState(getCategories())
-    setAffectedSystemsState(getAffectedSystems())
-    setIncidentCategoriesState(getIncidentCategories())
-    setSeveritiesState(getSeverities())
-    setTicketStatusesState(getTicketStatuses())
-    setPrioritiesState(getPriorities())
-    setIncidentStatusesState(getIncidentStatuses())
+  const loadMaintenanceData = async () => {
+    try {
+      const [categories, affectedSystems, incidentCategories, severities, ticketStatuses, priorities, incidentStatuses] = await Promise.all([
+        getCategories(),
+        getAffectedSystems(),
+        getIncidentCategories(),
+        getSeverities(),
+        getTicketStatuses(),
+        getPriorities(),
+        getIncidentStatuses(),
+      ])
+      setCategoriesState(categories)
+      setAffectedSystemsState(affectedSystems)
+      setIncidentCategoriesState(incidentCategories)
+      setSeveritiesState(severities)
+      setTicketStatusesState(ticketStatuses)
+      setPrioritiesState(priorities)
+      setIncidentStatusesState(incidentStatuses)
+    } catch (error) {
+      console.error('Error loading maintenance data:', error)
+    }
   }
 
-  const handleAddCategory = (name: string) => {
+  const refreshLists = async () => {
+    await loadMaintenanceData()
+  }
+
+  // Dispatch custom event to notify other components of maintenance data changes
+  const notifyMaintenanceDataChange = () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('maintenanceDataChanged'))
+    }
+  }
+
+  const handleAddCategory = async (name: string) => {
     const trimmed = name.trim()
     if (!trimmed) return
-    const list = getCategories()
-    if (list.includes(trimmed)) return
-    setCategories([...list, trimmed])
-    refreshLists()
-    setSuccessMessage(`Category "${trimmed}" added successfully`)
-    // Close modal after successful addition
-    setTimeout(() => {
-      onClose()
-    }, 500)
+    try {
+      const list = await getCategories()
+      if (list.includes(trimmed)) {
+        setSuccessMessage(`Category "${trimmed}" already exists`)
+        return
+      }
+      await addMaintenanceItem('category', trimmed)
+      clearMaintenanceCache()
+      await refreshLists()
+      notifyMaintenanceDataChange()
+      setSuccessMessage(`Category "${trimmed}" added successfully`)
+      setErrorMessage('')
+      setTimeout(() => {
+        onClose()
+      }, 500)
+    } catch (error: any) {
+      console.error('Add category error:', error)
+      const errorMsg = error.response?.data?.message || error.message || `Failed to add category "${trimmed}"`
+      setErrorMessage(errorMsg)
+      setSuccessMessage('')
+    }
   }
 
   
-  const handleDeleteCategory = (name: string) => {
-    const list = getCategories().filter((c) => c !== name)
-    setCategories(list)
-    refreshLists()
-    setSuccessMessage(`Category "${name}" deleted successfully`)
-    // Close modal after successful deletion
-    setTimeout(() => {
-      onClose()
-    }, 500)
+  const handleDeleteCategory = async (name: string) => {
+    try {
+      await deleteMaintenanceItem('category', name)
+      clearMaintenanceCache()
+      await refreshLists()
+      notifyMaintenanceDataChange()
+      setSuccessMessage(`Category "${name}" deleted successfully`)
+      setTimeout(() => {
+        onClose()
+      }, 500)
+    } catch (error: any) {
+      setErrorMessage(error.response?.data?.message || `Failed to delete category "${name}"`)
+      setSuccessMessage('')
+    }
   }
 
-  const handleAddAffectedSystem = (name: string) => {
+  const handleAddAffectedSystem = async (name: string) => {
     const trimmed = name.trim()
     if (!trimmed) return
-    const list = getAffectedSystems()
-    if (list.includes(trimmed)) return
-    setAffectedSystems([...list, trimmed])
-    refreshLists()
-    setSuccessMessage(`Affected System "${trimmed}" added successfully`)
-    // Close modal after successful addition
-    setTimeout(() => {
-      onClose()
-    }, 500)
+    try {
+      const list = await getAffectedSystems()
+      if (list.includes(trimmed)) {
+        setSuccessMessage(`Affected System "${trimmed}" already exists`)
+        return
+      }
+      await addMaintenanceItem('affected_system', trimmed)
+      clearMaintenanceCache()
+      await refreshLists()
+      notifyMaintenanceDataChange()
+      setSuccessMessage(`Affected System "${trimmed}" added successfully`)
+      setTimeout(() => {
+        onClose()
+      }, 500)
+    } catch (error: any) {
+      setErrorMessage(error.response?.data?.message || `Failed to add affected system "${trimmed}"`)
+      setSuccessMessage('')
+    }
   }
 
-  const handleDeleteAffectedSystem = (name: string) => {
-    const list = getAffectedSystems().filter((s) => s !== name)
-    setAffectedSystems(list)
-    refreshLists()
-    setSuccessMessage(`Affected System "${name}" deleted successfully`)
-    // Close modal after successful deletion
-    setTimeout(() => {
-      onClose()
-    }, 500)
+  const handleDeleteAffectedSystem = async (name: string) => {
+    try {
+      await deleteMaintenanceItem('affected_system', name)
+      clearMaintenanceCache()
+      await refreshLists()
+      notifyMaintenanceDataChange()
+      setSuccessMessage(`Affected System "${name}" deleted successfully`)
+      setTimeout(() => {
+        onClose()
+      }, 500)
+    } catch (error: any) {
+      setErrorMessage(error.response?.data?.message || `Failed to delete affected system "${name}"`)
+      setSuccessMessage('')
+    }
   }
 
-  const handleAddIncidentCategory = (name: string) => {
+  const handleAddIncidentCategory = async (name: string) => {
     const trimmed = name.trim()
     if (!trimmed) return
-    const list = getIncidentCategories()
-    if (list.includes(trimmed)) return
-    setIncidentCategories([...list, trimmed])
-    refreshLists()
-    setSuccessMessage(`Incident Category "${trimmed}" added successfully`)
-    // Close modal after successful addition
-    setTimeout(() => {
-      onClose()
-    }, 500)
+    try {
+      const list = await getIncidentCategories()
+      if (list.includes(trimmed)) {
+        setSuccessMessage(`Incident Category "${trimmed}" already exists`)
+        return
+      }
+      await addMaintenanceItem('incident_category', trimmed)
+      clearMaintenanceCache()
+      await refreshLists()
+      setSuccessMessage(`Incident Category "${trimmed}" added successfully`)
+      setTimeout(() => {
+        onClose()
+      }, 500)
+    } catch (error: any) {
+      setErrorMessage(error.response?.data?.message || `Failed to add incident category "${trimmed}"`)
+      setSuccessMessage('')
+    }
   }
 
-  const handleDeleteIncidentCategory = (name: string) => {
-    const list = getIncidentCategories().filter((c) => c !== name)
-    setIncidentCategories(list)
-    refreshLists()
-    setSuccessMessage(`Incident Category "${name}" deleted successfully`)
-    // Close modal after successful deletion
-    setTimeout(() => {
-      onClose()
-    }, 500)
+  const handleDeleteIncidentCategory = async (name: string) => {
+    try {
+      await deleteMaintenanceItem('incident_category', name)
+      clearMaintenanceCache()
+      await refreshLists()
+      setSuccessMessage(`Incident Category "${name}" deleted successfully`)
+      setTimeout(() => {
+        onClose()
+      }, 500)
+    } catch (error: any) {
+      setErrorMessage(error.response?.data?.message || `Failed to delete incident category "${name}"`)
+      setSuccessMessage('')
+    }
   }
 
   // Handle Add Severity
-  const handleAddSeverity = (name: string) => {
+  const handleAddSeverity = async (name: string) => {
     const trimmed = name.trim()
     if (!trimmed) return
-    const list = getSeverities()
-    if (list.includes(trimmed)) return
-    setSeverities([...list, trimmed])
-    refreshLists()
-    setSuccessMessage(`Severity "${trimmed}" added successfully`)
-    // Close modal after successful addition
-    setTimeout(() => {
-      onClose()
-    }, 500)
+    try {
+      const list = await getSeverities()
+      if (list.includes(trimmed)) {
+        setSuccessMessage(`Severity "${trimmed}" already exists`)
+        return
+      }
+      await addMaintenanceItem('severity', trimmed)
+      clearMaintenanceCache()
+      await refreshLists()
+      setSuccessMessage(`Severity "${trimmed}" added successfully`)
+      setTimeout(() => {
+        onClose()
+      }, 500)
+    } catch (error: any) {
+      setErrorMessage(error.response?.data?.message || `Failed to add severity "${trimmed}"`)
+      setSuccessMessage('')
+    }
   }
 
   // Handle Delete Severity
-  const handleDeleteSeverity = (name: string) => {
-    const list = getSeverities().filter((s) => s !== name)
-    setSeverities(list)
-    refreshLists()
-    setSuccessMessage(`Severity "${name}" deleted successfully`)
-    // Close modal after successful deletion
-    setTimeout(() => {
-      onClose()
-    }, 500)
+  const handleDeleteSeverity = async (name: string) => {
+    try {
+      await deleteMaintenanceItem('severity', name)
+      clearMaintenanceCache()
+      await refreshLists()
+      setSuccessMessage(`Severity "${name}" deleted successfully`)
+      setTimeout(() => {
+        onClose()
+      }, 500)
+    } catch (error: any) {
+      setErrorMessage(error.response?.data?.message || `Failed to delete severity "${name}"`)
+      setSuccessMessage('')
+    }
   }
 
   // Handle Add Ticket Status
-  const handleAddTicketStatus = (name: string) => {
+  const handleAddTicketStatus = async (name: string) => {
     const trimmed = name.trim()
     if (!trimmed) return
-    const list = getTicketStatuses()
-    if (list.includes(trimmed)) return
-    setTicketStatuses([...list, trimmed])
-    refreshLists()
-    setSuccessMessage(`Ticket Status "${trimmed}" added successfully`)
-    // Close modal after successful addition
-    setTimeout(() => {
-      onClose()
-    }, 500)
+    try {
+      const list = await getTicketStatuses()
+      if (list.includes(trimmed)) {
+        setSuccessMessage(`Ticket Status "${trimmed}" already exists`)
+        return
+      }
+      await addMaintenanceItem('ticket_status', trimmed)
+      clearMaintenanceCache()
+      await refreshLists()
+      setSuccessMessage(`Ticket Status "${trimmed}" added successfully`)
+      setTimeout(() => {
+        onClose()
+      }, 500)
+    } catch (error: any) {
+      setErrorMessage(error.response?.data?.message || `Failed to add ticket status "${trimmed}"`)
+      setSuccessMessage('')
+    }
   }
 
   // Handle Delete Ticket Status
-  const handleDeleteTicketStatus = (name: string) => {
-    const list = getTicketStatuses().filter((s) => s !== name)
-    setTicketStatuses(list)
-    refreshLists()
-    setSuccessMessage(`Ticket Status "${name}" deleted successfully`)
-    // Close modal after successful deletion
-    setTimeout(() => {
-      onClose()
-    }, 500)
+  const handleDeleteTicketStatus = async (name: string) => {
+    try {
+      await deleteMaintenanceItem('ticket_status', name)
+      clearMaintenanceCache()
+      await refreshLists()
+      setSuccessMessage(`Ticket Status "${name}" deleted successfully`)
+      setTimeout(() => {
+        onClose()
+      }, 500)
+    } catch (error: any) {
+      setErrorMessage(error.response?.data?.message || `Failed to delete ticket status "${name}"`)
+      setSuccessMessage('')
+    }
   }
 
   // Handle Add Priority
-  const handleAddPriority = (name: string) => {
+  const handleAddPriority = async (name: string) => {
     const trimmed = name.trim()
     if (!trimmed) return
-    const list = getPriorities()
-    if (list.includes(trimmed)) return
-    setPriorities([...list, trimmed])
-    refreshLists()
-    setSuccessMessage(`Priority "${trimmed}" added successfully`)
-    // Close modal after successful addition
-    setTimeout(() => {
-      onClose()
-    }, 500)
+    try {
+      const list = await getPriorities()
+      if (list.includes(trimmed)) {
+        setSuccessMessage(`Priority "${trimmed}" already exists`)
+        return
+      }
+      await addMaintenanceItem('priority', trimmed)
+      clearMaintenanceCache()
+      await refreshLists()
+      notifyMaintenanceDataChange()
+      setSuccessMessage(`Priority "${trimmed}" added successfully`)
+      setTimeout(() => {
+        onClose()
+      }, 500)
+    } catch (error: any) {
+      setErrorMessage(error.response?.data?.message || `Failed to add priority "${trimmed}"`)
+      setSuccessMessage('')
+    }
   }
 
   // Handle Delete Priority
-  const handleDeletePriority = (name: string) => {
-    const list = getPriorities().filter((p) => p !== name)
-    setPriorities(list)
-    refreshLists()
-    setSuccessMessage(`Priority "${name}" deleted successfully`)
-    // Close modal after successful deletion
-    setTimeout(() => {
-      onClose()
-    }, 500)
+  const handleDeletePriority = async (name: string) => {
+    try {
+      await deleteMaintenanceItem('priority', name)
+      clearMaintenanceCache()
+      await refreshLists()
+      notifyMaintenanceDataChange()
+      setSuccessMessage(`Priority "${name}" deleted successfully`)
+      setTimeout(() => {
+        onClose()
+      }, 500)
+    } catch (error: any) {
+      setErrorMessage(error.response?.data?.message || `Failed to delete priority "${name}"`)
+      setSuccessMessage('')
+    }
   }
 
   // Handle Add Incident Status
-  const handleAddIncidentStatus = (name: string) => {
+  const handleAddIncidentStatus = async (name: string) => {
     const trimmed = name.trim()
     if (!trimmed) return
-    const list = getIncidentStatuses()
-    if (list.includes(trimmed)) return
-    setIncidentStatuses([...list, trimmed])
-    refreshLists()
-    setSuccessMessage(`Incident Status "${trimmed}" added successfully`)
-    // Close modal after successful addition
-    setTimeout(() => {
-      onClose()
-    }, 500)
+    try {
+      const list = await getIncidentStatuses()
+      if (list.includes(trimmed)) {
+        setSuccessMessage(`Incident Status "${trimmed}" already exists`)
+        return
+      }
+      await addMaintenanceItem('incident_status', trimmed)
+      clearMaintenanceCache()
+      await refreshLists()
+      setSuccessMessage(`Incident Status "${trimmed}" added successfully`)
+      setTimeout(() => {
+        onClose()
+      }, 500)
+    } catch (error: any) {
+      setErrorMessage(error.response?.data?.message || `Failed to add incident status "${trimmed}"`)
+      setSuccessMessage('')
+    }
   }
 
   // Handle Delete Incident Status
-  const handleDeleteIncidentStatus = (name: string) => {
-    const list = getIncidentStatuses().filter((s) => s !== name)
-    setIncidentStatuses(list)
-    refreshLists()
-    setSuccessMessage(`Incident Status "${name}" deleted successfully`)
-    // Close modal after successful deletion
-    setTimeout(() => {
-      onClose()
-    }, 500)
+  const handleDeleteIncidentStatus = async (name: string) => {
+    try {
+      await deleteMaintenanceItem('incident_status', name)
+      clearMaintenanceCache()
+      await refreshLists()
+      setSuccessMessage(`Incident Status "${name}" deleted successfully`)
+      setTimeout(() => {
+        onClose()
+      }, 500)
+    } catch (error: any) {
+      setErrorMessage(error.response?.data?.message || `Failed to delete incident status "${name}"`)
+      setSuccessMessage('')
+    }
   }
 
   const handleAddBranch = async (acronym: string, name: string) => {
@@ -699,6 +808,16 @@ export default function MaintenanceModal({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
                 {successMessage}
+              </div>
+            )}
+
+            {/* Error Message */}
+            {errorMessage && (
+              <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2">
+                <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {errorMessage}
               </div>
             )}
 

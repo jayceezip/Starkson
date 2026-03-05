@@ -253,23 +253,17 @@ export default function CreateTicketPage() {
   const [otherAffectedSystem, setOtherAffectedSystem] = useState('')
   const [otherCategory, setOtherCategory] = useState('')
 
-  // Initialize defaults on mount
+  // Initialize defaults on mount (no longer needed but kept for compatibility)
   useEffect(() => {
-    initializeDefaults()
-    // Also log what's in localStorage for debugging
-    if (process.env.NODE_ENV === 'development') {
-      console.log('localStorage categories:', localStorage.getItem('starkson_categories'))
-      console.log('localStorage affected systems:', localStorage.getItem('starkson_affected_systems'))
-      console.log('localStorage priorities:', localStorage.getItem('starkson_priorities'))
-    }
+    // initializeDefaults() is now a no-op since we use the database
   }, [])
 
   // Load maintenance data with refresh
   const loadMaintenanceData = useCallback(async () => {
     setIsLoadingMaintenance(true)
     try {
-      // Force refresh the maintenance data from localStorage
-      const data = fetchMaintenanceData()
+      // Fetch maintenance data from API
+      const data = await fetchMaintenanceData()
       
       console.log('Loaded affected systems:', data.affectedSystems) // Debug log
       console.log('Loaded categories:', data.categories) // Debug log
@@ -305,7 +299,16 @@ export default function CreateTicketPage() {
     // Set up an interval to refresh data every 30 seconds
     const interval = setInterval(loadMaintenanceData, 30000)
     
-    return () => clearInterval(interval)
+    // Listen for maintenance data changes from the maintenance modal
+    const handleMaintenanceDataChange = () => {
+      loadMaintenanceData()
+    }
+    window.addEventListener('maintenanceDataChanged', handleMaintenanceDataChange)
+    
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('maintenanceDataChanged', handleMaintenanceDataChange)
+    }
   }, [loadMaintenanceData])
 
   const [files, setFiles] = useState<File[]>([])
@@ -531,28 +534,6 @@ export default function CreateTicketPage() {
               <p className="text-sm text-amber-700 mt-1">
                 Your account does not have any branch assigned yet. Contact your administrator to assign you to a branch so you can create tickets.
               </p>
-            </div>
-          )}
-
-          {/* Debug info - remove in production */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-6 text-xs">
-              <p><strong>Debug:</strong> Affected Systems: {affectedSystems.length} items, Categories: {categories.length} items, Priorities: {priorityOptions.length} items</p>
-              {affectedSystems.length > 0 && (
-                <div className="mt-1">
-                  <p><strong>Affected Systems:</strong> {affectedSystems.join(', ')}</p>
-                </div>
-              )}
-              {categories.length > 0 && (
-                <div className="mt-1">
-                  <p><strong>Categories:</strong> {categories.join(', ')}</p>
-                </div>
-              )}
-              {priorityOptions.length > 0 && (
-                <div className="mt-1">
-                  <p><strong>Priorities:</strong> {priorityOptions.map(p => p.label).join(', ')}</p>
-                </div>
-              )}
             </div>
           )}
 

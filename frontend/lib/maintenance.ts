@@ -1,5 +1,7 @@
-// Default lists for ticket form dropdowns. Can be extended via Maintenance modal (stored in localStorage).
+// Maintenance data management - now using database API instead of localStorage
+import api from './api'
 
+// Default lists for ticket form dropdowns (used as fallback if API fails)
 const AFFECTED_SYSTEMS_DEFAULT = [
   'Windows 11',
   'Viber',
@@ -27,7 +29,6 @@ const INCIDENT_CATEGORIES_DEFAULT = [
   'Other',
 ]
 
-// Default Severities
 const SEVERITIES_DEFAULT = [
   'Low',
   'Medium',
@@ -35,7 +36,6 @@ const SEVERITIES_DEFAULT = [
   'Critical',
 ]
 
-// Default Ticket Statuses
 const TICKET_STATUSES_DEFAULT = [
   'New',
   'Assigned',
@@ -46,7 +46,6 @@ const TICKET_STATUSES_DEFAULT = [
   'Converted to Incident',
 ]
 
-// Default Priorities
 const PRIORITIES_DEFAULT = [
   'Low',
   'Medium',
@@ -63,67 +62,7 @@ const INCIDENT_STATUSES_DEFAULT = [
   'Closed',
 ]
 
-const STORAGE_KEY_AFFECTED = 'starkson_affected_systems'
-const STORAGE_KEY_CATEGORIES = 'starkson_categories'
-const STORAGE_KEY_INCIDENT_CATEGORIES = 'starkson_incident_categories'
-const STORAGE_KEY_SEVERITIES = 'starkson_severities'
-const STORAGE_KEY_TICKET_STATUSES = 'starkson_ticket_statuses'
-const STORAGE_KEY_PRIORITIES = 'starkson_priorities'
-const STORAGE_KEY_INCIDENT_STATUSES = 'starkson_incident_statuses'
-
 export const INCIDENT_STATUSES_DEFAULTS = INCIDENT_STATUSES_DEFAULT
-
-function getFromStorage<T>(key: string, defaultValue: T[]): T[] {
-  if (typeof window === 'undefined') return defaultValue
-  try {
-    const stored = localStorage.getItem(key)
-    if (stored) {
-      const parsed = JSON.parse(stored) as T[]
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed
-    }
-  } catch {
-    // ignore
-  }
-  return defaultValue
-}
-
-function setToStorage<T>(key: string, value: T[]): void {
-  if (typeof window === 'undefined') return
-  try {
-    localStorage.setItem(key, JSON.stringify(value))
-  } catch {
-    // ignore
-  }
-}
-
-// Initialize default values if they don't exist
-export function initializeDefaults(): void {
-  if (typeof window === 'undefined') return
-  
-  // Only set defaults if no data exists
-  if (!localStorage.getItem(STORAGE_KEY_AFFECTED)) {
-    setAffectedSystems(AFFECTED_SYSTEMS_DEFAULT)
-  }
-  if (!localStorage.getItem(STORAGE_KEY_CATEGORIES)) {
-    setCategories(CATEGORIES_DEFAULT)
-  }
-  if (!localStorage.getItem(STORAGE_KEY_PRIORITIES)) {
-    setPriorities(PRIORITIES_DEFAULT)
-  }
-  if (!localStorage.getItem(STORAGE_KEY_INCIDENT_CATEGORIES)) {
-    setIncidentCategories(INCIDENT_CATEGORIES_DEFAULT)
-  }
-  if (!localStorage.getItem(STORAGE_KEY_SEVERITIES)) {
-    setSeverities(SEVERITIES_DEFAULT)
-  }
-  if (!localStorage.getItem(STORAGE_KEY_TICKET_STATUSES)) {
-    setTicketStatuses(TICKET_STATUSES_DEFAULT)
-  }
-  if (!localStorage.getItem(STORAGE_KEY_INCIDENT_STATUSES)) {
-    setIncidentStatuses(INCIDENT_STATUSES_DEFAULT)
-  }
-}
-
 export const AFFECTED_SYSTEMS_DEFAULTS = AFFECTED_SYSTEMS_DEFAULT
 export const CATEGORIES_DEFAULTS = CATEGORIES_DEFAULT
 export const INCIDENT_CATEGORIES_DEFAULTS = INCIDENT_CATEGORIES_DEFAULT
@@ -131,116 +70,206 @@ export const SEVERITIES_DEFAULTS = SEVERITIES_DEFAULT
 export const TICKET_STATUSES_DEFAULTS = TICKET_STATUSES_DEFAULT
 export const PRIORITIES_DEFAULTS = PRIORITIES_DEFAULT
 
-export function getAffectedSystems(): string[] {
-  return getFromStorage(STORAGE_KEY_AFFECTED, AFFECTED_SYSTEMS_DEFAULT)
+// Cache for maintenance data
+let maintenanceCache: {
+  affectedSystems?: string[]
+  categories?: string[]
+  priorities?: string[]
+  incidentCategories?: string[]
+  severities?: string[]
+  ticketStatuses?: string[]
+  incidentStatuses?: string[]
+  lastFetched?: number
+} = {}
+
+const CACHE_DURATION = 60000 // 1 minute cache
+
+// Fetch maintenance data from API
+async function fetchFromAPI(type: string): Promise<string[]> {
+  try {
+    const response = await api.get(`/maintenance/${type}`)
+    return response.data || []
+  } catch (error) {
+    console.error(`Error fetching ${type} from API:`, error)
+    // Return defaults on error
+    const defaultMap: Record<string, string[]> = {
+      'affected_system': AFFECTED_SYSTEMS_DEFAULT,
+      'category': CATEGORIES_DEFAULT,
+      'priority': PRIORITIES_DEFAULT,
+      'incident_category': INCIDENT_CATEGORIES_DEFAULT,
+      'severity': SEVERITIES_DEFAULT,
+      'ticket_status': TICKET_STATUSES_DEFAULT,
+      'incident_status': INCIDENT_STATUSES_DEFAULT,
+    }
+    return defaultMap[type] || []
+  }
 }
 
+// Fetch all maintenance data from API
+export async function fetchMaintenanceData(): Promise<{
+  affectedSystems: string[]
+  categories: string[]
+  priorities: string[]
+  incidentCategories: string[]
+  severities: string[]
+  ticketStatuses: string[]
+  incidentStatuses: string[]
+}> {
+  const now = Date.now()
+  
+  // Return cached data if still valid
+  if (maintenanceCache.lastFetched && (now - maintenanceCache.lastFetched) < CACHE_DURATION) {
+    return {
+      affectedSystems: maintenanceCache.affectedSystems || AFFECTED_SYSTEMS_DEFAULT,
+      categories: maintenanceCache.categories || CATEGORIES_DEFAULT,
+      priorities: maintenanceCache.priorities || PRIORITIES_DEFAULT,
+      incidentCategories: maintenanceCache.incidentCategories || INCIDENT_CATEGORIES_DEFAULT,
+      severities: maintenanceCache.severities || SEVERITIES_DEFAULT,
+      ticketStatuses: maintenanceCache.ticketStatuses || TICKET_STATUSES_DEFAULT,
+      incidentStatuses: maintenanceCache.incidentStatuses || INCIDENT_STATUSES_DEFAULT,
+    }
+  }
+
+  try {
+    const response = await api.get('/maintenance')
+    const data = response.data || {}
+    
+    maintenanceCache = {
+      affectedSystems: data.affectedSystems || AFFECTED_SYSTEMS_DEFAULT,
+      categories: data.categories || CATEGORIES_DEFAULT,
+      priorities: data.priorities || PRIORITIES_DEFAULT,
+      incidentCategories: data.incidentCategories || INCIDENT_CATEGORIES_DEFAULT,
+      severities: data.severities || SEVERITIES_DEFAULT,
+      ticketStatuses: data.ticketStatuses || TICKET_STATUSES_DEFAULT,
+      incidentStatuses: data.incidentStatuses || INCIDENT_STATUSES_DEFAULT,
+      lastFetched: now,
+    }
+
+    return {
+      affectedSystems: maintenanceCache.affectedSystems,
+      categories: maintenanceCache.categories,
+      priorities: maintenanceCache.priorities,
+      incidentCategories: maintenanceCache.incidentCategories,
+      severities: maintenanceCache.severities,
+      ticketStatuses: maintenanceCache.ticketStatuses,
+      incidentStatuses: maintenanceCache.incidentStatuses,
+    }
+  } catch (error) {
+    console.error('Error fetching maintenance data from API:', error)
+    // Return defaults on error
+    return {
+      affectedSystems: AFFECTED_SYSTEMS_DEFAULT,
+      categories: CATEGORIES_DEFAULT,
+      priorities: PRIORITIES_DEFAULT,
+      incidentCategories: INCIDENT_CATEGORIES_DEFAULT,
+      severities: SEVERITIES_DEFAULT,
+      ticketStatuses: TICKET_STATUSES_DEFAULT,
+      incidentStatuses: INCIDENT_STATUSES_DEFAULT,
+    }
+  }
+}
+
+// Clear cache (call after adding/deleting items)
+export function clearMaintenanceCache(): void {
+  maintenanceCache = {}
+}
+
+// Get affected systems
+export async function getAffectedSystems(): Promise<string[]> {
+  const data = await fetchMaintenanceData()
+  return data.affectedSystems
+}
+
+// Get categories
+export async function getCategories(): Promise<string[]> {
+  const data = await fetchMaintenanceData()
+  return data.categories
+}
+
+// Get priorities
+export async function getPriorities(): Promise<string[]> {
+  const data = await fetchMaintenanceData()
+  return data.priorities
+}
+
+// Get incident categories
+export async function getIncidentCategories(): Promise<string[]> {
+  const data = await fetchMaintenanceData()
+  return data.incidentCategories
+}
+
+// Get severities
+export async function getSeverities(): Promise<string[]> {
+  const data = await fetchMaintenanceData()
+  return data.severities
+}
+
+// Get ticket statuses
+export async function getTicketStatuses(): Promise<string[]> {
+  const data = await fetchMaintenanceData()
+  return data.ticketStatuses
+}
+
+// Get incident statuses
+export async function getIncidentStatuses(): Promise<string[]> {
+  const data = await fetchMaintenanceData()
+  return data.incidentStatuses
+}
+
+// Add maintenance data item (admin only)
+export async function addMaintenanceItem(type: string, value: string): Promise<void> {
+  try {
+    await api.post(`/maintenance/${type}`, { value })
+    clearMaintenanceCache() // Clear cache after adding
+  } catch (error: any) {
+    console.error(`Error adding ${type}:`, error)
+    throw error
+  }
+}
+
+// Delete maintenance data item (admin only)
+export async function deleteMaintenanceItem(type: string, value: string): Promise<void> {
+  try {
+    const encodedValue = encodeURIComponent(value)
+    await api.delete(`/maintenance/${type}/${encodedValue}`)
+    clearMaintenanceCache() // Clear cache after deleting
+  } catch (error: any) {
+    console.error(`Error deleting ${type}:`, error)
+    throw error
+  }
+}
+
+// Legacy functions for backward compatibility (now async)
+// These are kept for components that haven't been updated yet
 export function setAffectedSystems(list: string[]): void {
-  setToStorage(STORAGE_KEY_AFFECTED, list)
-}
-
-export function getCategories(): string[] {
-  return getFromStorage(STORAGE_KEY_CATEGORIES, CATEGORIES_DEFAULT)
+  console.warn('setAffectedSystems is deprecated. Use addMaintenanceItem instead.')
 }
 
 export function setCategories(list: string[]): void {
-  setToStorage(STORAGE_KEY_CATEGORIES, list)
-}
-
-// Incident Categories
-export function getIncidentCategories(): string[] {
-  return getFromStorage(STORAGE_KEY_INCIDENT_CATEGORIES, INCIDENT_CATEGORIES_DEFAULT)
-}
-
-export function setIncidentCategories(list: string[]): void {
-  setToStorage(STORAGE_KEY_INCIDENT_CATEGORIES, list)
-}
-
-// Severities
-export function getSeverities(): string[] {
-  return getFromStorage(STORAGE_KEY_SEVERITIES, SEVERITIES_DEFAULT)
-}
-
-export function setSeverities(list: string[]): void {
-  setToStorage(STORAGE_KEY_SEVERITIES, list)
-}
-
-// Ticket Statuses
-export function getTicketStatuses(): string[] {
-  return getFromStorage(STORAGE_KEY_TICKET_STATUSES, TICKET_STATUSES_DEFAULT)
-}
-
-export function setTicketStatuses(list: string[]): void {
-  setToStorage(STORAGE_KEY_TICKET_STATUSES, list)
-}
-
-// Priorities
-export function getPriorities(): string[] {
-  return getFromStorage(STORAGE_KEY_PRIORITIES, PRIORITIES_DEFAULT)
+  console.warn('setCategories is deprecated. Use addMaintenanceItem instead.')
 }
 
 export function setPriorities(list: string[]): void {
-  setToStorage(STORAGE_KEY_PRIORITIES, list)
+  console.warn('setPriorities is deprecated. Use addMaintenanceItem instead.')
 }
 
-export function getIncidentStatuses(): string[] {
-  return getFromStorage(STORAGE_KEY_INCIDENT_STATUSES, INCIDENT_STATUSES_DEFAULT)
+export function setIncidentCategories(list: string[]): void {
+  console.warn('setIncidentCategories is deprecated. Use addMaintenanceItem instead.')
+}
+
+export function setSeverities(list: string[]): void {
+  console.warn('setSeverities is deprecated. Use addMaintenanceItem instead.')
+}
+
+export function setTicketStatuses(list: string[]): void {
+  console.warn('setTicketStatuses is deprecated. Use addMaintenanceItem instead.')
 }
 
 export function setIncidentStatuses(list: string[]): void {
-  setToStorage(STORAGE_KEY_INCIDENT_STATUSES, list)
+  console.warn('setIncidentStatuses is deprecated. Use addMaintenanceItem instead.')
 }
 
-// Function to fetch/refresh all maintenance data from localStorage
-export function fetchMaintenanceData(): {
-  affectedSystems: string[];
-  categories: string[];
-  priorities: string[];
-  incidentCategories: string[];
-  severities: string[];
-  ticketStatuses: string[];
-  incidentStatuses: string[];
-} {
-  // Force a read from localStorage for all data types
-  const affectedSystems = getFromStorage(STORAGE_KEY_AFFECTED, AFFECTED_SYSTEMS_DEFAULT);
-  const categories = getFromStorage(STORAGE_KEY_CATEGORIES, CATEGORIES_DEFAULT);
-  const priorities = getFromStorage(STORAGE_KEY_PRIORITIES, PRIORITIES_DEFAULT);
-  const incidentCategories = getFromStorage(STORAGE_KEY_INCIDENT_CATEGORIES, INCIDENT_CATEGORIES_DEFAULT);
-  const severities = getFromStorage(STORAGE_KEY_SEVERITIES, SEVERITIES_DEFAULT);
-  const ticketStatuses = getFromStorage(STORAGE_KEY_TICKET_STATUSES, TICKET_STATUSES_DEFAULT);
-  const incidentStatuses = getFromStorage(STORAGE_KEY_INCIDENT_STATUSES, INCIDENT_STATUSES_DEFAULT);
-  
-  return {
-    affectedSystems,
-    categories,
-    priorities,
-    incidentCategories,
-    severities,
-    ticketStatuses,
-    incidentStatuses
-  };
-}
-
-// Optional: Function to reset all data to defaults
-export function resetAllToDefaults(): void {
-  setAffectedSystems(AFFECTED_SYSTEMS_DEFAULT);
-  setCategories(CATEGORIES_DEFAULT);
-  setPriorities(PRIORITIES_DEFAULT);
-  setIncidentCategories(INCIDENT_CATEGORIES_DEFAULT);
-  setSeverities(SEVERITIES_DEFAULT);
-  setTicketStatuses(TICKET_STATUSES_DEFAULT);
-  setIncidentStatuses(INCIDENT_STATUSES_DEFAULT);
-}
-
-// Optional: Function to get all data at once (useful for debugging)
-export function getAllMaintenanceData(): Record<string, string[]> {
-  return {
-    affectedSystems: getAffectedSystems(),
-    categories: getCategories(),
-    priorities: getPriorities(),
-    incidentCategories: getIncidentCategories(),
-    severities: getSeverities(),
-    ticketStatuses: getTicketStatuses(),
-    incidentStatuses: getIncidentStatuses()
-  };
+// Initialize defaults - no longer needed but kept for compatibility
+export function initializeDefaults(): void {
+  // No-op: defaults are now in the database
 }

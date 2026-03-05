@@ -189,13 +189,21 @@ export default function IncidentDetailsPage() {
     const currentUser = getStoredUser()
     setUser(currentUser)
     
-    // Load dynamic incident statuses from maintenance
-    const statuses = getIncidentStatuses()
-    const options = statuses.map(status => ({
-      value: status.toLowerCase().replace(/\s+/g, '_'),
-      label: status
-    }))
-    setStatusOptions(options)
+    // Load dynamic incident statuses from maintenance (async)
+    const loadStatusOptions = async () => {
+      try {
+        const statuses = await getIncidentStatuses()
+        const options = Array.isArray(statuses) ? statuses.map(status => ({
+          value: status.toLowerCase().replace(/\s+/g, '_'),
+          label: status
+        })) : []
+        setStatusOptions(options)
+      } catch (error) {
+        console.error('Error loading incident statuses:', error)
+        setStatusOptions([])
+      }
+    }
+    loadStatusOptions()
   }, [])
 
   const fetchIncident = useCallback(async () => {

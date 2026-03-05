@@ -285,38 +285,51 @@ function IncidentsPageContent() {
     const currentUser = getStoredUser()
     setUser(currentUser)
     
-    // Load dynamic status options from maintenance
-    const statuses = getIncidentStatuses()
-    const statusOpts = [
-      { value: '', label: 'All statuses' },
-      ...statuses.map(status => ({
-        value: status.toLowerCase().replace(/\s+/g, '_'),
-        label: status
-      }))
-    ]
-    setStatusOptions(statusOpts)
+    // Load dynamic maintenance data (async)
+    const loadMaintenanceData = async () => {
+      try {
+        const [statuses, severities, categories] = await Promise.all([
+          getIncidentStatuses(),
+          getSeverities(),
+          getIncidentCategories()
+        ])
+        
+        const statusOpts = [
+          { value: '', label: 'All statuses' },
+          ...(Array.isArray(statuses) ? statuses.map(status => ({
+            value: status.toLowerCase().replace(/\s+/g, '_'),
+            label: status
+          })) : [])
+        ]
+        setStatusOptions(statusOpts)
 
-    // Load dynamic severity options from maintenance
-    const severities = getSeverities()
-    const severityOpts = [
-      { value: '', label: 'All severities' },
-      ...severities.map(severity => ({
-        value: severity.toLowerCase(),
-        label: severity
-      }))
-    ]
-    setSeverityOptions(severityOpts)
+        const severityOpts = [
+          { value: '', label: 'All severities' },
+          ...(Array.isArray(severities) ? severities.map(severity => ({
+            value: severity.toLowerCase(),
+            label: severity
+          })) : [])
+        ]
+        setSeverityOptions(severityOpts)
 
-    // Load dynamic category options from maintenance
-    const categories = getIncidentCategories()
-    const categoryOpts = [
-      { value: '', label: 'All categories' },
-      ...categories.map(category => ({
-        value: category.toLowerCase().replace(/\s+/g, '_'),
-        label: category
-      }))
-    ]
-    setCategoryOptions(categoryOpts)
+        const categoryOpts = [
+          { value: '', label: 'All categories' },
+          ...(Array.isArray(categories) ? categories.map(category => ({
+            value: category.toLowerCase().replace(/\s+/g, '_'),
+            label: category
+          })) : [])
+        ]
+        setCategoryOptions(categoryOpts)
+      } catch (error) {
+        console.error('Error loading maintenance data:', error)
+        // Set default empty options on error
+        setStatusOptions([{ value: '', label: 'All statuses' }])
+        setSeverityOptions([{ value: '', label: 'All severities' }])
+        setCategoryOptions([{ value: '', label: 'All categories' }])
+      }
+    }
+    
+    loadMaintenanceData()
   }, [])
 
   const fetchIncidents = useCallback(async (showLoading = true) => {

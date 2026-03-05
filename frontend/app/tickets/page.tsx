@@ -22,6 +22,9 @@ interface Ticket {
   createdByName?: string
   assignedToName?: string
   slaDue?: string
+  // NEW: Category and affected system
+  category?: string
+  affectedSystem?: string
   convertedIncidentId?: string | null
   convertedIncidentNumber?: string | null
 }
@@ -51,27 +54,38 @@ export default function TicketsPage() {
     const currentUser = getStoredUser()
     setUser(currentUser)
     
-    // Load dynamic status options from maintenance
-    const statuses = getTicketStatuses()
-    const statusOpts = [
-      { value: '', label: 'All statuses' },
-      ...statuses.map(status => ({
-        value: status.toLowerCase().replace(/\s+/g, '_'),
-        label: status
-      }))
-    ]
-    setStatusOptions(statusOpts)
+    // Load dynamic status options from maintenance (async)
+    const loadMaintenanceData = async () => {
+      try {
+        const statuses = await getTicketStatuses()
+        const statusOpts = [
+          { value: '', label: 'All statuses' },
+          ...(Array.isArray(statuses) ? statuses.map(status => ({
+            value: status.toLowerCase().replace(/\s+/g, '_'),
+            label: status
+          })) : [])
+        ]
+        setStatusOptions(statusOpts)
 
-    // NEW: Load dynamic priority options from maintenance
-    const priorities = getPriorities()
-    const priorityOpts = [
-      { value: '', label: 'All priorities' },
-      ...priorities.map(priority => ({
-        value: priority.toLowerCase(),
-        label: priority
-      }))
-    ]
-    setPriorityOptions(priorityOpts)
+        // Load dynamic priority options from maintenance
+        const priorities = await getPriorities()
+        const priorityOpts = [
+          { value: '', label: 'All priorities' },
+          ...(Array.isArray(priorities) ? priorities.map(priority => ({
+            value: priority.toLowerCase(),
+            label: priority
+          })) : [])
+        ]
+        setPriorityOptions(priorityOpts)
+      } catch (error) {
+        console.error('Error loading maintenance data:', error)
+        // Set default options on error
+        setStatusOptions([{ value: '', label: 'All statuses' }])
+        setPriorityOptions([{ value: '', label: 'All priorities' }])
+      }
+    }
+    
+    loadMaintenanceData()
   }, [])
 
   const fetchTickets = useCallback(async (showLoading = true) => {
@@ -93,7 +107,10 @@ export default function TicketsPage() {
         // Ensure status is in the same format as filter values (lowercase with underscores)
         status: ticket.status ? ticket.status.toLowerCase().replace(/\s+/g, '_') : 'new',
         // Ensure priority is in the same format as filter values (lowercase)
-        priority: ticket.priority ? ticket.priority.toLowerCase() : 'medium'
+        priority: ticket.priority ? ticket.priority.toLowerCase() : 'medium',
+        // Category and affected system are passed through as-is (may be undefined)
+        category: ticket.category,
+        affectedSystem: ticket.affectedSystem || ticket.affected_system,
       }))
       
       setTickets(normalizedList.sort((a, b) => 
@@ -475,6 +492,8 @@ export default function TicketsPage() {
                           <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Ticket #</th>
                           <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Type</th>
                           <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Title</th>
+                          <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Category</th>
+                          <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Affected System</th>
                           <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
                           <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Priority</th>
                           <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Created By</th>
@@ -506,6 +525,12 @@ export default function TicketsPage() {
                                 <Link href={`/tickets/${ticket.id}`} className="text-gray-900 hover:text-blue-600 transition-colors line-clamp-2">
                                   {ticket.title || 'Untitled'}
                                 </Link>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                {ticket.category || '—'}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                {ticket.affectedSystem || '—'}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="flex items-center gap-2">

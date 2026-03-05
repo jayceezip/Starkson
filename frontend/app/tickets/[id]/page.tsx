@@ -192,15 +192,27 @@ export default function TicketDetailsPage() {
   // Fetch all maintenance data when component mounts
   useEffect(() => {
     if (mounted) {
-      setIncidentCategories(getIncidentCategories())
-      setSeverities(getSeverities())
-      
-      const statuses = getTicketStatuses()
-      const formattedStatuses = statuses.map(status => ({
-        value: status.toLowerCase().replace(/\s+/g, '_'),
-        label: status
-      }))
-      setTicketStatuses(formattedStatuses)
+      const loadMaintenanceData = async () => {
+        try {
+          const [incidentCats, severities, statuses] = await Promise.all([
+            getIncidentCategories(),
+            getSeverities(),
+            getTicketStatuses()
+          ])
+          
+          setIncidentCategories(incidentCats)
+          setSeverities(severities)
+          
+          const formattedStatuses = Array.isArray(statuses) ? statuses.map(status => ({
+            value: status.toLowerCase().replace(/\s+/g, '_'),
+            label: status
+          })) : []
+          setTicketStatuses(formattedStatuses)
+        } catch (error) {
+          console.error('Error loading maintenance data:', error)
+        }
+      }
+      loadMaintenanceData()
     }
   }, [mounted])
 
@@ -213,8 +225,19 @@ export default function TicketDetailsPage() {
   // Fetch incident categories and severities when convert modal opens
   useEffect(() => {
     if (showConvertModal) {
-      setIncidentCategories(getIncidentCategories())
-      setSeverities(getSeverities())
+      const loadConvertModalData = async () => {
+        try {
+          const [incidentCats, severities] = await Promise.all([
+            getIncidentCategories(),
+            getSeverities()
+          ])
+          setIncidentCategories(incidentCats)
+          setSeverities(severities)
+        } catch (error) {
+          console.error('Error loading convert modal data:', error)
+        }
+      }
+      loadConvertModalData()
     }
   }, [showConvertModal])
 
@@ -1162,6 +1185,14 @@ export default function TicketDetailsPage() {
                   <div>
                     <span className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Priority</span>
                     <p className="mt-1 text-gray-900 capitalize">{ticket.priority || 'medium'}</p>
+                  </div>
+                  <div>
+                    <span className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Category</span>
+                    <p className="mt-1 text-gray-900 capitalize">
+                      {ticket.category
+                        ? ticket.category
+                        : 'N/A'}
+                    </p>
                   </div>
                   <div>
                     <span className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Request Type</span>
