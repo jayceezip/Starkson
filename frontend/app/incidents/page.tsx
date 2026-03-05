@@ -29,23 +29,18 @@ const PAGE_SIZE = 10
 
 // Modern Status Select Component for Filters - with dynamic options
 const ModernStatusFilterSelect = ({ 
-  values, 
+  value, 
   onChange,
   options
 }: { 
-  values: string[]; 
-  onChange: (values: string[]) => void;
+  value: string; 
+  onChange: (value: string) => void;
   options: { value: string; label: string }[];
 }) => {
-  const hasSelection = values.length > 0;
-  const summaryLabel = !hasSelection
-    ? 'All statuses'
-    : values.length === 1
-    ? (options.find((opt) => opt.value === values[0])?.label ?? '1 selected')
-    : `${values.length} statuses selected`;
+  const selectedOption = options.find(opt => opt.value === value) || options[0];
 
   return (
-    <Listbox value={values} onChange={onChange} multiple>
+    <Listbox value={value} onChange={onChange}>
       <div className="relative">
         <Listbox.Button className="
           relative w-full flex items-center justify-between gap-2 px-4 py-2.5
@@ -56,7 +51,7 @@ const ModernStatusFilterSelect = ({
           transition-all duration-200 ease-in-out
           cursor-pointer font-medium text-left
         ">
-          <span className="truncate">{summaryLabel}</span>
+          <span>{selectedOption.label}</span>
           <svg
             className="w-4 h-4 text-gray-500 transition-transform duration-200 ui-open:rotate-180"
             fill="none"
@@ -73,31 +68,29 @@ const ModernStatusFilterSelect = ({
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-72 overflow-auto focus:outline-none">
+          <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-60 overflow-auto focus:outline-none">
             {options.map((option) => (
               <Listbox.Option
                 key={option.value || 'all'}
                 value={option.value}
                 className={({ active }) => `
-                  relative cursor-pointer select-none py-2.5 px-4 text-sm
+                  relative cursor-pointer select-none py-2.5 px-4
                   ${active ? 'bg-gray-50' : ''}
                   transition-colors duration-150
                 `}
               >
                 {({ selected }) => (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      readOnly
-                      checked={selected && !!option.value}
-                      className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
-                    />
-                    <span className={`flex-1 text-sm font-medium ${selected ? 'text-gray-900' : 'text-gray-700'}`}>
+                  <div className="flex items-center justify-between">
+                    <span className={`flex-1 text-sm font-medium ${
+                      selected ? 'text-gray-900' : 'text-gray-700'
+                    }`}>
                       {option.label}
-                      {option.value === '' && (
-                        <span className="ml-1 text-xs text-gray-400">(clear selection)</span>
-                      )}
                     </span>
+                    {selected && (
+                      <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
                   </div>
                 )}
               </Listbox.Option>
@@ -111,23 +104,18 @@ const ModernStatusFilterSelect = ({
 
 // Modern Severity Select Component for Filters - with dynamic options
 const ModernSeverityFilterSelect = ({ 
-  values, 
+  value, 
   onChange,
   options
 }: { 
-  values: string[]; 
-  onChange: (values: string[]) => void;
+  value: string; 
+  onChange: (value: string) => void;
   options: { value: string; label: string }[];
 }) => {
-  const hasSelection = values.length > 0;
-  const summaryLabel = !hasSelection
-    ? 'All severities'
-    : values.length === 1
-    ? (options.find((opt) => opt.value === values[0])?.label ?? '1 selected')
-    : `${values.length} severities selected`;
+  const selectedOption = options.find(opt => opt.value === value) || options[0];
 
   return (
-    <Listbox value={values} onChange={onChange} multiple>
+    <Listbox value={value} onChange={onChange}>
       <div className="relative">
         <Listbox.Button className="
           relative w-full flex items-center justify-between gap-2 px-4 py-2.5
@@ -138,7 +126,7 @@ const ModernSeverityFilterSelect = ({
           transition-all duration-200 ease-in-out
           cursor-pointer font-medium text-left
         ">
-          <span className="truncate">{summaryLabel}</span>
+          <span>{selectedOption.label}</span>
           <svg
             className="w-4 h-4 text-gray-500 transition-transform duration-200 ui-open:rotate-180"
             fill="none"
@@ -155,31 +143,29 @@ const ModernSeverityFilterSelect = ({
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-72 overflow-auto focus:outline-none">
+          <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-60 overflow-auto focus:outline-none">
             {options.map((option) => (
               <Listbox.Option
                 key={option.value || 'all'}
                 value={option.value}
                 className={({ active }) => `
-                  relative cursor-pointer select-none py-2.5 px-4 text-sm
+                  relative cursor-pointer select-none py-2.5 px-4
                   ${active ? 'bg-gray-50' : ''}
                   transition-colors duration-150
                 `}
               >
                 {({ selected }) => (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      readOnly
-                      checked={selected && !!option.value}
-                      className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
-                    />
-                    <span className={`flex-1 text-sm font-medium ${selected ? 'text-gray-900' : 'text-gray-700'}`}>
+                  <div className="flex items-center justify-between">
+                    <span className={`flex-1 text-sm font-medium ${
+                      selected ? 'text-gray-900' : 'text-gray-700'
+                    }`}>
                       {option.label}
-                      {option.value === '' && (
-                        <span className="ml-1 text-xs text-gray-400">(clear selection)</span>
-                      )}
                     </span>
+                    {selected && (
+                      <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
                   </div>
                 )}
               </Listbox.Option>
@@ -193,23 +179,18 @@ const ModernSeverityFilterSelect = ({
 
 // Modern Category Select Component for Filters - with dynamic options
 const ModernCategoryFilterSelect = ({ 
-  values, 
+  value, 
   onChange,
   options
 }: { 
-  values: string[]; 
-  onChange: (values: string[]) => void;
+  value: string; 
+  onChange: (value: string) => void;
   options: { value: string; label: string }[];
 }) => {
-  const hasSelection = values.length > 0;
-  const summaryLabel = !hasSelection
-    ? 'All categories'
-    : values.length === 1
-    ? (options.find((opt) => opt.value === values[0])?.label ?? '1 selected')
-    : `${values.length} categories selected`;
+  const selectedOption = options.find(opt => opt.value === value) || options[0];
 
   return (
-    <Listbox value={values} onChange={onChange} multiple>
+    <Listbox value={value} onChange={onChange}>
       <div className="relative">
         <Listbox.Button className="
           relative w-full flex items-center justify-between gap-2 px-4 py-2.5
@@ -220,7 +201,7 @@ const ModernCategoryFilterSelect = ({
           transition-all duration-200 ease-in-out
           cursor-pointer font-medium text-left
         ">
-          <span className="truncate">{summaryLabel}</span>
+          <span>{selectedOption.label}</span>
           <svg
             className="w-4 h-4 text-gray-500 transition-transform duration-200 ui-open:rotate-180"
             fill="none"
@@ -237,31 +218,29 @@ const ModernCategoryFilterSelect = ({
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-72 overflow-auto focus:outline-none">
+          <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-60 overflow-auto focus:outline-none">
             {options.map((option) => (
               <Listbox.Option
                 key={option.value || 'all'}
                 value={option.value}
                 className={({ active }) => `
-                  relative cursor-pointer select-none py-2.5 px-4 text-sm
+                  relative cursor-pointer select-none py-2.5 px-4
                   ${active ? 'bg-gray-50' : ''}
                   transition-colors duration-150
                 `}
               >
                 {({ selected }) => (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      readOnly
-                      checked={selected && !!option.value}
-                      className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
-                    />
-                    <span className={`flex-1 text-sm font-medium ${selected ? 'text-gray-900' : 'text-gray-700'}`}>
+                  <div className="flex items-center justify-between">
+                    <span className={`flex-1 text-sm font-medium ${
+                      selected ? 'text-gray-900' : 'text-gray-700'
+                    }`}>
                       {option.label}
-                      {option.value === '' && (
-                        <span className="ml-1 text-xs text-gray-400">(clear selection)</span>
-                      )}
                     </span>
+                    {selected && (
+                      <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
                   </div>
                 )}
               </Listbox.Option>
@@ -283,9 +262,9 @@ function IncidentsPageContent() {
   const [page, setPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
   const [filters, setFilters] = useState(() => ({
-    statuses: [] as string[],
-    severities: [] as string[],
-    categories: [] as string[],
+    status: searchParams.get('status') || '',
+    severity: searchParams.get('severity') || '',
+    category: searchParams.get('category') || '',
     branch: searchParams.get('branch_acronym') || '',
   }))
   
@@ -301,57 +280,67 @@ function IncidentsPageContent() {
   ])
   const [exporting, setExporting] = useState(false)
 
+  // Load dynamic maintenance data (async)
+  const loadMaintenanceData = useCallback(async () => {
+    try {
+      const [statuses, severities, categories] = await Promise.all([
+        getIncidentStatuses(),
+        getSeverities(),
+        getIncidentCategories()
+      ])
+      
+      const statusOpts = [
+        { value: '', label: 'All statuses' },
+        ...(Array.isArray(statuses) ? statuses.map(status => ({
+          value: status.toLowerCase().replace(/\s+/g, '_'),
+          label: status
+        })) : [])
+      ]
+      setStatusOptions(statusOpts)
+
+      const severityOpts = [
+        { value: '', label: 'All severities' },
+        ...(Array.isArray(severities) ? severities.map(severity => ({
+          value: severity.toLowerCase(),
+          label: severity
+        })) : [])
+      ]
+      setSeverityOptions(severityOpts)
+
+      const categoryOpts = [
+        { value: '', label: 'All categories' },
+        ...(Array.isArray(categories) ? categories.map(category => ({
+          value: category.toLowerCase().replace(/\s+/g, '_'),
+          label: category
+        })) : [])
+      ]
+      setCategoryOptions(categoryOpts)
+    } catch (error) {
+      console.error('Error loading maintenance data:', error)
+      // Set default empty options on error
+      setStatusOptions([{ value: '', label: 'All statuses' }])
+      setSeverityOptions([{ value: '', label: 'All severities' }])
+      setCategoryOptions([{ value: '', label: 'All categories' }])
+    }
+  }, [])
+
   useEffect(() => {
     setMounted(true)
     const currentUser = getStoredUser()
     setUser(currentUser)
     
-    // Load dynamic maintenance data (async)
-    const loadMaintenanceData = async () => {
-      try {
-        const [statuses, severities, categories] = await Promise.all([
-          getIncidentStatuses(),
-          getSeverities(),
-          getIncidentCategories()
-        ])
-        
-        const statusOpts = [
-          { value: '', label: 'All statuses' },
-          ...(Array.isArray(statuses) ? statuses.map(status => ({
-            value: status.toLowerCase().replace(/\s+/g, '_'),
-            label: status
-          })) : [])
-        ]
-        setStatusOptions(statusOpts)
-
-        const severityOpts = [
-          { value: '', label: 'All severities' },
-          ...(Array.isArray(severities) ? severities.map(severity => ({
-            value: severity.toLowerCase(),
-            label: severity
-          })) : [])
-        ]
-        setSeverityOptions(severityOpts)
-
-        const categoryOpts = [
-          { value: '', label: 'All categories' },
-          ...(Array.isArray(categories) ? categories.map(category => ({
-            value: category.toLowerCase().replace(/\s+/g, '_'),
-            label: category
-          })) : [])
-        ]
-        setCategoryOptions(categoryOpts)
-      } catch (error) {
-        console.error('Error loading maintenance data:', error)
-        // Set default empty options on error
-        setStatusOptions([{ value: '', label: 'All statuses' }])
-        setSeverityOptions([{ value: '', label: 'All severities' }])
-        setCategoryOptions([{ value: '', label: 'All categories' }])
-      }
-    }
-    
     loadMaintenanceData()
-  }, [])
+    
+    // Listen for maintenance data changes from the maintenance modal
+    const handleMaintenanceDataChange = () => {
+      loadMaintenanceData()
+    }
+    window.addEventListener('maintenanceDataChanged', handleMaintenanceDataChange)
+    
+    return () => {
+      window.removeEventListener('maintenanceDataChanged', handleMaintenanceDataChange)
+    }
+  }, [loadMaintenanceData])
 
   const fetchIncidents = useCallback(async (showLoading = true) => {
     if (!user) return
@@ -360,10 +349,12 @@ function IncidentsPageContent() {
         setLoading(true)
       }
       const params = new URLSearchParams()
+      if (filters.status) params.append('status', filters.status)
+      if (filters.severity) params.append('severity', filters.severity)
+      if (filters.category) params.append('category', filters.category)
       if (filters.branch) params.append('branch_acronym', filters.branch)
       
-      const query = params.toString()
-      const response = await api.get(`/incidents${query ? `?${query}` : ''}`)
+      const response = await api.get(`/incidents?${params.toString()}`)
       const list = Array.isArray(response.data) ? response.data : []
       
       // Normalize values to match filter format
@@ -384,7 +375,7 @@ function IncidentsPageContent() {
         setLoading(false)
       }
     }
-  }, [user, filters.branch])
+  }, [user, filters.status, filters.severity, filters.category, filters.branch])
 
   // Initial load - shows loading spinner
   useEffect(() => {
@@ -413,35 +404,26 @@ function IncidentsPageContent() {
     fetchIncidents(true) // Show loading when filters change
   }, [filters])
 
-  // Keyword + multi-filtering (status, severity, category) on the client
+  // Keyword search: split query into words, match any incident field (case-insensitive)
   const keywords = searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean)
-  const filteredIncidents = incidents.filter((inc) => {
-    const matchesStatus =
-      filters.statuses.length === 0 || filters.statuses.includes(inc.status || 'new')
-    const matchesSeverity =
-      filters.severities.length === 0 || filters.severities.includes(inc.severity || 'medium')
-    const matchesCategory =
-      filters.categories.length === 0 || filters.categories.includes(inc.category || '')
-
-    const searchText = [
-      inc.incidentNumber,
-      inc.title,
-      inc.category,
-      inc.severity,
-      inc.status,
-      inc.affectedAsset,
-      inc.affectedUser,
-      inc.sourceTicketNumber,
-    ]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase()
-
-    const matchesKeywords =
-      keywords.length === 0 || keywords.every((kw) => searchText.includes(kw))
-
-    return matchesStatus && matchesSeverity && matchesCategory && matchesKeywords
-  })
+  const filteredIncidents = keywords.length === 0
+    ? incidents
+    : incidents.filter((inc) => {
+        const searchText = [
+          inc.incidentNumber,
+          inc.title,
+          inc.category,
+          inc.severity,
+          inc.status,
+          inc.affectedAsset,
+          inc.affectedUser,
+          inc.sourceTicketNumber,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+        return keywords.every((kw) => searchText.includes(kw))
+      })
 
   const totalPages = Math.max(1, Math.ceil(filteredIncidents.length / PAGE_SIZE))
   const start = (page - 1) * PAGE_SIZE
@@ -473,28 +455,6 @@ function IncidentsPageContent() {
     return category ? category.replace(/_/g, ' ') : ''
   }
 
-  const getActiveFilterSummary = () => {
-    const parts: string[] = []
-    if (filters.statuses.length) {
-      const labels = filters.statuses.map((v) => getStatusLabel(v)).filter(Boolean)
-      parts.push(`Status: ${labels.join(', ')}`)
-    }
-    if (filters.severities.length) {
-      const labels = filters.severities.map((v) => getSeverityLabel(v)).filter(Boolean)
-      parts.push(`Severity: ${labels.join(', ')}`)
-    }
-    if (filters.categories.length) {
-      const labels = filters.categories.map((v) => getCategoryLabel(v)).filter(Boolean)
-      parts.push(`Category: ${labels.join(', ')}`)
-    }
-    if (filters.branch) {
-      const branchName =
-        REAL_BRANCHES.find((b) => b.acronym === filters.branch)?.name ?? filters.branch
-      parts.push(`Branch: ${branchName}`)
-    }
-    return parts.length ? parts.join(' | ') : 'None'
-  }
-
   const csvEscape = (val: unknown) => {
     if (val == null) return ''
     const s = String(val)
@@ -515,13 +475,7 @@ function IncidentsPageContent() {
       inc.sourceTicketNumber || '',
       inc.createdAt ? new Date(inc.createdAt).toISOString() : '',
     ])
-    const metaLine = `Filters: ${getActiveFilterSummary()}`
-    const csvLines = [
-      '\uFEFF' + metaLine,
-      headers.map(csvEscape).join(','),
-      ...rows.map((r) => r.map(csvEscape).join(',')),
-    ]
-    const csv = csvLines.join('\r\n')
+    const csv = ['\uFEFF' + headers.map(csvEscape).join(','), ...rows.map((r) => r.map(csvEscape).join(','))].join('\r\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
@@ -548,16 +502,11 @@ function IncidentsPageContent() {
       doc.setFontSize(14)
       doc.text('Incidents Export', 14, 12)
       doc.setFontSize(10)
-      doc.text(
-        `Generated: ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })} (PH time) | Total: ${filteredIncidents.length}`,
-        14,
-        18
-      )
-      doc.text(`Filters: ${getActiveFilterSummary()}`, 14, 23)
+      doc.text(`Generated: ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })} (PH time) | Total: ${filteredIncidents.length}`, 14, 18)
       autoTable(doc, {
         head: [['Incident #', 'Title', 'Category', 'Severity', 'Status', 'Created']],
         body: tableData,
-        startY: 27,
+        startY: 22,
         styles: { fontSize: 7, cellPadding: 1.5 },
         headStyles: { fillColor: [66, 66, 66] },
       })
@@ -621,42 +570,24 @@ function IncidentsPageContent() {
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
                 <ModernStatusFilterSelect
-                  values={filters.statuses}
-                  onChange={(values: string[]) => {
-                    const cleaned = values.includes('')
-                      ? []
-                      : values.filter((v) => v)
-                    setFilters({ ...filters, statuses: cleaned })
-                    setPage(1)
-                  }}
+                  value={filters.status}
+                  onChange={(value) => { setFilters({ ...filters, status: value }); setPage(1) }}
                   options={statusOptions}
                 />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Severity</label>
                 <ModernSeverityFilterSelect
-                  values={filters.severities}
-                  onChange={(values: string[]) => {
-                    const cleaned = values.includes('')
-                      ? []
-                      : values.filter((v) => v)
-                    setFilters({ ...filters, severities: cleaned })
-                    setPage(1)
-                  }}
+                  value={filters.severity}
+                  onChange={(value) => { setFilters({ ...filters, severity: value }); setPage(1) }}
                   options={severityOptions}
                 />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Category</label>
                 <ModernCategoryFilterSelect
-                  values={filters.categories}
-                  onChange={(values: string[]) => {
-                    const cleaned = values.includes('')
-                      ? []
-                      : values.filter((v) => v)
-                    setFilters({ ...filters, categories: cleaned })
-                    setPage(1)
-                  }}
+                  value={filters.category}
+                  onChange={(value) => { setFilters({ ...filters, category: value }); setPage(1) }}
                   options={categoryOptions}
                 />
               </div>

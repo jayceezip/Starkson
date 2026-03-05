@@ -184,27 +184,38 @@ export default function IncidentDetailsPage() {
   // NEW: State for dynamic status options
   const [statusOptions, setStatusOptions] = useState<{ value: string; label: string }[]>([])
 
+  // Load dynamic incident statuses from maintenance (async)
+  const loadStatusOptions = useCallback(async () => {
+    try {
+      const statuses = await getIncidentStatuses()
+      const options = Array.isArray(statuses) ? statuses.map(status => ({
+        value: status.toLowerCase().replace(/\s+/g, '_'),
+        label: status
+      })) : []
+      setStatusOptions(options)
+    } catch (error) {
+      console.error('Error loading incident statuses:', error)
+      setStatusOptions([])
+    }
+  }, [])
+
   useEffect(() => {
     setMounted(true)
     const currentUser = getStoredUser()
     setUser(currentUser)
     
-    // Load dynamic incident statuses from maintenance (async)
-    const loadStatusOptions = async () => {
-      try {
-        const statuses = await getIncidentStatuses()
-        const options = Array.isArray(statuses) ? statuses.map(status => ({
-          value: status.toLowerCase().replace(/\s+/g, '_'),
-          label: status
-        })) : []
-        setStatusOptions(options)
-      } catch (error) {
-        console.error('Error loading incident statuses:', error)
-        setStatusOptions([])
-      }
-    }
     loadStatusOptions()
-  }, [])
+    
+    // Listen for maintenance data changes from the maintenance modal
+    const handleMaintenanceDataChange = () => {
+      loadStatusOptions()
+    }
+    window.addEventListener('maintenanceDataChanged', handleMaintenanceDataChange)
+    
+    return () => {
+      window.removeEventListener('maintenanceDataChanged', handleMaintenanceDataChange)
+    }
+  }, [loadStatusOptions])
 
   const fetchIncident = useCallback(async () => {
     try {

@@ -39,11 +39,7 @@ export default function TicketsPage() {
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
-  const [filters, setFilters] = useState({
-    statuses: [] as string[],
-    priorities: [] as string[],
-    branch: '',
-  })
+  const [filters, setFilters] = useState({ status: '', priority: '', branch: '' })
   const [statusOptions, setStatusOptions] = useState<{ value: string; label: string }[]>([
     { value: '', label: 'All statuses' }
   ])
@@ -53,44 +49,54 @@ export default function TicketsPage() {
   ])
   const [exporting, setExporting] = useState(false)
 
+  // Load dynamic status options from maintenance (async)
+  const loadMaintenanceData = useCallback(async () => {
+    try {
+      const statuses = await getTicketStatuses()
+      const statusOpts = [
+        { value: '', label: 'All statuses' },
+        ...(Array.isArray(statuses) ? statuses.map(status => ({
+          value: status.toLowerCase().replace(/\s+/g, '_'),
+          label: status
+        })) : [])
+      ]
+      setStatusOptions(statusOpts)
+
+      // Load dynamic priority options from maintenance
+      const priorities = await getPriorities()
+      const priorityOpts = [
+        { value: '', label: 'All priorities' },
+        ...(Array.isArray(priorities) ? priorities.map(priority => ({
+          value: priority.toLowerCase(),
+          label: priority
+        })) : [])
+      ]
+      setPriorityOptions(priorityOpts)
+    } catch (error) {
+      console.error('Error loading maintenance data:', error)
+      // Set default options on error
+      setStatusOptions([{ value: '', label: 'All statuses' }])
+      setPriorityOptions([{ value: '', label: 'All priorities' }])
+    }
+  }, [])
+
   useEffect(() => {
     setMounted(true)
     const currentUser = getStoredUser()
     setUser(currentUser)
     
-    // Load dynamic status options from maintenance (async)
-    const loadMaintenanceData = async () => {
-      try {
-        const statuses = await getTicketStatuses()
-        const statusOpts = [
-          { value: '', label: 'All statuses' },
-          ...(Array.isArray(statuses) ? statuses.map(status => ({
-            value: status.toLowerCase().replace(/\s+/g, '_'),
-            label: status
-          })) : [])
-        ]
-        setStatusOptions(statusOpts)
-
-        // Load dynamic priority options from maintenance
-        const priorities = await getPriorities()
-        const priorityOpts = [
-          { value: '', label: 'All priorities' },
-          ...(Array.isArray(priorities) ? priorities.map(priority => ({
-            value: priority.toLowerCase(),
-            label: priority
-          })) : [])
-        ]
-        setPriorityOptions(priorityOpts)
-      } catch (error) {
-        console.error('Error loading maintenance data:', error)
-        // Set default options on error
-        setStatusOptions([{ value: '', label: 'All statuses' }])
-        setPriorityOptions([{ value: '', label: 'All priorities' }])
-      }
-    }
-    
     loadMaintenanceData()
-  }, [])
+    
+    // Listen for maintenance data changes from the maintenance modal
+    const handleMaintenanceDataChange = () => {
+      loadMaintenanceData()
+    }
+    window.addEventListener('maintenanceDataChanged', handleMaintenanceDataChange)
+    
+    return () => {
+      window.removeEventListener('maintenanceDataChanged', handleMaintenanceDataChange)
+    }
+  }, [loadMaintenanceData])
 
   const fetchTickets = useCallback(async (showLoading = true) => {
     if (!user) return
@@ -99,9 +105,10 @@ export default function TicketsPage() {
         setLoading(true)
       }
       const params = new URLSearchParams()
+      if (filters.status) params.append('status', filters.status)
+      if (filters.priority) params.append('priority', filters.priority)
       if (filters.branch) params.append('branch_acronym', filters.branch)
-      const query = params.toString()
-      const response = await api.get(`/tickets${query ? `?${query}` : ''}`)
+      const response = await api.get(`/tickets?${params.toString()}`)
       const list = Array.isArray(response.data) ? response.data : []
       
       // Normalize the status and priority values to match the filter format
@@ -126,7 +133,7 @@ export default function TicketsPage() {
         setLoading(false)
       }
     }
-  }, [user, filters.branch])
+  }, [user, filters.status, filters.priority, filters.branch])
 
   // Initial load - shows loading spinner
   useEffect(() => {
@@ -162,34 +169,26 @@ export default function TicketsPage() {
     router.push(`/tickets/${ticketId}`)
   }
 
-  // Keyword + multi-filtering (status, priority, branch) on the client
+  // Keyword search: split query into words, match any ticket field (case-insensitive)
   const keywords = searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean)
-  const filteredTickets = tickets.filter((t) => {
-    const matchesStatus =
-      filters.statuses.length === 0 || filters.statuses.includes(t.status || 'new')
-    const matchesPriority =
-      filters.priorities.length === 0 || filters.priorities.includes(t.priority || 'medium')
-
-    // Keyword search across common fields
-    const searchText = [
-      t.ticketNumber,
-      t.title,
-      t.requestType,
-      t.status,
-      t.priority,
-      t.createdByName,
-      t.assignedToName,
-      t.convertedIncidentNumber,
-    ]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase()
-
-    const matchesKeywords =
-      keywords.length === 0 || keywords.every((kw) => searchText.includes(kw))
-
-    return matchesStatus && matchesPriority && matchesKeywords
-  })
+  const filteredTickets = keywords.length === 0
+    ? tickets
+    : tickets.filter((t) => {
+        const searchText = [
+          t.ticketNumber,
+          t.title,
+          t.requestType,
+          t.status,
+          t.priority,
+          t.createdByName,
+          t.assignedToName,
+          t.convertedIncidentNumber,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+        return keywords.every((kw) => searchText.includes(kw))
+      })
 
   const totalPages = Math.max(1, Math.ceil(filteredTickets.length / PAGE_SIZE))
   const start = (page - 1) * PAGE_SIZE
@@ -247,32 +246,6 @@ export default function TicketsPage() {
     return s
   }
 
-  const getActiveFilterSummary = () => {
-    const parts: string[] = []
-
-    if (filters.statuses.length) {
-      const labels = filters.statuses
-        .map((v) => getStatusLabel(v))
-        .filter(Boolean)
-      parts.push(`Status: ${labels.join(', ')}`)
-    }
-
-    if (filters.priorities.length) {
-      const labels = filters.priorities
-        .map((v) => getPriorityLabel(v))
-        .filter(Boolean)
-      parts.push(`Priority: ${labels.join(', ')}`)
-    }
-
-    if (filters.branch) {
-      const branchName =
-        REAL_BRANCHES.find((b) => b.acronym === filters.branch)?.name ?? filters.branch
-      parts.push(`Branch: ${branchName}`)
-    }
-
-    return parts.length ? parts.join(' | ') : 'None'
-  }
-
   const handleExportTicketsCSV = () => {
     const headers = ['Ticket #', 'Type', 'Title', 'Status', 'Priority', 'Created By', 'Assigned To', 'Created', 'SLA Due']
     const rows = filteredTickets.map((t) => [
@@ -286,13 +259,7 @@ export default function TicketsPage() {
       t.createdAt ? new Date(t.createdAt).toISOString() : '',
       t.slaDue ? new Date(t.slaDue).toISOString() : '',
     ])
-    const metaLine = `Filters: ${getActiveFilterSummary()}`
-    const csvLines = [
-      '\uFEFF' + metaLine,
-      headers.map(csvEscape).join(','),
-      ...rows.map((r) => r.map(csvEscape).join(',')),
-    ]
-    const csv = csvLines.join('\r\n')
+    const csv = ['\uFEFF' + headers.map(csvEscape).join(','), ...rows.map((r) => r.map(csvEscape).join(','))].join('\r\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
@@ -319,16 +286,11 @@ export default function TicketsPage() {
       doc.setFontSize(14)
       doc.text('Tickets Export', 14, 12)
       doc.setFontSize(10)
-      doc.text(
-        `Generated: ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })} (PH time) | Total: ${filteredTickets.length}`,
-        14,
-        18
-      )
-      doc.text(`Filters: ${getActiveFilterSummary()}`, 14, 23)
+      doc.text(`Generated: ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })} (PH time) | Total: ${filteredTickets.length}`, 14, 18)
       autoTable(doc, {
         head: [['Ticket #', 'Title', 'Status', 'Priority', 'Created By', 'Created']],
         body: tableData,
-        startY: 27,
+        startY: 22,
         styles: { fontSize: 7, cellPadding: 1.5 },
         headStyles: { fillColor: [66, 66, 66] },
       })
@@ -391,58 +353,17 @@ export default function TicketsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
-                <Listbox
-                  value={filters.statuses}
-                  onChange={(values: string[]) => {
-                    const cleaned = values.includes('')
-                      ? []
-                      : values.filter((v) => v)
-                    setFilters((f) => ({ ...f, statuses: cleaned }))
-                    setPage(1)
-                  }}
-                  multiple
-                >
+                <Listbox value={filters.status} onChange={(value) => { setFilters((f) => ({ ...f, status: value })); setPage(1) }}>
                   <div className="relative">
                     <Listbox.Button className="relative w-full flex items-center justify-between gap-2 px-4 py-2.5 bg-white text-gray-900 rounded-xl border border-gray-200 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-medium text-left">
-                      <span className="truncate">
-                        {filters.statuses.length === 0
-                          ? 'All statuses'
-                          : filters.statuses.length === 1
-                          ? getStatusLabel(filters.statuses[0])
-                          : `${filters.statuses.length} statuses selected`}
-                      </span>
-                      <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
+                      <span>{statusOptions.find((o) => o.value === filters.status)?.label ?? 'All statuses'}</span>
+                      <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                     </Listbox.Button>
                     <Transition as={Fragment} leave="transition ease-in duration-100" leaveFrom="opacity-100" leaveTo="opacity-0">
-                      <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-72 overflow-auto">
+                      <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-60 overflow-auto">
                         {statusOptions.map((opt) => (
-                          <Listbox.Option
-                            key={opt.value || 'all'}
-                            value={opt.value}
-                            className={({ active }) =>
-                              `cursor-pointer select-none py-2.5 px-4 text-sm ${
-                                active ? 'bg-gray-50' : ''
-                              }`
-                            }
-                          >
-                            {({ selected }) => (
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  readOnly
-                                  checked={selected && !!opt.value}
-                                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                />
-                                <span className="flex-1">
-                                  {opt.label}
-                                  {opt.value === '' && (
-                                    <span className="ml-1 text-xs text-gray-400">(clear selection)</span>
-                                  )}
-                                </span>
-                              </div>
-                            )}
+                          <Listbox.Option key={opt.value || 'all'} value={opt.value} className={({ active }) => `cursor-pointer py-2.5 px-4 ${active ? 'bg-gray-50' : ''}`}>
+                            {opt.label}
                           </Listbox.Option>
                         ))}
                       </Listbox.Options>
@@ -452,58 +373,17 @@ export default function TicketsPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Priority</label>
-                <Listbox
-                  value={filters.priorities}
-                  onChange={(values: string[]) => {
-                    const cleaned = values.includes('')
-                      ? []
-                      : values.filter((v) => v)
-                    setFilters((f) => ({ ...f, priorities: cleaned }))
-                    setPage(1)
-                  }}
-                  multiple
-                >
+                <Listbox value={filters.priority} onChange={(value) => { setFilters((f) => ({ ...f, priority: value })); setPage(1) }}>
                   <div className="relative">
                     <Listbox.Button className="relative w-full flex items-center justify-between gap-2 px-4 py-2.5 bg-white text-gray-900 rounded-xl border border-gray-200 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-medium text-left">
-                      <span className="truncate">
-                        {filters.priorities.length === 0
-                          ? 'All priorities'
-                          : filters.priorities.length === 1
-                          ? getPriorityLabel(filters.priorities[0])
-                          : `${filters.priorities.length} priorities selected`}
-                      </span>
-                      <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
+                      <span>{priorityOptions.find((o) => o.value === filters.priority)?.label ?? 'All priorities'}</span>
+                      <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                     </Listbox.Button>
                     <Transition as={Fragment} leave="transition ease-in duration-100" leaveFrom="opacity-100" leaveTo="opacity-0">
-                      <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-72 overflow-auto">
+                      <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-60 overflow-auto">
                         {priorityOptions.map((opt) => (
-                          <Listbox.Option
-                            key={opt.value || 'all'}
-                            value={opt.value}
-                            className={({ active }) =>
-                              `cursor-pointer select-none py-2.5 px-4 text-sm ${
-                                active ? 'bg-gray-50' : ''
-                              }`
-                            }
-                          >
-                            {({ selected }) => (
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  readOnly
-                                  checked={selected && !!opt.value}
-                                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                />
-                                <span className="flex-1">
-                                  {opt.label}
-                                  {opt.value === '' && (
-                                    <span className="ml-1 text-xs text-gray-400">(clear selection)</span>
-                                  )}
-                                </span>
-                              </div>
-                            )}
+                          <Listbox.Option key={opt.value || 'all'} value={opt.value} className={({ active }) => `cursor-pointer py-2.5 px-4 ${active ? 'bg-gray-50' : ''}`}>
+                            {opt.label}
                           </Listbox.Option>
                         ))}
                       </Listbox.Options>

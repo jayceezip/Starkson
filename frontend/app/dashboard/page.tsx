@@ -212,6 +212,7 @@ export default function DashboardPage() {
   
   const isAdmin = hasRole(user, 'admin')
   const isSecurityOfficer = hasRole(user, 'security_officer')
+  const isITSupport = hasRole(user, 'it_support')
   const isAdminOrSO = isAdmin || isSecurityOfficer
 
   const handleActivityClick = useCallback((item: ActivityItem, href: string) => {
@@ -519,7 +520,7 @@ export default function DashboardPage() {
               </div>
             </>
           ) : (
-            // Regular user sees their stats
+            // Regular user or IT Support sees their stats
             <>
               <div className="panel-card relative">
                 <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-sky-100 text-sky-600">
@@ -531,16 +532,19 @@ export default function DashboardPage() {
                 <p className="panel-card-value">{stats.tickets}</p>
                 <p className="text-sm text-gray-500 mt-1">Total tickets created</p>
               </div>
-              <div className="panel-card relative">
-                <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-red-100 text-red-600">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
+              {/* Only show My Incidents for regular users, not IT Support */}
+              {!isITSupport && (
+                <div className="panel-card relative">
+                  <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-red-100 text-red-600">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <h3 className="panel-card-title uppercase tracking-wide">My Incidents</h3>
+                  <p className="panel-card-value">{stats.incidents}</p>
+                  <p className="text-sm text-gray-500 mt-1">Security incidents from your tickets</p>
                 </div>
-                <h3 className="panel-card-title uppercase tracking-wide">My Incidents</h3>
-                <p className="panel-card-value">{stats.incidents}</p>
-                <p className="text-sm text-gray-500 mt-1">Security incidents from your tickets</p>
-              </div>
+              )}
               <div className="panel-card relative">
                 <div className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-lg bg-amber-100 text-amber-600">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -190,31 +190,42 @@ export default function TicketDetailsPage() {
   const ticketIdRef = useRef<string | null>(null)
 
   // Fetch all maintenance data when component mounts
+  const loadMaintenanceData = useCallback(async () => {
+    try {
+      const [incidentCats, severities, statuses] = await Promise.all([
+        getIncidentCategories(),
+        getSeverities(),
+        getTicketStatuses()
+      ])
+      
+      setIncidentCategories(incidentCats)
+      setSeverities(severities)
+      
+      const formattedStatuses = Array.isArray(statuses) ? statuses.map(status => ({
+        value: status.toLowerCase().replace(/\s+/g, '_'),
+        label: status
+      })) : []
+      setTicketStatuses(formattedStatuses)
+    } catch (error) {
+      console.error('Error loading maintenance data:', error)
+    }
+  }, [])
+
   useEffect(() => {
     if (mounted) {
-      const loadMaintenanceData = async () => {
-        try {
-          const [incidentCats, severities, statuses] = await Promise.all([
-            getIncidentCategories(),
-            getSeverities(),
-            getTicketStatuses()
-          ])
-          
-          setIncidentCategories(incidentCats)
-          setSeverities(severities)
-          
-          const formattedStatuses = Array.isArray(statuses) ? statuses.map(status => ({
-            value: status.toLowerCase().replace(/\s+/g, '_'),
-            label: status
-          })) : []
-          setTicketStatuses(formattedStatuses)
-        } catch (error) {
-          console.error('Error loading maintenance data:', error)
-        }
-      }
       loadMaintenanceData()
+      
+      // Listen for maintenance data changes from the maintenance modal
+      const handleMaintenanceDataChange = () => {
+        loadMaintenanceData()
+      }
+      window.addEventListener('maintenanceDataChanged', handleMaintenanceDataChange)
+      
+      return () => {
+        window.removeEventListener('maintenanceDataChanged', handleMaintenanceDataChange)
+      }
     }
-  }, [mounted])
+  }, [mounted, loadMaintenanceData])
 
   useEffect(() => {
     setMounted(true)
