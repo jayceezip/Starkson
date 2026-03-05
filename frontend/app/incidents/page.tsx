@@ -445,6 +445,25 @@ function IncidentsPageContent() {
     return category ? category.replace(/_/g, ' ') : ''
   }
 
+  const getActiveFilterSummary = () => {
+    const parts: string[] = []
+    if (filters.status) {
+      parts.push(`Status: ${getStatusLabel(filters.status)}`)
+    }
+    if (filters.severity) {
+      parts.push(`Severity: ${getSeverityLabel(filters.severity)}`)
+    }
+    if (filters.category) {
+      parts.push(`Category: ${getCategoryLabel(filters.category)}`)
+    }
+    if (filters.branch) {
+      const branchName =
+        REAL_BRANCHES.find((b) => b.acronym === filters.branch)?.name ?? filters.branch
+      parts.push(`Branch: ${branchName}`)
+    }
+    return parts.length ? parts.join(' | ') : 'None'
+  }
+
   const csvEscape = (val: unknown) => {
     if (val == null) return ''
     const s = String(val)
@@ -465,7 +484,13 @@ function IncidentsPageContent() {
       inc.sourceTicketNumber || '',
       inc.createdAt ? new Date(inc.createdAt).toISOString() : '',
     ])
-    const csv = ['\uFEFF' + headers.map(csvEscape).join(','), ...rows.map((r) => r.map(csvEscape).join(','))].join('\r\n')
+    const metaLine = `Filters: ${getActiveFilterSummary()}`
+    const csvLines = [
+      '\uFEFF' + metaLine,
+      headers.map(csvEscape).join(','),
+      ...rows.map((r) => r.map(csvEscape).join(',')),
+    ]
+    const csv = csvLines.join('\r\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
@@ -492,11 +517,16 @@ function IncidentsPageContent() {
       doc.setFontSize(14)
       doc.text('Incidents Export', 14, 12)
       doc.setFontSize(10)
-      doc.text(`Generated: ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })} (PH time) | Total: ${filteredIncidents.length}`, 14, 18)
+      doc.text(
+        `Generated: ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })} (PH time) | Total: ${filteredIncidents.length}`,
+        14,
+        18
+      )
+      doc.text(`Filters: ${getActiveFilterSummary()}`, 14, 23)
       autoTable(doc, {
         head: [['Incident #', 'Title', 'Category', 'Severity', 'Status', 'Created']],
         body: tableData,
-        startY: 22,
+        startY: 27,
         styles: { fontSize: 7, cellPadding: 1.5 },
         headStyles: { fillColor: [66, 66, 66] },
       })

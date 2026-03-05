@@ -236,6 +236,22 @@ export default function TicketsPage() {
     return s
   }
 
+  const getActiveFilterSummary = () => {
+    const parts: string[] = []
+    if (filters.status) {
+      parts.push(`Status: ${getStatusLabel(filters.status)}`)
+    }
+    if (filters.priority) {
+      parts.push(`Priority: ${getPriorityLabel(filters.priority)}`)
+    }
+    if (filters.branch) {
+      const branchName =
+        REAL_BRANCHES.find((b) => b.acronym === filters.branch)?.name ?? filters.branch
+      parts.push(`Branch: ${branchName}`)
+    }
+    return parts.length ? parts.join(' | ') : 'None'
+  }
+
   const handleExportTicketsCSV = () => {
     const headers = ['Ticket #', 'Type', 'Title', 'Status', 'Priority', 'Created By', 'Assigned To', 'Created', 'SLA Due']
     const rows = filteredTickets.map((t) => [
@@ -249,7 +265,13 @@ export default function TicketsPage() {
       t.createdAt ? new Date(t.createdAt).toISOString() : '',
       t.slaDue ? new Date(t.slaDue).toISOString() : '',
     ])
-    const csv = ['\uFEFF' + headers.map(csvEscape).join(','), ...rows.map((r) => r.map(csvEscape).join(','))].join('\r\n')
+    const metaLine = `Filters: ${getActiveFilterSummary()}`
+    const csvLines = [
+      '\uFEFF' + metaLine,
+      headers.map(csvEscape).join(','),
+      ...rows.map((r) => r.map(csvEscape).join(',')),
+    ]
+    const csv = csvLines.join('\r\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
@@ -276,11 +298,16 @@ export default function TicketsPage() {
       doc.setFontSize(14)
       doc.text('Tickets Export', 14, 12)
       doc.setFontSize(10)
-      doc.text(`Generated: ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })} (PH time) | Total: ${filteredTickets.length}`, 14, 18)
+      doc.text(
+        `Generated: ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })} (PH time) | Total: ${filteredTickets.length}`,
+        14,
+        18
+      )
+      doc.text(`Filters: ${getActiveFilterSummary()}`, 14, 23)
       autoTable(doc, {
         head: [['Ticket #', 'Title', 'Status', 'Priority', 'Created By', 'Created']],
         body: tableData,
-        startY: 22,
+        startY: 27,
         styles: { fontSize: 7, cellPadding: 1.5 },
         headStyles: { fillColor: [66, 66, 66] },
       })

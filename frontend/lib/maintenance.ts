@@ -146,13 +146,13 @@ export async function fetchMaintenanceData(): Promise<{
     }
 
     return {
-      affectedSystems: maintenanceCache.affectedSystems,
-      categories: maintenanceCache.categories,
-      priorities: maintenanceCache.priorities,
-      incidentCategories: maintenanceCache.incidentCategories,
-      severities: maintenanceCache.severities,
-      ticketStatuses: maintenanceCache.ticketStatuses,
-      incidentStatuses: maintenanceCache.incidentStatuses,
+      affectedSystems: maintenanceCache.affectedSystems || AFFECTED_SYSTEMS_DEFAULT,
+      categories: maintenanceCache.categories || CATEGORIES_DEFAULT,
+      priorities: maintenanceCache.priorities || PRIORITIES_DEFAULT,
+      incidentCategories: maintenanceCache.incidentCategories || INCIDENT_CATEGORIES_DEFAULT,
+      severities: maintenanceCache.severities || SEVERITIES_DEFAULT,
+      ticketStatuses: maintenanceCache.ticketStatuses || TICKET_STATUSES_DEFAULT,
+      incidentStatuses: maintenanceCache.incidentStatuses || INCIDENT_STATUSES_DEFAULT,
     }
   } catch (error) {
     console.error('Error fetching maintenance data from API:', error)
