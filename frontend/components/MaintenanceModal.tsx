@@ -531,6 +531,7 @@ export default function MaintenanceModal({
       await addMaintenanceItem('incident_category', trimmed)
       clearMaintenanceCache()
       await refreshLists()
+      notifyMaintenanceDataChange()
       setSuccessMessage(`Incident Category "${trimmed}" added successfully`)
       setTimeout(() => {
         onClose()
@@ -546,6 +547,7 @@ export default function MaintenanceModal({
       await deleteMaintenanceItem('incident_category', name)
       clearMaintenanceCache()
       await refreshLists()
+      notifyMaintenanceDataChange()
       setSuccessMessage(`Incident Category "${name}" deleted successfully`)
       setTimeout(() => {
         onClose()
@@ -569,6 +571,7 @@ export default function MaintenanceModal({
       await addMaintenanceItem('severity', trimmed)
       clearMaintenanceCache()
       await refreshLists()
+      notifyMaintenanceDataChange()
       setSuccessMessage(`Severity "${trimmed}" added successfully`)
       setTimeout(() => {
         onClose()
@@ -585,6 +588,7 @@ export default function MaintenanceModal({
       await deleteMaintenanceItem('severity', name)
       clearMaintenanceCache()
       await refreshLists()
+      notifyMaintenanceDataChange()
       setSuccessMessage(`Severity "${name}" deleted successfully`)
       setTimeout(() => {
         onClose()
@@ -608,6 +612,7 @@ export default function MaintenanceModal({
       await addMaintenanceItem('ticket_status', trimmed)
       clearMaintenanceCache()
       await refreshLists()
+      notifyMaintenanceDataChange()
       setSuccessMessage(`Ticket Status "${trimmed}" added successfully`)
       setTimeout(() => {
         onClose()
@@ -624,6 +629,7 @@ export default function MaintenanceModal({
       await deleteMaintenanceItem('ticket_status', name)
       clearMaintenanceCache()
       await refreshLists()
+      notifyMaintenanceDataChange()
       setSuccessMessage(`Ticket Status "${name}" deleted successfully`)
       setTimeout(() => {
         onClose()
@@ -688,6 +694,7 @@ export default function MaintenanceModal({
       await addMaintenanceItem('incident_status', trimmed)
       clearMaintenanceCache()
       await refreshLists()
+      notifyMaintenanceDataChange()
       setSuccessMessage(`Incident Status "${trimmed}" added successfully`)
       setTimeout(() => {
         onClose()
@@ -704,6 +711,7 @@ export default function MaintenanceModal({
       await deleteMaintenanceItem('incident_status', name)
       clearMaintenanceCache()
       await refreshLists()
+      notifyMaintenanceDataChange()
       setSuccessMessage(`Incident Status "${name}" deleted successfully`)
       setTimeout(() => {
         onClose()

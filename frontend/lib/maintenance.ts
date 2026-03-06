@@ -82,7 +82,7 @@ let maintenanceCache: {
   lastFetched?: number
 } = {}
 
-const CACHE_DURATION = 60000 // 1 minute cache
+const CACHE_DURATION = 10000 // 10 seconds cache - faster updates
 
 // Fetch maintenance data from API
 async function fetchFromAPI(type: string): Promise<string[]> {
@@ -117,8 +117,8 @@ export async function fetchMaintenanceData(): Promise<{
 }> {
   const now = Date.now()
   
-  // Return cached data if still valid
-  if (maintenanceCache.lastFetched && (now - maintenanceCache.lastFetched) < CACHE_DURATION) {
+  // Return cached data if still valid (and lastFetched is not 0, which means cache was cleared)
+  if (maintenanceCache.lastFetched && maintenanceCache.lastFetched > 0 && (now - maintenanceCache.lastFetched) < CACHE_DURATION) {
     return {
       affectedSystems: maintenanceCache.affectedSystems || AFFECTED_SYSTEMS_DEFAULT,
       categories: maintenanceCache.categories || CATEGORIES_DEFAULT,
@@ -171,7 +171,9 @@ export async function fetchMaintenanceData(): Promise<{
 
 // Clear cache (call after adding/deleting items)
 export function clearMaintenanceCache(): void {
+  // Reset cache and set lastFetched to 0 to force immediate refresh on next fetch
   maintenanceCache = {}
+  maintenanceCache.lastFetched = 0
 }
 
 // Get affected systems
