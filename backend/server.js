@@ -9,10 +9,33 @@ dotenv.config()
 const app = express()
 const PORT = process.env.PORT || 5000
 
-// Middleware
-app.use(cors())
+// CORS configuration - MODIFIED SECTION
+const corsOptions = {
+  origin: ['https://starkson-afhs.onrender.com', 'http://localhost:3000', 'http://localhost:5173'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  credentials: true,
+  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
+}
+
+// Apply CORS middleware with options
+app.use(cors(corsOptions))
+
+// Handle preflight requests explicitly
+app.options('*', cors(corsOptions))
+
+// Body parsing middleware
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
+
+// Log all API requests for debugging
+app.use('/api/*', (req, res, next) => {
+  console.log(`🌐 API Request: ${req.method} ${req.originalUrl}`)
+  if (req.method === 'OPTIONS') {
+    console.log('🔧 Preflight request detected')
+  }
+  next()
+})
 
 // Routes
 app.use('/api/auth', require('./routes/auth'))
@@ -30,12 +53,6 @@ app.use('/api/attachments', require('./routes/attachments'))
 app.use('/api/sla', require('./routes/sla'))
 app.use('/api/notifications', require('./routes/notifications'))
 
-// Log all API requests for debugging
-app.use('/api/*', (req, res, next) => {
-  console.log(`🌐 API Request: ${req.method} ${req.originalUrl}`)
-  next()
-})
-
 app.head('/api/health', (req, res) => {
   res.sendStatus(200)
 })
@@ -48,12 +65,6 @@ app.get('/api/health', async (req, res) => {
 // Debug route to test attachments router (must be before 404 handler)
 app.get('/api/attachments/test', (req, res) => {
   res.json({ message: 'Attachments route is accessible', timestamp: new Date().toISOString() })
-})
-
-// Log all API requests for debugging (before 404 handler)
-app.use('/api/*', (req, res, next) => {
-  console.log(`🌐 API Request: ${req.method} ${req.originalUrl}`)
-  next()
 })
 
 // 404 handler for unmatched routes (MUST be last)
@@ -70,6 +81,7 @@ app.use('*', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
   console.log('Supabase client initialized')
+  console.log('CORS enabled for:', corsOptions.origin)
 })
 
 module.exports = app
