@@ -253,6 +253,10 @@ export default function CreateTicketPage() {
   const [otherAffectedSystem, setOtherAffectedSystem] = useState('')
   const [otherCategory, setOtherCategory] = useState('')
 
+  // Refs for polling
+  const maintenancePollingRef = useRef<NodeJS.Timeout>()
+  const isMaintenancePollingRef = useRef<boolean>(false)
+
   // Initialize defaults on mount (no longer needed but kept for compatibility)
   useEffect(() => {
     // initializeDefaults() is now a no-op since we use the database
@@ -292,6 +296,82 @@ export default function CreateTicketPage() {
     }
   }, [])
 
+  // Function to refresh affected systems only (lighter weight)
+  const refreshAffectedSystems = useCallback(async () => {
+    try {
+      const systems = await getAffectedSystems()
+      setAffectedSystems(systems)
+    } catch (error) {
+      console.debug('Background affected systems refresh failed:', error)
+    }
+  }, [])
+
+  // Function to refresh categories only (lighter weight)
+  const refreshCategories = useCallback(async () => {
+    try {
+      const cats = await getCategories()
+      setCategories(cats)
+    } catch (error) {
+      console.debug('Background categories refresh failed:', error)
+    }
+  }, [])
+
+  // Function to refresh priorities only (lighter weight)
+  const refreshPriorities = useCallback(async () => {
+    try {
+      const priorities = await getPriorities()
+      const formattedPriorities = priorities.map(p => ({
+        value: p.toLowerCase().replace(/\s+/g, '_'),
+        label: p
+      }))
+      setPriorityOptions(formattedPriorities)
+      
+      // If current priority is not in the new options, reset to default
+      setFormData(prev => {
+        const currentPriorityExists = formattedPriorities.some(p => p.value === prev.priority)
+        if (!currentPriorityExists && formattedPriorities.length > 0) {
+          const defaultPriority = formattedPriorities.find(p => p.value === 'medium') || formattedPriorities[0]
+          return { ...prev, priority: defaultPriority.value }
+        }
+        return prev
+      })
+    } catch (error) {
+      console.debug('Background priorities refresh failed:', error)
+    }
+  }, [])
+
+  // Function to refresh all maintenance data (lighter weight combined)
+  const refreshAllMaintenanceData = useCallback(async () => {
+    try {
+      const [systems, cats, priorities] = await Promise.all([
+        getAffectedSystems(),
+        getCategories(),
+        getPriorities()
+      ])
+      
+      setAffectedSystems(systems)
+      setCategories(cats)
+      
+      const formattedPriorities = priorities.map(p => ({
+        value: p.toLowerCase().replace(/\s+/g, '_'),
+        label: p
+      }))
+      setPriorityOptions(formattedPriorities)
+      
+      // If current priority is not in the new options, reset to default
+      setFormData(prev => {
+        const currentPriorityExists = formattedPriorities.some(p => p.value === prev.priority)
+        if (!currentPriorityExists && formattedPriorities.length > 0) {
+          const defaultPriority = formattedPriorities.find(p => p.value === 'medium') || formattedPriorities[0]
+          return { ...prev, priority: defaultPriority.value }
+        }
+        return prev
+      })
+    } catch (error) {
+      console.debug('Background maintenance data refresh failed:', error)
+    }
+  }, [])
+
   // Load data on mount and when user changes
   useEffect(() => {
     loadMaintenanceData()
@@ -310,6 +390,49 @@ export default function CreateTicketPage() {
       window.removeEventListener('maintenanceDataChanged', handleMaintenanceDataChange)
     }
   }, [loadMaintenanceData])
+
+  // Start polling for maintenance data updates every 10 seconds
+  useEffect(() => {
+    if (!userLoaded) return
+
+    // Clear any existing interval
+    if (maintenancePollingRef.current) {
+      clearInterval(maintenancePollingRef.current)
+    }
+
+    // Start polling for maintenance data updates every 10 seconds
+    maintenancePollingRef.current = setInterval(() => {
+      if (!isMaintenancePollingRef.current) {
+        isMaintenancePollingRef.current = true
+        refreshAllMaintenanceData().finally(() => {
+          isMaintenancePollingRef.current = false
+        })
+      }
+    }, 5000)
+
+    // Cleanup on unmount
+    return () => {
+      if (maintenancePollingRef.current) {
+        clearInterval(maintenancePollingRef.current)
+        maintenancePollingRef.current = undefined
+      }
+    }
+  }, [userLoaded, refreshAllMaintenanceData])
+
+  // Force an immediate refresh when the component becomes visible again
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshAllMaintenanceData()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [refreshAllMaintenanceData])
 
   const [files, setFiles] = useState<File[]>([])
   const [uploadStatus, setUploadStatus] = useState<Record<number, { status: 'pending' | 'uploading' | 'success' | 'error', message?: string }>>({})

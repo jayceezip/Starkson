@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, Fragment } from 'react'
+import { useEffect, useState, useCallback, useRef, Fragment } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Listbox, Transition } from '@headlessui/react'
@@ -184,6 +184,10 @@ export default function IncidentDetailsPage() {
   // NEW: State for dynamic status options
   const [statusOptions, setStatusOptions] = useState<{ value: string; label: string }[]>([])
 
+  // Refs for polling
+  const maintenancePollingRef = useRef<NodeJS.Timeout>()
+  const isMaintenancePollingRef = useRef<boolean>(false)
+
   // Load dynamic incident statuses from maintenance (async)
   const loadStatusOptions = useCallback(async () => {
     try {
@@ -196,6 +200,20 @@ export default function IncidentDetailsPage() {
     } catch (error) {
       console.error('Error loading incident statuses:', error)
       setStatusOptions([])
+    }
+  }, [])
+
+  // Function to refresh status options only (lighter weight)
+  const refreshStatusOptions = useCallback(async () => {
+    try {
+      const statuses = await getIncidentStatuses()
+      const options = Array.isArray(statuses) ? statuses.map(status => ({
+        value: status.toLowerCase().replace(/\s+/g, '_'),
+        label: status
+      })) : []
+      setStatusOptions(options)
+    } catch (error) {
+      console.debug('Background status options refresh failed:', error)
     }
   }, [])
 
@@ -216,6 +234,49 @@ export default function IncidentDetailsPage() {
       window.removeEventListener('maintenanceDataChanged', handleMaintenanceDataChange)
     }
   }, [loadStatusOptions])
+
+  // Start polling for status options updates every 10 seconds
+  useEffect(() => {
+    if (!mounted || !user || !params.id) return
+
+    // Clear any existing interval
+    if (maintenancePollingRef.current) {
+      clearInterval(maintenancePollingRef.current)
+    }
+
+    // Start polling for status options updates every 10 seconds
+    maintenancePollingRef.current = setInterval(() => {
+      if (!isMaintenancePollingRef.current) {
+        isMaintenancePollingRef.current = true
+        refreshStatusOptions().finally(() => {
+          isMaintenancePollingRef.current = false
+        })
+      }
+    }, 5000)
+
+    // Cleanup on unmount
+    return () => {
+      if (maintenancePollingRef.current) {
+        clearInterval(maintenancePollingRef.current)
+        maintenancePollingRef.current = undefined
+      }
+    }
+  }, [mounted, user, params.id, refreshStatusOptions])
+
+  // Force an immediate refresh when the component becomes visible again
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && params.id) {
+        refreshStatusOptions()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [params.id, refreshStatusOptions])
 
   const fetchIncident = useCallback(async () => {
     try {

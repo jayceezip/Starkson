@@ -37,6 +37,14 @@ const getArticle = (word: string): string => {
   return ['a', 'e', 'i', 'o', 'u'].includes(firstLetter) ? 'an' : 'a';
 };
 
+// Loading Spinner Component
+const LoadingSpinner = ({ size = 'w-5 h-5' }: { size?: string }) => (
+  <svg className={`animate-spin ${size} text-white`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+  </svg>
+);
+
 // Export Options Modal Component
 const ExportOptionsModal = ({ 
   isOpen, 
@@ -192,10 +200,19 @@ const ExportOptionsModal = ({
               disabled={exportLoading}
               className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-              Export as CSV
+              {exportLoading ? (
+                <>
+                  <LoadingSpinner />
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Export as CSV
+                </>
+              )}
             </button>
             
             <button
@@ -203,10 +220,19 @@ const ExportOptionsModal = ({
               disabled={exportLoading}
               className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-              </svg>
-              Export as PDF
+              {exportLoading ? (
+                <>
+                  <LoadingSpinner />
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  Export as PDF
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -377,6 +403,9 @@ export default function MaintenanceModal({
   const [errorMessage, setErrorMessage] = useState('')
   // State for view branches modal
   const [showViewBranchesModal, setShowViewBranchesModal] = useState(false)
+  // Loading states for add/delete operations
+  const [addLoading, setAddLoading] = useState(false)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   const fetchBranches = async () => {
     try {
@@ -440,10 +469,12 @@ export default function MaintenanceModal({
   const handleAddCategory = async (name: string) => {
     const trimmed = name.trim()
     if (!trimmed) return
+    setAddLoading(true)
     try {
       const list = await getCategories()
       if (list.includes(trimmed)) {
         setSuccessMessage(`Category "${trimmed}" already exists`)
+        setAddLoading(false)
         return
       }
       await addMaintenanceItem('category', trimmed)
@@ -460,11 +491,14 @@ export default function MaintenanceModal({
       const errorMsg = error.response?.data?.message || error.message || `Failed to add category "${trimmed}"`
       setErrorMessage(errorMsg)
       setSuccessMessage('')
+    } finally {
+      setAddLoading(false)
     }
   }
 
   
   const handleDeleteCategory = async (name: string) => {
+    setDeleteLoading(true)
     try {
       await deleteMaintenanceItem('category', name)
       clearMaintenanceCache()
@@ -477,16 +511,20 @@ export default function MaintenanceModal({
     } catch (error: any) {
       setErrorMessage(error.response?.data?.message || `Failed to delete category "${name}"`)
       setSuccessMessage('')
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
   const handleAddAffectedSystem = async (name: string) => {
     const trimmed = name.trim()
     if (!trimmed) return
+    setAddLoading(true)
     try {
       const list = await getAffectedSystems()
       if (list.includes(trimmed)) {
         setSuccessMessage(`Affected System "${trimmed}" already exists`)
+        setAddLoading(false)
         return
       }
       await addMaintenanceItem('affected_system', trimmed)
@@ -500,10 +538,13 @@ export default function MaintenanceModal({
     } catch (error: any) {
       setErrorMessage(error.response?.data?.message || `Failed to add affected system "${trimmed}"`)
       setSuccessMessage('')
+    } finally {
+      setAddLoading(false)
     }
   }
 
   const handleDeleteAffectedSystem = async (name: string) => {
+    setDeleteLoading(true)
     try {
       await deleteMaintenanceItem('affected_system', name)
       clearMaintenanceCache()
@@ -516,16 +557,20 @@ export default function MaintenanceModal({
     } catch (error: any) {
       setErrorMessage(error.response?.data?.message || `Failed to delete affected system "${name}"`)
       setSuccessMessage('')
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
   const handleAddIncidentCategory = async (name: string) => {
     const trimmed = name.trim()
     if (!trimmed) return
+    setAddLoading(true)
     try {
       const list = await getIncidentCategories()
       if (list.includes(trimmed)) {
         setSuccessMessage(`Incident Category "${trimmed}" already exists`)
+        setAddLoading(false)
         return
       }
       await addMaintenanceItem('incident_category', trimmed)
@@ -539,10 +584,13 @@ export default function MaintenanceModal({
     } catch (error: any) {
       setErrorMessage(error.response?.data?.message || `Failed to add incident category "${trimmed}"`)
       setSuccessMessage('')
+    } finally {
+      setAddLoading(false)
     }
   }
 
   const handleDeleteIncidentCategory = async (name: string) => {
+    setDeleteLoading(true)
     try {
       await deleteMaintenanceItem('incident_category', name)
       clearMaintenanceCache()
@@ -555,6 +603,8 @@ export default function MaintenanceModal({
     } catch (error: any) {
       setErrorMessage(error.response?.data?.message || `Failed to delete incident category "${name}"`)
       setSuccessMessage('')
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -562,10 +612,12 @@ export default function MaintenanceModal({
   const handleAddSeverity = async (name: string) => {
     const trimmed = name.trim()
     if (!trimmed) return
+    setAddLoading(true)
     try {
       const list = await getSeverities()
       if (list.includes(trimmed)) {
         setSuccessMessage(`Severity "${trimmed}" already exists`)
+        setAddLoading(false)
         return
       }
       await addMaintenanceItem('severity', trimmed)
@@ -579,11 +631,14 @@ export default function MaintenanceModal({
     } catch (error: any) {
       setErrorMessage(error.response?.data?.message || `Failed to add severity "${trimmed}"`)
       setSuccessMessage('')
+    } finally {
+      setAddLoading(false)
     }
   }
 
   // Handle Delete Severity
   const handleDeleteSeverity = async (name: string) => {
+    setDeleteLoading(true)
     try {
       await deleteMaintenanceItem('severity', name)
       clearMaintenanceCache()
@@ -596,6 +651,8 @@ export default function MaintenanceModal({
     } catch (error: any) {
       setErrorMessage(error.response?.data?.message || `Failed to delete severity "${name}"`)
       setSuccessMessage('')
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -603,10 +660,12 @@ export default function MaintenanceModal({
   const handleAddTicketStatus = async (name: string) => {
     const trimmed = name.trim()
     if (!trimmed) return
+    setAddLoading(true)
     try {
       const list = await getTicketStatuses()
       if (list.includes(trimmed)) {
         setSuccessMessage(`Ticket Status "${trimmed}" already exists`)
+        setAddLoading(false)
         return
       }
       await addMaintenanceItem('ticket_status', trimmed)
@@ -620,11 +679,14 @@ export default function MaintenanceModal({
     } catch (error: any) {
       setErrorMessage(error.response?.data?.message || `Failed to add ticket status "${trimmed}"`)
       setSuccessMessage('')
+    } finally {
+      setAddLoading(false)
     }
   }
 
   // Handle Delete Ticket Status
   const handleDeleteTicketStatus = async (name: string) => {
+    setDeleteLoading(true)
     try {
       await deleteMaintenanceItem('ticket_status', name)
       clearMaintenanceCache()
@@ -637,6 +699,8 @@ export default function MaintenanceModal({
     } catch (error: any) {
       setErrorMessage(error.response?.data?.message || `Failed to delete ticket status "${name}"`)
       setSuccessMessage('')
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -644,10 +708,12 @@ export default function MaintenanceModal({
   const handleAddPriority = async (name: string) => {
     const trimmed = name.trim()
     if (!trimmed) return
+    setAddLoading(true)
     try {
       const list = await getPriorities()
       if (list.includes(trimmed)) {
         setSuccessMessage(`Priority "${trimmed}" already exists`)
+        setAddLoading(false)
         return
       }
       await addMaintenanceItem('priority', trimmed)
@@ -661,11 +727,14 @@ export default function MaintenanceModal({
     } catch (error: any) {
       setErrorMessage(error.response?.data?.message || `Failed to add priority "${trimmed}"`)
       setSuccessMessage('')
+    } finally {
+      setAddLoading(false)
     }
   }
 
   // Handle Delete Priority
   const handleDeletePriority = async (name: string) => {
+    setDeleteLoading(true)
     try {
       await deleteMaintenanceItem('priority', name)
       clearMaintenanceCache()
@@ -678,6 +747,8 @@ export default function MaintenanceModal({
     } catch (error: any) {
       setErrorMessage(error.response?.data?.message || `Failed to delete priority "${name}"`)
       setSuccessMessage('')
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -685,10 +756,12 @@ export default function MaintenanceModal({
   const handleAddIncidentStatus = async (name: string) => {
     const trimmed = name.trim()
     if (!trimmed) return
+    setAddLoading(true)
     try {
       const list = await getIncidentStatuses()
       if (list.includes(trimmed)) {
         setSuccessMessage(`Incident Status "${trimmed}" already exists`)
+        setAddLoading(false)
         return
       }
       await addMaintenanceItem('incident_status', trimmed)
@@ -702,11 +775,14 @@ export default function MaintenanceModal({
     } catch (error: any) {
       setErrorMessage(error.response?.data?.message || `Failed to add incident status "${trimmed}"`)
       setSuccessMessage('')
+    } finally {
+      setAddLoading(false)
     }
   }
 
   // Handle Delete Incident Status
   const handleDeleteIncidentStatus = async (name: string) => {
+    setDeleteLoading(true)
     try {
       await deleteMaintenanceItem('incident_status', name)
       clearMaintenanceCache()
@@ -719,10 +795,13 @@ export default function MaintenanceModal({
     } catch (error: any) {
       setErrorMessage(error.response?.data?.message || `Failed to delete incident status "${name}"`)
       setSuccessMessage('')
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
   const handleAddBranch = async (acronym: string, name: string) => {
+    setAddLoading(true)
     try {
       setBranchError('')
       await api.post('/branches', { acronym: acronym.trim().toUpperCase(), name: name.trim() })
@@ -734,10 +813,13 @@ export default function MaintenanceModal({
       }, 500)
     } catch (err: any) {
       setBranchError(err.response?.data?.message || 'Failed to add branch')
+    } finally {
+      setAddLoading(false)
     }
   }
 
   const handleDeleteBranch = async (acronym: string) => {
+    setDeleteLoading(true)
     try {
       setBranchError('')
       await api.delete(`/branches/${encodeURIComponent(acronym)}`)
@@ -749,6 +831,8 @@ export default function MaintenanceModal({
       }, 500)
     } catch (err: any) {
       setBranchError(err.response?.data?.message || 'Failed to delete branch')
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -991,13 +1075,13 @@ export default function MaintenanceModal({
                 {actionType === 'add' ? (
                   <BranchAddForm 
                     onSubmit={handleAddBranch} 
-                    loading={branchesLoading} 
+                    loading={branchesLoading || addLoading} 
                   />
                 ) : (
                   <BranchDeleteForm
                     branches={branches}
                     onDelete={handleDeleteBranch}
-                    loading={branchesLoading}
+                    loading={branchesLoading || deleteLoading}
                   />
                 )}
               </>
@@ -1007,12 +1091,14 @@ export default function MaintenanceModal({
                   label={`New ${LABELS.category.singular}`}
                   placeholder="e.g., Security"
                   onSubmit={handleAddCategory}
+                  loading={addLoading}
                 />
               ) : (
                 <DeleteForm
                   label={`Select ${LABELS.category.singular} to delete`}
                   options={categories}
                   onDelete={handleDeleteCategory}
+                  loading={deleteLoading}
                 />
               )
             ) : manageType === 'incident_category' ? (
@@ -1021,12 +1107,14 @@ export default function MaintenanceModal({
                   label={`New ${LABELS.incident_category.singular}`}
                   placeholder="e.g., Data Breach"
                   onSubmit={handleAddIncidentCategory}
+                  loading={addLoading}
                 />
               ) : (
                 <DeleteForm
                   label={`Select ${LABELS.incident_category.singular} to delete`}
                   options={incidentCategories}
                   onDelete={handleDeleteIncidentCategory}
+                  loading={deleteLoading}
                 />
               )
             ) : manageType === 'severity' ? (
@@ -1035,12 +1123,14 @@ export default function MaintenanceModal({
                   label={`New ${LABELS.severity.singular}`}
                   placeholder="e.g., Critical"
                   onSubmit={handleAddSeverity}
+                  loading={addLoading}
                 />
               ) : (
                 <DeleteForm
                   label={`Select ${LABELS.severity.singular} to delete`}
                   options={severities}
                   onDelete={handleDeleteSeverity}
+                  loading={deleteLoading}
                 />
               )
             ) : manageType === 'ticket_status' ? (
@@ -1049,12 +1139,14 @@ export default function MaintenanceModal({
                   label={`New ${LABELS.ticket_status.singular}`}
                   placeholder="e.g., On Hold"
                   onSubmit={handleAddTicketStatus}
+                  loading={addLoading}
                 />
               ) : (
                 <DeleteForm
                   label={`Select ${LABELS.ticket_status.singular} to delete`}
                   options={ticketStatuses}
                   onDelete={handleDeleteTicketStatus}
+                  loading={deleteLoading}
                 />
               )
             ) : manageType === 'priority' ? (
@@ -1063,12 +1155,14 @@ export default function MaintenanceModal({
                   label={`New ${LABELS.priority.singular}`}
                   placeholder="e.g., Urgent"
                   onSubmit={handleAddPriority}
+                  loading={addLoading}
                 />
               ) : (
                 <DeleteForm
                   label={`Select ${LABELS.priority.singular} to delete`}
                   options={priorities}
                   onDelete={handleDeletePriority}
+                  loading={deleteLoading}
                 />
               )
             ) : manageType === 'incident_status' ? (
@@ -1077,12 +1171,14 @@ export default function MaintenanceModal({
                   label={`New ${LABELS.incident_status.singular}`}
                   placeholder="e.g., In Progress"
                   onSubmit={handleAddIncidentStatus}
+                  loading={addLoading}
                 />
               ) : (
                 <DeleteForm
                   label={`Select ${LABELS.incident_status.singular} to delete`}
                   options={incidentStatuses}
                   onDelete={handleDeleteIncidentStatus}
+                  loading={deleteLoading}
                 />
               )
             ) : manageType === 'affected_system' ? (
@@ -1091,12 +1187,14 @@ export default function MaintenanceModal({
                   label={`New ${LABELS.affected_system.singular}`}
                   placeholder="e.g., Outlook"
                   onSubmit={handleAddAffectedSystem}
+                  loading={addLoading}
                 />
               ) : (
                 <DeleteForm
                   label={`Select ${LABELS.affected_system.singular} to delete`}
                   options={affectedSystems}
                   onDelete={handleDeleteAffectedSystem}
+                  loading={deleteLoading}
                 />
               )
             ) : null}
@@ -1118,10 +1216,12 @@ function AddForm({
   label,
   placeholder,
   onSubmit,
+  loading = false,
 }: {
   label: string
   placeholder: string
   onSubmit: (value: string) => void
+  loading?: boolean
 }) {
   const [value, setValue] = useState('')
 
@@ -1139,13 +1239,22 @@ function AddForm({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder={placeholder}
-        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        disabled={loading}
+        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
       />
       <button
         type="submit"
-        className="w-full px-4 py-2.5 rounded-xl font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        disabled={!value.trim() || loading}
+        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        Add
+        {loading ? (
+          <>
+            <LoadingSpinner />
+            Adding...
+          </>
+        ) : (
+          'Add'
+        )}
       </button>
     </form>
   )
@@ -1181,7 +1290,8 @@ function BranchAddForm({
           onChange={(e) => setAcronym(e.target.value)}
           placeholder="e.g., D10"
           maxLength={10}
-          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
+          disabled={loading}
+          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase disabled:opacity-50 disabled:cursor-not-allowed"
         />
       </div>
       <div>
@@ -1191,15 +1301,23 @@ function BranchAddForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g., D10 – New Branch"
-          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          disabled={loading}
+          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
         />
       </div>
       <button
         type="submit"
         disabled={loading || !acronym.trim() || !name.trim()}
-        className="w-full px-4 py-2.5 rounded-xl font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {loading ? 'Adding...' : 'Add Branch'}
+        {loading ? (
+          <>
+            <LoadingSpinner />
+            Adding...
+          </>
+        ) : (
+          'Add Branch'
+        )}
       </button>
     </form>
   )
@@ -1225,8 +1343,16 @@ function BranchDeleteForm({
   const realBranches = branches.filter((b) => b.acronym !== 'ALL')
 
   if (loading && realBranches.length === 0) {
-    return <p className="text-sm text-gray-500">Loading branches...</p>
+    return (
+      <div className="flex items-center justify-center py-8">
+        <div className="flex items-center gap-2 text-gray-500">
+          <LoadingSpinner size="w-5 h-5" />
+          <span>Loading branches...</span>
+        </div>
+      </div>
+    )
   }
+  
   if (realBranches.length === 0) {
     return <p className="text-sm text-gray-500">No branches to delete.</p>
   }
@@ -1237,7 +1363,8 @@ function BranchDeleteForm({
       <select
         value={selected}
         onChange={(e) => setSelected(e.target.value)}
-        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        disabled={loading}
+        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <option value="">Select...</option>
         {realBranches.map((b) => (
@@ -1250,9 +1377,16 @@ function BranchDeleteForm({
         type="button"
         onClick={handleDelete}
         disabled={!selected || loading}
-        className="w-full px-4 py-2.5 rounded-xl font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {loading ? 'Deleting...' : 'Delete Branch'}
+        {loading ? (
+          <>
+            <LoadingSpinner />
+            Deleting...
+          </>
+        ) : (
+          'Delete Branch'
+        )}
       </button>
     </div>
   )
@@ -1262,10 +1396,12 @@ function DeleteForm({
   label,
   options,
   onDelete,
+  loading = false,
 }: {
   label: string
   options: string[]
   onDelete: (value: string) => void
+  loading?: boolean
 }) {
   const [selected, setSelected] = useState('')
 
@@ -1286,7 +1422,8 @@ function DeleteForm({
       <select
         value={selected}
         onChange={(e) => setSelected(e.target.value)}
-        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        disabled={loading}
+        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <option value="">Select...</option>
         {options.map((opt) => (
@@ -1296,10 +1433,17 @@ function DeleteForm({
       <button
         type="button"
         onClick={handleDelete}
-        disabled={!selected}
-        className="w-full px-4 py-2.5 rounded-xl font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        disabled={!selected || loading}
+        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        Delete
+        {loading ? (
+          <>
+            <LoadingSpinner />
+            Deleting...
+          </>
+        ) : (
+          'Delete'
+        )}
       </button>
     </div>
   )

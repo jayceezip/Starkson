@@ -183,10 +183,12 @@ export default function TicketDetailsPage() {
 
   // Refs for polling
   const pollingIntervalRef = useRef<NodeJS.Timeout>()
+  const maintenancePollingRef = useRef<NodeJS.Timeout>()
   const lastCommentIdsRef = useRef<Set<number>>(new Set())
   const lastAttachmentIdsRef = useRef<Set<number>>(new Set())
   const lastStatusRef = useRef<string>('')
   const isPollingRef = useRef<boolean>(false)
+  const isMaintenancePollingRef = useRef<boolean>(false)
   const ticketIdRef = useRef<string | null>(null)
 
   // Fetch all maintenance data when component mounts
@@ -211,6 +213,62 @@ export default function TicketDetailsPage() {
     }
   }, [])
 
+  // Function to refresh incident categories only (lighter weight)
+  const refreshIncidentCategories = useCallback(async () => {
+    try {
+      const categories = await getIncidentCategories()
+      setIncidentCategories(categories)
+    } catch (error) {
+      console.debug('Background incident categories refresh failed:', error)
+    }
+  }, [])
+
+  // Function to refresh severities only (lighter weight)
+  const refreshSeverities = useCallback(async () => {
+    try {
+      const severities = await getSeverities()
+      setSeverities(severities)
+    } catch (error) {
+      console.debug('Background severities refresh failed:', error)
+    }
+  }, [])
+
+  // Function to refresh status options only (lighter weight)
+  const refreshStatusOptions = useCallback(async () => {
+    try {
+      const statuses = await getTicketStatuses()
+      const formattedStatuses = Array.isArray(statuses) ? statuses.map(status => ({
+        value: status.toLowerCase().replace(/\s+/g, '_'),
+        label: status
+      })) : []
+      setTicketStatuses(formattedStatuses)
+    } catch (error) {
+      console.debug('Background status options refresh failed:', error)
+    }
+  }, [])
+
+  // Function to refresh all maintenance data (lighter weight combined)
+  const refreshAllMaintenanceData = useCallback(async () => {
+    try {
+      const [categories, severities, statuses] = await Promise.all([
+        getIncidentCategories(),
+        getSeverities(),
+        getTicketStatuses()
+      ])
+      
+      setIncidentCategories(categories)
+      setSeverities(severities)
+      
+      const formattedStatuses = Array.isArray(statuses) ? statuses.map(status => ({
+        value: status.toLowerCase().replace(/\s+/g, '_'),
+        label: status
+      })) : []
+      setTicketStatuses(formattedStatuses)
+    } catch (error) {
+      console.debug('Background maintenance data refresh failed:', error)
+    }
+  }, [])
+
   useEffect(() => {
     if (mounted) {
       loadMaintenanceData()
@@ -226,6 +284,34 @@ export default function TicketDetailsPage() {
       }
     }
   }, [mounted, loadMaintenanceData])
+
+  // Poll for maintenance data updates (incident categories, severities, statuses)
+  useEffect(() => {
+    if (!mounted || !user || !params.id) return
+
+    // Clear any existing interval
+    if (maintenancePollingRef.current) {
+      clearInterval(maintenancePollingRef.current)
+    }
+
+    // Start polling for maintenance data updates every 10 seconds
+    maintenancePollingRef.current = setInterval(() => {
+      if (!isMaintenancePollingRef.current) {
+        isMaintenancePollingRef.current = true
+        refreshAllMaintenanceData().finally(() => {
+          isMaintenancePollingRef.current = false
+        })
+      }
+    }, 5000)
+
+    // Cleanup on unmount
+    return () => {
+      if (maintenancePollingRef.current) {
+        clearInterval(maintenancePollingRef.current)
+        maintenancePollingRef.current = undefined
+      }
+    }
+  }, [mounted, user, params.id, refreshAllMaintenanceData])
 
   useEffect(() => {
     setMounted(true)
@@ -471,7 +557,8 @@ export default function TicketDetailsPage() {
         Promise.all([
           fetchCommentsOnly(),
           fetchAttachmentsOnly(),
-          fetchStatusOnly()
+          fetchStatusOnly(),
+          refreshAllMaintenanceData() // Refresh all maintenance data
         ])
       }
     }
@@ -481,7 +568,7 @@ export default function TicketDetailsPage() {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [params.id, fetchCommentsOnly, fetchAttachmentsOnly, fetchStatusOnly])
+  }, [params.id, fetchCommentsOnly, fetchAttachmentsOnly, fetchStatusOnly, refreshAllMaintenanceData])
 
   // Initialize edit data when ticket loads
   useEffect(() => {
