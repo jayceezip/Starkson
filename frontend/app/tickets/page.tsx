@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, Fragment } from 'react'
+import { useEffect, useState, useCallback, useRef, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Listbox, Transition } from '@headlessui/react'
@@ -31,6 +31,95 @@ interface Ticket {
 
 const PAGE_SIZE = 10
 
+// Helper function to sort statuses with "All statuses" at the top and proper order
+const sortStatusOptions = (statuses: { value: string; label: string }[]): { value: string; label: string }[] => {
+  // Define the desired order for default statuses (excluding "All statuses")
+  const statusOrder = [
+    'All Statuses',
+    'New',
+    'Assigned',
+    'In Progress',
+    'Waiting for User',
+    'Resolved',
+    'Closed',
+    'Converted to Incident'
+  ];
+  
+  // Separate "All statuses" from the rest
+  const allStatusesOption = statuses.find(opt => opt.value === '') || { value: '', label: 'All statuses' };
+  const otherOptions = statuses.filter(opt => opt.value !== '');
+  
+  // Separate into default statuses and custom statuses
+  const defaultOptions: { value: string; label: string }[] = [];
+  const customOptions: { value: string; label: string }[] = [];
+  
+  otherOptions.forEach(opt => {
+    if (statusOrder.includes(opt.label)) {
+      defaultOptions.push(opt);
+    } else {
+      customOptions.push(opt);
+    }
+  });
+  
+  // Sort default statuses according to the specified order
+  defaultOptions.sort((a, b) => statusOrder.indexOf(a.label) - statusOrder.indexOf(b.label));
+  
+  // Sort custom statuses alphabetically by label
+  customOptions.sort((a, b) => a.label.localeCompare(b.label));
+  
+  // Find the index where custom statuses should be inserted (after "Waiting for User")
+  const waitingForUserIndex = defaultOptions.findIndex(opt => opt.label === 'Waiting for User');
+  const insertIndex = waitingForUserIndex !== -1 ? waitingForUserIndex + 1 : defaultOptions.length;
+  
+  // Insert custom statuses after "Waiting for User"
+  const result = [...defaultOptions];
+  if (insertIndex >= 0 && insertIndex <= result.length) {
+    result.splice(insertIndex, 0, ...customOptions);
+  } else {
+    result.push(...customOptions);
+  }
+  
+  // Return with "All statuses" at the top
+  return [allStatusesOption, ...result];
+};
+
+// Helper function to sort priorities with "All priorities" at the top
+const sortPriorityOptions = (priorities: { value: string; label: string }[]): { value: string; label: string }[] => {
+  // Define the desired order for default priorities (excluding "All priorities")
+  const priorityOrder = ['Low', 'Medium', 'High', 'Urgent'];
+  
+  // Separate "All priorities" from the rest
+  const allPrioritiesOption = priorities.find(opt => opt.value === '') || { value: '', label: 'All priorities' };
+  const otherOptions = priorities.filter(opt => opt.value !== '');
+  
+  // Separate into default priorities and custom priorities
+  const defaultOptions: { value: string; label: string }[] = [];
+  const customOptions: { value: string; label: string }[] = [];
+  
+  otherOptions.forEach(opt => {
+    if (priorityOrder.includes(opt.label)) {
+      defaultOptions.push(opt);
+    } else {
+      customOptions.push(opt);
+    }
+  });
+  
+  // Sort default priorities according to the specified order
+  defaultOptions.sort((a, b) => priorityOrder.indexOf(a.label) - priorityOrder.indexOf(b.label));
+  
+  // Sort custom priorities alphabetically by label
+  customOptions.sort((a, b) => a.label.localeCompare(b.label));
+  
+  // Return default priorities first, then custom priorities, with "All priorities" at the top
+  return [allPrioritiesOption, ...defaultOptions, ...customOptions];
+};
+
+// Helper function to sort branches with "All branches" at the top
+const sortBranchOptions = (branches: { acronym: string; name: string }[]): { acronym: string; name: string }[] => {
+  // Sort branches alphabetically by name
+  return [...branches].sort((a, b) => a.name.localeCompare(b.name));
+};
+
 export default function TicketsPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
@@ -47,7 +136,89 @@ export default function TicketsPage() {
   const [priorityOptions, setPriorityOptions] = useState<{ value: string; label: string }[]>([
     { value: '', label: 'All priorities' }
   ])
+  // Sorted branches
+  const [sortedBranches, setSortedBranches] = useState<{ acronym: string; name: string }[]>([])
   const [exporting, setExporting] = useState(false)
+
+  // Refs for polling
+  const maintenancePollingRef = useRef<NodeJS.Timeout>()
+  const isMaintenancePollingRef = useRef<boolean>(false)
+
+  // Function to refresh status options only (lighter weight)
+  const refreshStatusOptions = useCallback(async () => {
+    try {
+      const statuses = await getTicketStatuses()
+      const statusOpts = [
+        { value: '', label: 'All statuses' },
+        ...(Array.isArray(statuses) ? statuses.map(status => ({
+          value: status.toLowerCase().replace(/\s+/g, '_'),
+          label: status
+        })) : [])
+      ]
+      // Sort status options
+      const sortedStatusOpts = sortStatusOptions(statusOpts);
+      setStatusOptions(sortedStatusOpts)
+    } catch (error) {
+      console.debug('Background status options refresh failed:', error)
+    }
+  }, [])
+
+  // Function to refresh priority options only (lighter weight)
+  const refreshPriorityOptions = useCallback(async () => {
+    try {
+      const priorities = await getPriorities()
+      const priorityOpts = [
+        { value: '', label: 'All priorities' },
+        ...(Array.isArray(priorities) ? priorities.map(priority => ({
+          value: priority.toLowerCase(),
+          label: priority
+        })) : [])
+      ]
+      // Sort priority options
+      const sortedPriorityOpts = sortPriorityOptions(priorityOpts);
+      setPriorityOptions(sortedPriorityOpts)
+    } catch (error) {
+      console.debug('Background priority options refresh failed:', error)
+    }
+  }, [])
+
+  // Function to refresh all maintenance data (lighter weight combined)
+  const refreshAllMaintenanceData = useCallback(async () => {
+    try {
+      const [statuses, priorities] = await Promise.all([
+        getTicketStatuses(),
+        getPriorities()
+      ])
+      
+      // Update status options
+      const statusOpts = [
+        { value: '', label: 'All statuses' },
+        ...(Array.isArray(statuses) ? statuses.map(status => ({
+          value: status.toLowerCase().replace(/\s+/g, '_'),
+          label: status
+        })) : [])
+      ]
+      const sortedStatusOpts = sortStatusOptions(statusOpts);
+      setStatusOptions(sortedStatusOpts)
+
+      // Update priority options
+      const priorityOpts = [
+        { value: '', label: 'All priorities' },
+        ...(Array.isArray(priorities) ? priorities.map(priority => ({
+          value: priority.toLowerCase(),
+          label: priority
+        })) : [])
+      ]
+      const sortedPriorityOpts = sortPriorityOptions(priorityOpts);
+      setPriorityOptions(sortedPriorityOpts)
+
+      // Sort branches (static, but keep for consistency)
+      const sorted = sortBranchOptions(REAL_BRANCHES);
+      setSortedBranches(sorted);
+    } catch (error) {
+      console.debug('Background maintenance data refresh failed:', error)
+    }
+  }, [])
 
   // Load dynamic status options from maintenance (async)
   const loadMaintenanceData = useCallback(async () => {
@@ -60,7 +231,9 @@ export default function TicketsPage() {
           label: status
         })) : [])
       ]
-      setStatusOptions(statusOpts)
+      // Sort status options
+      const sortedStatusOpts = sortStatusOptions(statusOpts);
+      setStatusOptions(sortedStatusOpts)
 
       // Load dynamic priority options from maintenance
       const priorities = await getPriorities()
@@ -71,12 +244,19 @@ export default function TicketsPage() {
           label: priority
         })) : [])
       ]
-      setPriorityOptions(priorityOpts)
+      // Sort priority options
+      const sortedPriorityOpts = sortPriorityOptions(priorityOpts);
+      setPriorityOptions(sortedPriorityOpts)
+
+      // Sort branches
+      const sorted = sortBranchOptions(REAL_BRANCHES);
+      setSortedBranches(sorted);
     } catch (error) {
       console.error('Error loading maintenance data:', error)
       // Set default options on error
       setStatusOptions([{ value: '', label: 'All statuses' }])
       setPriorityOptions([{ value: '', label: 'All priorities' }])
+      setSortedBranches(sortBranchOptions(REAL_BRANCHES));
     }
   }, [])
 
@@ -97,6 +277,49 @@ export default function TicketsPage() {
       window.removeEventListener('maintenanceDataChanged', handleMaintenanceDataChange)
     }
   }, [loadMaintenanceData])
+
+  // Start polling for maintenance data updates every 10 seconds
+  useEffect(() => {
+    if (!mounted || !user) return
+
+    // Clear any existing interval
+    if (maintenancePollingRef.current) {
+      clearInterval(maintenancePollingRef.current)
+    }
+
+    // Start polling for maintenance data updates every 10 seconds
+    maintenancePollingRef.current = setInterval(() => {
+      if (!isMaintenancePollingRef.current) {
+        isMaintenancePollingRef.current = true
+        refreshAllMaintenanceData().finally(() => {
+          isMaintenancePollingRef.current = false
+        })
+      }
+    }, 5000)
+
+    // Cleanup on unmount
+    return () => {
+      if (maintenancePollingRef.current) {
+        clearInterval(maintenancePollingRef.current)
+        maintenancePollingRef.current = undefined
+      }
+    }
+  }, [mounted, user, refreshAllMaintenanceData])
+
+  // Force an immediate refresh when the component becomes visible again
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshAllMaintenanceData()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [refreshAllMaintenanceData])
 
   const fetchTickets = useCallback(async (showLoading = true) => {
     if (!user) return
@@ -396,13 +619,13 @@ export default function TicketsPage() {
                 <Listbox value={filters.branch} onChange={(value) => { setFilters((f) => ({ ...f, branch: value })); setPage(1) }}>
                   <div className="relative">
                     <Listbox.Button className="relative w-full flex items-center justify-between gap-2 px-4 py-2.5 bg-white text-gray-900 rounded-xl border border-gray-200 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-medium text-left">
-                      <span>{filters.branch ? REAL_BRANCHES.find((b) => b.acronym === filters.branch)?.name ?? filters.branch : 'All branches'}</span>
+                      <span>{filters.branch ? sortedBranches.find((b) => b.acronym === filters.branch)?.name ?? filters.branch : 'All branches'}</span>
                       <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                     </Listbox.Button>
                     <Transition as={Fragment} leave="transition ease-in duration-100" leaveFrom="opacity-100" leaveTo="opacity-0">
                       <Listbox.Options className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 max-h-60 overflow-auto">
                         <Listbox.Option value="" className={({ active }) => `cursor-pointer py-2.5 px-4 ${active ? 'bg-gray-50' : ''}`}>All branches</Listbox.Option>
-                        {REAL_BRANCHES.map((b) => (
+                        {sortedBranches.map((b) => (
                           <Listbox.Option key={b.acronym} value={b.acronym} className={({ active }) => `cursor-pointer py-2.5 px-4 ${active ? 'bg-gray-50' : ''}`}>
                             {b.name}
                           </Listbox.Option>

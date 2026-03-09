@@ -262,6 +262,32 @@ export default function CreateTicketPage() {
     // initializeDefaults() is now a no-op since we use the database
   }, [])
 
+  // Helper function to sort priorities in the desired order
+  const sortPriorities = (priorities: string[]): string[] => {
+    const priorityOrder = ['Low', 'Medium', 'High', 'Urgent'];
+    
+    // Separate into default priorities and custom priorities
+    const defaultPriorities: string[] = [];
+    const customPriorities: string[] = [];
+    
+    priorities.forEach(p => {
+      if (priorityOrder.includes(p)) {
+        defaultPriorities.push(p);
+      } else {
+        customPriorities.push(p);
+      }
+    });
+    
+    // Sort default priorities according to the specified order
+    defaultPriorities.sort((a, b) => priorityOrder.indexOf(a) - priorityOrder.indexOf(b));
+    
+    // Sort custom priorities alphabetically (or however you want them)
+    customPriorities.sort((a, b) => a.localeCompare(b));
+    
+    // Return default priorities first, then custom priorities
+    return [...defaultPriorities, ...customPriorities];
+  };
+
   // Load maintenance data with refresh
   const loadMaintenanceData = useCallback(async () => {
     setIsLoadingMaintenance(true)
@@ -276,11 +302,15 @@ export default function CreateTicketPage() {
       setAffectedSystems(data.affectedSystems)
       setCategories(data.categories)
       
+      // Sort priorities in the desired order: Low, Medium, High, Urgent, then custom priorities
+      const sortedPriorities = sortPriorities(data.priorities);
+      
       // Format priorities
-      const formattedPriorities = data.priorities.map(p => ({
+      const formattedPriorities = sortedPriorities.map(p => ({
         value: p.toLowerCase().replace(/\s+/g, '_'),
         label: p
       }))
+      
       setPriorityOptions(formattedPriorities)
       
       // Set default priority if available
@@ -320,10 +350,16 @@ export default function CreateTicketPage() {
   const refreshPriorities = useCallback(async () => {
     try {
       const priorities = await getPriorities()
-      const formattedPriorities = priorities.map(p => ({
+      
+      // Sort priorities in the desired order: Low, Medium, High, Urgent, then custom priorities
+      const sortedPriorities = sortPriorities(priorities);
+      
+      // Format priorities
+      const formattedPriorities = sortedPriorities.map(p => ({
         value: p.toLowerCase().replace(/\s+/g, '_'),
         label: p
       }))
+      
       setPriorityOptions(formattedPriorities)
       
       // If current priority is not in the new options, reset to default
@@ -352,10 +388,15 @@ export default function CreateTicketPage() {
       setAffectedSystems(systems)
       setCategories(cats)
       
-      const formattedPriorities = priorities.map(p => ({
+      // Sort priorities in the desired order: Low, Medium, High, Urgent, then custom priorities
+      const sortedPriorities = sortPriorities(priorities);
+      
+      // Format priorities
+      const formattedPriorities = sortedPriorities.map(p => ({
         value: p.toLowerCase().replace(/\s+/g, '_'),
         label: p
       }))
+      
       setPriorityOptions(formattedPriorities)
       
       // If current priority is not in the new options, reset to default

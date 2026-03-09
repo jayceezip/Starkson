@@ -8,7 +8,7 @@ import api, { getApiBaseUrl } from '@/lib/api'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser } from '@/lib/auth'
 import { formatPinoyDateTime } from '@/lib/date'
-import { getIncidentStatuses } from '@/lib/maintenance' // Added import
+import { getIncidentStatuses } from '@/lib/maintenance'
 
 interface Incident {
   id: number
@@ -49,6 +49,52 @@ interface Attachment {
   size: number
   createdAt: string
 }
+
+// Helper function to sort incident statuses with "All statuses" at the top and proper order
+const sortIncidentStatusOptions = (statuses: { value: string; label: string }[]): { value: string; label: string }[] => {
+  // Define the desired order for default statuses
+  const statusOrder = [
+    'All Statuses',
+    'New',
+    'Triaged',
+    'Investigating',
+    'Contained',
+    'Recovered',
+    'Closed'
+  ];
+  
+  // Separate into default statuses and custom statuses
+  const defaultOptions: { value: string; label: string }[] = [];
+  const customOptions: { value: string; label: string }[] = [];
+  
+  statuses.forEach(opt => {
+    if (statusOrder.includes(opt.label)) {
+      defaultOptions.push(opt);
+    } else {
+      customOptions.push(opt);
+    }
+  });
+  
+  // Sort default statuses according to the specified order
+  defaultOptions.sort((a, b) => statusOrder.indexOf(a.label) - statusOrder.indexOf(b.label));
+  
+  // Sort custom statuses alphabetically by label
+  customOptions.sort((a, b) => a.label.localeCompare(b.label));
+  
+  // Find the index where custom statuses should be inserted (after "Contained")
+  const containedIndex = defaultOptions.findIndex(opt => opt.label === 'Contained');
+  const insertIndex = containedIndex !== -1 ? containedIndex + 1 : defaultOptions.length;
+  
+  // Insert custom statuses after "Contained"
+  const result = [...defaultOptions];
+  if (insertIndex >= 0 && insertIndex <= result.length) {
+    result.splice(insertIndex, 0, ...customOptions);
+  } else {
+    result.push(...customOptions);
+  }
+  
+  return result;
+};
 
 // Modern Status Select Component for Incidents - COLORS REMOVED with dynamic options
 const ModernIncidentStatusSelect = ({ 
@@ -169,6 +215,11 @@ function getIncidentField(incident: any, camel: string, snake?: string): string 
 }
 
 export default function IncidentDetailsPage() {
+  // DEBUG: Force a visible alert to confirm component is running
+  if (typeof window !== 'undefined') {
+    console.log('%c🔵 INCIDENT PAGE LOADED - CHECKING USER ROLE', 'font-size: 16px; font-weight: bold; color: blue;');
+  }
+  
   const params = useParams()
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
@@ -181,27 +232,22 @@ export default function IncidentDetailsPage() {
   const [timelineEntry, setTimelineEntry] = useState({ action: '', description: '' })
   const [investigationModalOpen, setInvestigationModalOpen] = useState(false)
   const [investigationForm, setInvestigationForm] = useState({ rootCause: '', resolutionSummary: '' })
+  // NEW: Loading states for actions
+  const [addingTimeline, setAddingTimeline] = useState(false)
+  const [savingInvestigation, setSavingInvestigation] = useState(false)
   // NEW: State for dynamic status options
   const [statusOptions, setStatusOptions] = useState<{ value: string; label: string }[]>([])
 
   // Refs for polling
   const maintenancePollingRef = useRef<NodeJS.Timeout>()
+  const timelinePollingRef = useRef<NodeJS.Timeout>()
+  const investigationPollingRef = useRef<NodeJS.Timeout>()
   const isMaintenancePollingRef = useRef<boolean>(false)
-
-  // Load dynamic incident statuses from maintenance (async)
-  const loadStatusOptions = useCallback(async () => {
-    try {
-      const statuses = await getIncidentStatuses()
-      const options = Array.isArray(statuses) ? statuses.map(status => ({
-        value: status.toLowerCase().replace(/\s+/g, '_'),
-        label: status
-      })) : []
-      setStatusOptions(options)
-    } catch (error) {
-      console.error('Error loading incident statuses:', error)
-      setStatusOptions([])
-    }
-  }, [])
+  const isTimelinePollingRef = useRef<boolean>(false)
+  const isInvestigationPollingRef = useRef<boolean>(false)
+  const lastTimelineIdsRef = useRef<Set<number>>(new Set())
+  const lastInvestigationRef = useRef<{ rootCause: string; resolutionSummary: string }>({ rootCause: '', resolutionSummary: '' })
+  const lastStatusRef = useRef<string>('')
 
   // Function to refresh status options only (lighter weight)
   const refreshStatusOptions = useCallback(async () => {
@@ -211,9 +257,163 @@ export default function IncidentDetailsPage() {
         value: status.toLowerCase().replace(/\s+/g, '_'),
         label: status
       })) : []
-      setStatusOptions(options)
+      
+      // Sort the status options in the desired order
+      const sortedOptions = sortIncidentStatusOptions(options);
+      setStatusOptions(sortedOptions)
     } catch (error) {
       console.debug('Background status options refresh failed:', error)
+    }
+  }, [])
+
+  // Function to fetch only timeline (lighter weight) - WITH DEBUGGING
+  const fetchTimelineOnly = useCallback(async () => {
+    if (!params.id) return
+    
+    const incidentId = Array.isArray(params.id) ? params.id[0] : params.id
+    if (!incidentId) return
+    
+    try {
+      console.log(`%c🟢 [${user?.role}] Fetching timeline for incident ${incidentId}...`, 'color: green;');
+      const response = await api.get(`/incidents/${incidentId}/timeline`)
+      const newTimeline = response.data as TimelineEntry[]
+      console.log(`%c🟢 [${user?.role}] Timeline response:`, newTimeline.length, 'entries', 'color: green;');
+      
+      setIncident(prev => {
+        if (!prev) return prev
+        
+        const newTimelineIds = new Set<number>(newTimeline.map((entry: TimelineEntry) => entry.id))
+        
+        // Check if there are new timeline entries
+        const hasNewTimeline = Array.from(newTimelineIds).some(id => !lastTimelineIdsRef.current.has(id))
+        
+        if (hasNewTimeline) {
+          console.log(`%c🟢 [${user?.role}] 🔔 NEW TIMELINE ENTRIES DETECTED!`, 'font-size: 14px; font-weight: bold; color: purple;');
+          console.log('Previous IDs:', Array.from(lastTimelineIdsRef.current));
+          console.log('New IDs:', Array.from(newTimelineIds));
+          lastTimelineIdsRef.current = newTimelineIds
+          
+          return {
+            ...prev,
+            timeline: newTimeline
+          }
+        } else {
+          console.log(`%c🟢 [${user?.role}] No new timeline entries`, 'color: gray;');
+        }
+        
+        return prev
+      })
+    } catch (error) {
+      console.error(`%c🔴 [${user?.role}] Timeline fetch FAILED:`, error, 'color: red; font-weight: bold;');
+    }
+  }, [params.id, user])
+
+  // Function to fetch status only (lighter weight)
+  const fetchStatusOnly = useCallback(async () => {
+    if (!params.id) return
+    
+    const incidentId = Array.isArray(params.id) ? params.id[0] : params.id
+    if (!incidentId) return
+    
+    try {
+      const response = await api.get(`/incidents/${incidentId}/status`)
+      const { status } = response.data as { status: string }
+      
+      setIncident(prev => {
+        if (!prev) return prev
+        
+        if (status !== lastStatusRef.current) {
+          console.log(`[${user?.role}] Status changed from ${lastStatusRef.current} to ${status}`)
+          lastStatusRef.current = status
+          
+          return {
+            ...prev,
+            status
+          }
+        }
+        
+        return prev
+      })
+    } catch (error) {
+      console.debug('Background status fetch failed:', error)
+    }
+  }, [params.id, user])
+
+  // Function to fetch investigation only (lighter weight)
+  const fetchInvestigationOnly = useCallback(async () => {
+    if (!params.id) return
+    
+    const incidentId = Array.isArray(params.id) ? params.id[0] : params.id
+    if (!incidentId) return
+    
+    try {
+      const response = await api.get(`/incidents/${incidentId}/investigation`)
+      const { rootCause, resolutionSummary } = response.data
+      
+      setIncident(prev => {
+        if (!prev) return prev
+        
+        // Check if investigation data has changed
+        if (rootCause !== lastInvestigationRef.current.rootCause || 
+            resolutionSummary !== lastInvestigationRef.current.resolutionSummary) {
+          console.log(`[${user?.role}] Investigation data changed`)
+          lastInvestigationRef.current = { rootCause, resolutionSummary }
+          
+          return {
+            ...prev,
+            rootCause,
+            resolutionSummary
+          }
+        }
+        
+        return prev
+      })
+    } catch (error) {
+      console.debug('Background investigation fetch failed:', error)
+    }
+  }, [params.id, user])
+
+  // Function to refresh all incident data (for initial load and manual refresh)
+  const refreshAllIncidentData = useCallback(async () => {
+    if (!params.id) return
+    
+    const incidentId = Array.isArray(params.id) ? params.id[0] : params.id
+    if (!incidentId) return
+    
+    try {
+      console.log(`[${user?.role}] Refreshing all incident data...`)
+      const response = await api.get(`/incidents/${incidentId}`)
+      setIncident(response.data)
+      
+      // Update refs with current data
+      if (response.data.timeline) {
+        lastTimelineIdsRef.current = new Set<number>(response.data.timeline.map((entry: TimelineEntry) => entry.id))
+      }
+      lastStatusRef.current = response.data.status
+      lastInvestigationRef.current = { 
+        rootCause: response.data.rootCause, 
+        resolutionSummary: response.data.resolutionSummary 
+      }
+    } catch (error) {
+      console.error('Failed to refresh incident data:', error)
+    }
+  }, [params.id, user])
+
+  // Load dynamic incident statuses from maintenance (async)
+  const loadStatusOptions = useCallback(async () => {
+    try {
+      const statuses = await getIncidentStatuses()
+      const options = Array.isArray(statuses) ? statuses.map(status => ({
+        value: status.toLowerCase().replace(/\s+/g, '_'),
+        label: status
+      })) : []
+      
+      // Sort the status options in the desired order
+      const sortedOptions = sortIncidentStatusOptions(options);
+      setStatusOptions(sortedOptions)
+    } catch (error) {
+      console.error('Error loading incident statuses:', error)
+      setStatusOptions([])
     }
   }, [])
 
@@ -263,11 +463,87 @@ export default function IncidentDetailsPage() {
     }
   }, [mounted, user, params.id, refreshStatusOptions])
 
+  // Start polling for timeline updates every 2 seconds - WITH FORCED DEBUGGING
+  useEffect(() => {
+    if (!mounted || !user || !params.id) return
+
+    console.log(`%c🔵 [${user?.role}] ===== SETTING UP TIMELINE POLLING =====`, 'font-size: 14px; font-weight: bold; color: blue;');
+    console.log(`%c🔵 [${user?.role}] Should run every 2 seconds`, 'color: blue;');
+    
+    let pollCount = 0;
+
+    // Clear any existing interval
+    if (timelinePollingRef.current) {
+      clearInterval(timelinePollingRef.current)
+    }
+
+    // Start polling for timeline updates every 2 seconds
+    timelinePollingRef.current = setInterval(() => {
+      pollCount++;
+      console.log(`%c🟠 [${user?.role}] POLL #${pollCount} - Fetching timeline...`, 'color: orange; font-weight: bold;');
+      
+      if (!isTimelinePollingRef.current) {
+        isTimelinePollingRef.current = true
+        fetchTimelineOnly().finally(() => {
+          isTimelinePollingRef.current = false
+        })
+      } else {
+        console.log(`%c🟠 [${user?.role}] POLL #${pollCount} - Skipped (already running)`, 'color: gray;');
+      }
+    }, 2000)
+
+    // Cleanup on unmount
+    return () => {
+      console.log(`%c🔴 [${user?.role}] ===== CLEANING UP TIMELINE POLLING =====`, 'font-size: 14px; font-weight: bold; color: red;');
+      if (timelinePollingRef.current) {
+        clearInterval(timelinePollingRef.current)
+        timelinePollingRef.current = undefined
+      }
+    }
+  }, [mounted, user, params.id, fetchTimelineOnly])
+
+  // Start polling for investigation updates every 3 seconds
+  useEffect(() => {
+    if (!mounted || !user || !params.id) return
+
+    // Clear any existing interval
+    if (investigationPollingRef.current) {
+      clearInterval(investigationPollingRef.current)
+    }
+
+    // Start polling for investigation updates every 3 seconds
+    investigationPollingRef.current = setInterval(() => {
+      if (!isInvestigationPollingRef.current) {
+        isInvestigationPollingRef.current = true
+        Promise.all([
+          fetchInvestigationOnly(),
+          fetchStatusOnly()
+        ]).finally(() => {
+          isInvestigationPollingRef.current = false
+        })
+      }
+    }, 3000)
+
+    // Cleanup on unmount
+    return () => {
+      if (investigationPollingRef.current) {
+        clearInterval(investigationPollingRef.current)
+        investigationPollingRef.current = undefined
+      }
+    }
+  }, [mounted, user, params.id, fetchInvestigationOnly, fetchStatusOnly])
+
   // Force an immediate refresh when the component becomes visible again
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && params.id) {
-        refreshStatusOptions()
+        console.log(`[${user?.role}] Tab became visible, refreshing data...`)
+        Promise.all([
+          refreshStatusOptions(),
+          fetchTimelineOnly(),
+          fetchStatusOnly(),
+          fetchInvestigationOnly()
+        ])
       }
     }
 
@@ -276,18 +552,30 @@ export default function IncidentDetailsPage() {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [params.id, refreshStatusOptions])
+  }, [params.id, user, refreshStatusOptions, fetchTimelineOnly, fetchStatusOnly, fetchInvestigationOnly])
 
   const fetchIncident = useCallback(async () => {
     try {
+      console.log(`[${user?.role}] Initial fetch of incident data...`)
       const response = await api.get(`/incidents/${params.id}`)
       setIncident(response.data)
+      
+      // Update refs with current data
+      if (response.data.timeline) {
+        lastTimelineIdsRef.current = new Set<number>(response.data.timeline.map((entry: TimelineEntry) => entry.id))
+        console.log(`[${user?.role}] Initial timeline entries:`, lastTimelineIdsRef.current.size)
+      }
+      lastStatusRef.current = response.data.status
+      lastInvestigationRef.current = { 
+        rootCause: response.data.rootCause, 
+        resolutionSummary: response.data.resolutionSummary 
+      }
     } catch (error) {
       console.error('Failed to fetch incident:', error)
     } finally {
       setLoading(false)
     }
-  }, [params.id])
+  }, [params.id, user])
 
   useEffect(() => {
     if (!mounted) return
@@ -319,12 +607,11 @@ export default function IncidentDetailsPage() {
       await api.put(`/incidents/${params.id}`, { status: newStatus })
       // Optimistically update the UI
       setIncident(prev => prev ? { ...prev, status: newStatus } : null)
-      // Fetch in background to sync with server
-      fetchIncident()
+      lastStatusRef.current = newStatus
     } catch (error) {
       console.error('Failed to update status:', error)
       // Revert optimistic update on error
-      fetchIncident()
+      await fetchStatusOnly()
     } finally {
       setUpdatingStatus(false);
       setPendingStatus(null);
@@ -347,12 +634,17 @@ export default function IncidentDetailsPage() {
     e.preventDefault()
     if (!timelineEntry.action.trim() || !timelineEntry.description.trim()) return
 
+    setAddingTimeline(true)
     try {
+      console.log(`[${user?.role}] Adding timeline entry...`)
       await api.post(`/incidents/${params.id}/timeline`, timelineEntry)
       setTimelineEntry({ action: '', description: '' })
-      fetchIncident()
+      // Fetch updated timeline immediately
+      await fetchTimelineOnly()
     } catch (error) {
       console.error('Failed to add timeline entry:', error)
+    } finally {
+      setAddingTimeline(false)
     }
   }
 
@@ -367,19 +659,25 @@ export default function IncidentDetailsPage() {
     e.preventDefault()
     const rootCause = investigationForm.rootCause.trim()
     const resolutionSummary = investigationForm.resolutionSummary.trim()
+    
+    setSavingInvestigation(true)
     try {
       await api.put(`/incidents/${params.id}`, {
         rootCause: rootCause || null,
         resolutionSummary: resolutionSummary || null
       })
       setInvestigationModalOpen(false)
-      fetchIncident()
+      // Fetch updated investigation data immediately
+      await fetchInvestigationOnly()
     } catch (error) {
       console.error('Failed to save investigation:', error)
+    } finally {
+      setSavingInvestigation(false)
     }
   }
 
   const handleClearInvestigation = async () => {
+    setSavingInvestigation(true)
     try {
       await api.put(`/incidents/${params.id}`, {
         rootCause: null,
@@ -387,9 +685,12 @@ export default function IncidentDetailsPage() {
       })
       setInvestigationModalOpen(false)
       setInvestigationForm({ rootCause: '', resolutionSummary: '' })
-      fetchIncident()
+      // Fetch updated investigation data immediately
+      await fetchInvestigationOnly()
     } catch (error) {
       console.error('Failed to clear investigation:', error)
+    } finally {
+      setSavingInvestigation(false)
     }
   }
 
@@ -420,6 +721,31 @@ export default function IncidentDetailsPage() {
     <ProtectedRoute allowedRoles={['security_officer', 'admin', 'it_support']}>
       <div className="min-h-screen bg-[#f5f5f7] pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
         <div className="max-w-6xl mx-auto">
+          {/* TEMPORARY DEBUG BUTTON */}
+          <div className="mb-4 p-4 bg-yellow-100 rounded-lg border border-yellow-300">
+            <p className="text-sm font-medium text-yellow-800 mb-2">🔧 Debug Controls (Temporary)</p>
+            <div className="flex gap-2">
+              <button 
+                onClick={async () => {
+                  console.log('%c🟡 MANUAL FETCH TRIGGERED', 'font-size: 14px; font-weight: bold; color: orange;');
+                  await fetchTimelineOnly();
+                  console.log('%c🟡 MANUAL FETCH COMPLETE', 'font-size: 14px; font-weight: bold; color: green;');
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+              >
+                Manual Test Fetch Timeline
+              </button>
+              <button 
+                onClick={() => {
+                  console.log('%c🟡 CURRENT TIMELINE IDS:', 'font-size: 14px; font-weight: bold;', Array.from(lastTimelineIdsRef.current));
+                }}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors"
+              >
+                Show Timeline IDs
+              </button>
+            </div>
+          </div>
+
           <div className="mb-6">
             <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 tracking-tight">{incident.title || 'Untitled Incident'}</h1>
             <p className="text-gray-500 font-mono text-sm mt-0.5">{incident.incidentNumber || `#${incident.id}`}</p>
@@ -434,23 +760,19 @@ export default function IncidentDetailsPage() {
 
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <h2 className="text-lg font-bold text-gray-900 mb-4">Timeline</h2>
-                <div className="space-y-4 mb-4 max-h-96 overflow-y-auto pr-2">
+                {/* Timeline container with fixed height and scrollbar */}
+                <div className="space-y-3 mb-4 max-h-96 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
                   {incident.timeline && incident.timeline.length > 0 ? (
                     incident.timeline.map((entry: any) => {
                       const entryDate = entry.created_at || entry.createdAt
                       const formattedDate = formatPinoyDateTime(entryDate)
                       
                       return (
-                        <div key={entry.id} className="flex gap-4 pb-4 border-b border-gray-200 last:border-0">
-                          <div className="flex-shrink-0 w-2 h-2 rounded-full bg-blue-500 mt-2"></div>
-                          <div className="flex-1">
-                            <div className="flex justify-between items-start mb-1">
-                              <span className="text-sm font-semibold text-gray-800">{entry.action}</span>
-                              <span className="text-xs text-gray-500">{formattedDate}</span>
-                            </div>
-                            <p className="text-sm text-gray-700 mb-1">{entry.description}</p>
-                            <p className="text-xs text-gray-500">by {entry.userName || 'Unknown User'}</p>
-                          </div>
+                        <div key={entry.id} className="border-b border-gray-200 pb-3 last:border-0">
+                          <p className="text-sm font-medium text-gray-900">- <span className="font-bold">{entry.action}</span></p>
+                          <p className="text-sm text-gray-700 ml-4">{entry.description}</p>
+                          <p className="text-xs text-gray-500 ml-4">by {entry.userName || 'Unknown User'}</p>
+                          <p className="text-xs text-gray-400 ml-4">{formattedDate}</p>
                         </div>
                       )
                     })
@@ -469,6 +791,7 @@ export default function IncidentDetailsPage() {
                         className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         placeholder="e.g., Investigation started"
                         required
+                        disabled={addingTimeline}
                       />
                     </div>
                     <div>
@@ -480,17 +803,33 @@ export default function IncidentDetailsPage() {
                         rows={3}
                         placeholder="Detailed description of the action taken..."
                         required
+                        disabled={addingTimeline}
                       />
                     </div>
                     <div className="flex gap-2">
-                      <button type="submit" className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-medium text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition-colors">
-                        Add Timeline Entry
+                      <button 
+                        type="submit" 
+                        disabled={addingTimeline}
+                        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors"
+                      >
+                        {addingTimeline ? (
+                          <>
+                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            <span>Adding...</span>
+                          </>
+                        ) : (
+                          'Add Timeline Entry'
+                        )}
                       </button>
                       {incident.status !== 'closed' && (
                         <button
                           type="button"
                           onClick={openInvestigationModal}
-                          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-medium text-white bg-gray-600 hover:bg-gray-700 shadow-sm transition-colors"
+                          disabled={addingTimeline}
+                          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-medium text-white bg-gray-600 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors"
                         >
                           {incident.rootCause || incident.resolutionSummary ? 'Edit' : 'Add'} Root Cause & Resolution
                         </button>
@@ -501,7 +840,7 @@ export default function IncidentDetailsPage() {
               </div>
 
               {investigationModalOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setInvestigationModalOpen(false)}>
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => !savingInvestigation && setInvestigationModalOpen(false)}>
                   <div className="bg-white p-6 rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto border border-gray-100" onClick={(e) => e.stopPropagation()}>
                     <h2 className="text-xl font-bold text-gray-900 mb-4">Investigation – Root Cause & Resolution</h2>
                     <form onSubmit={handleSaveInvestigation} className="space-y-4">
@@ -513,6 +852,7 @@ export default function IncidentDetailsPage() {
                           className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y min-h-[100px]"
                           rows={4}
                           placeholder="Document root cause analysis..."
+                          disabled={savingInvestigation}
                         />
                       </div>
                       <div>
@@ -523,22 +863,43 @@ export default function IncidentDetailsPage() {
                           className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y min-h-[100px]"
                           rows={4}
                           placeholder="Document resolution summary..."
+                          disabled={savingInvestigation}
                         />
                       </div>
                       <div className="flex flex-wrap gap-3 justify-between pt-2">
                         <button
                           type="button"
                           onClick={handleClearInvestigation}
-                          className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl font-medium border border-red-300 text-red-700 hover:bg-red-50 transition-colors"
+                          disabled={savingInvestigation}
+                          className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl font-medium border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                           Clear contents
                         </button>
                         <div className="flex gap-2">
-                          <button type="button" onClick={() => setInvestigationModalOpen(false)} className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl font-medium border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors">
+                          <button 
+                            type="button" 
+                            onClick={() => !savingInvestigation && setInvestigationModalOpen(false)} 
+                            disabled={savingInvestigation}
+                            className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl font-medium border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
                             Cancel
                           </button>
-                          <button type="submit" className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl font-medium text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition-colors">
-                            Save
+                          <button 
+                            type="submit" 
+                            disabled={savingInvestigation}
+                            className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors"
+                          >
+                            {savingInvestigation ? (
+                              <>
+                                <svg className="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                                Saving...
+                              </>
+                            ) : (
+                              'Save'
+                            )}
                           </button>
                         </div>
                       </div>

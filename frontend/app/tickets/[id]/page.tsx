@@ -167,7 +167,13 @@ export default function TicketDetailsPage() {
   const [isInternal, setIsInternal] = useState(false)
   const [showConvertModal, setShowConvertModal] = useState(false)
   const [converting, setConverting] = useState(false)
-  const [convertData, setConvertData] = useState({ category: '', severity: 'medium', description: '', assignedTo: '' })
+  const [convertData, setConvertData] = useState({ 
+    category: '', 
+    severity: 'medium', 
+    description: '', 
+    assignedTo: '',
+    otherCategory: '' // Add field for "Other" category
+  })
   const [securityOfficers, setSecurityOfficers] = useState<{ id: string; fullname: string; username: string }[]>([])
   const [securityOfficersLoading, setSecurityOfficersLoading] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
@@ -180,6 +186,103 @@ export default function TicketDetailsPage() {
   const [incidentCategories, setIncidentCategories] = useState<string[]>([])
   const [severities, setSeverities] = useState<string[]>([])
   const [ticketStatuses, setTicketStatuses] = useState<{ value: string; label: string }[]>([])
+
+  // Helper function to sort incident categories with "Other" at the end
+  const sortIncidentCategories = (categories: string[]): string[] => {
+    // Separate "Other" from the rest
+    const otherIndex = categories.findIndex(c => c.toLowerCase() === 'other');
+    let other = '';
+    const otherCategories: string[] = [];
+    
+    if (otherIndex !== -1) {
+      other = categories[otherIndex];
+      // Get all categories except "Other"
+      const rest = categories.filter((_, index) => index !== otherIndex);
+      
+      // Sort the rest alphabetically
+      rest.sort((a, b) => a.localeCompare(b));
+      
+      // Return sorted categories with "Other" at the end
+      return [...rest, other];
+    }
+    
+    // If no "Other", just sort alphabetically
+    return [...categories].sort((a, b) => a.localeCompare(b));
+  };
+
+  // Helper function to sort severities in the desired order
+  const sortSeverities = (severities: string[]): string[] => {
+    // Define the desired order for default severities
+    const severityOrder = ['Low', 'Medium', 'High', 'Critical'];
+    
+    // Separate into default severities and custom severities
+    const defaultSeverities: string[] = [];
+    const customSeverities: string[] = [];
+    
+    severities.forEach(severity => {
+      if (severityOrder.includes(severity)) {
+        defaultSeverities.push(severity);
+      } else {
+        customSeverities.push(severity);
+      }
+    });
+    
+    // Sort default severities according to the specified order
+    defaultSeverities.sort((a, b) => severityOrder.indexOf(a) - severityOrder.indexOf(b));
+    
+    // Sort custom severities alphabetically
+    customSeverities.sort((a, b) => a.localeCompare(b));
+    
+    // Return default severities first, then custom severities
+    return [...defaultSeverities, ...customSeverities];
+  };
+
+  // Helper function to sort ticket statuses in the desired order
+  const sortTicketStatuses = (statuses: string[]): string[] => {
+    // Define the desired order for default statuses
+    const statusOrder = [
+      'All Statuses',
+      'New',
+      'Assigned',
+      'In Progress',
+      'Waiting for User',
+      'Resolved',
+      'Closed',
+      'Converted to Incident'
+    ];
+    
+    // Separate into default statuses and custom statuses
+    const defaultStatuses: string[] = [];
+    const customStatuses: string[] = [];
+    
+    statuses.forEach(status => {
+      if (statusOrder.includes(status)) {
+        defaultStatuses.push(status);
+      } else {
+        customStatuses.push(status);
+      }
+    });
+    
+    // Sort default statuses according to the specified order
+    defaultStatuses.sort((a, b) => statusOrder.indexOf(a) - statusOrder.indexOf(b));
+    
+    // Sort custom statuses alphabetically
+    customStatuses.sort((a, b) => a.localeCompare(b));
+    
+    // Find the index where custom statuses should be inserted (after "Waiting for User")
+    const insertIndex = defaultStatuses.findIndex(s => s === 'Waiting for User') + 1;
+    
+    // Insert custom statuses after "Waiting for User"
+    const result = [...defaultStatuses];
+    if (insertIndex >= 0 && insertIndex <= result.length) {
+      result.splice(insertIndex, 0, ...customStatuses);
+    } else {
+      // If "Waiting for User" not found, append custom statuses at the end
+      result.push(...customStatuses);
+    }
+    
+    return result;
+  };
 
   // Refs for polling
   const pollingIntervalRef = useRef<NodeJS.Timeout>()
@@ -200,13 +303,21 @@ export default function TicketDetailsPage() {
         getTicketStatuses()
       ])
       
-      setIncidentCategories(incidentCats)
-      setSeverities(severities)
+      // Sort incident categories with "Other" at the end
+      const sortedIncidentCats = sortIncidentCategories(Array.isArray(incidentCats) ? incidentCats : []);
+      setIncidentCategories(sortedIncidentCats)
       
-      const formattedStatuses = Array.isArray(statuses) ? statuses.map(status => ({
+      // Sort severities in the desired order
+      const sortedSeverities = sortSeverities(Array.isArray(severities) ? severities : []);
+      setSeverities(sortedSeverities)
+      
+      // Sort statuses in the desired order
+      const sortedStatuses = sortTicketStatuses(Array.isArray(statuses) ? statuses : []);
+      
+      const formattedStatuses = sortedStatuses.map(status => ({
         value: status.toLowerCase().replace(/\s+/g, '_'),
         label: status
-      })) : []
+      }))
       setTicketStatuses(formattedStatuses)
     } catch (error) {
       console.error('Error loading maintenance data:', error)
@@ -217,7 +328,8 @@ export default function TicketDetailsPage() {
   const refreshIncidentCategories = useCallback(async () => {
     try {
       const categories = await getIncidentCategories()
-      setIncidentCategories(categories)
+      const sortedCategories = sortIncidentCategories(Array.isArray(categories) ? categories : []);
+      setIncidentCategories(sortedCategories)
     } catch (error) {
       console.debug('Background incident categories refresh failed:', error)
     }
@@ -227,7 +339,8 @@ export default function TicketDetailsPage() {
   const refreshSeverities = useCallback(async () => {
     try {
       const severities = await getSeverities()
-      setSeverities(severities)
+      const sortedSeverities = sortSeverities(Array.isArray(severities) ? severities : []);
+      setSeverities(sortedSeverities)
     } catch (error) {
       console.debug('Background severities refresh failed:', error)
     }
@@ -237,10 +350,14 @@ export default function TicketDetailsPage() {
   const refreshStatusOptions = useCallback(async () => {
     try {
       const statuses = await getTicketStatuses()
-      const formattedStatuses = Array.isArray(statuses) ? statuses.map(status => ({
+      
+      // Sort statuses in the desired order
+      const sortedStatuses = sortTicketStatuses(Array.isArray(statuses) ? statuses : []);
+      
+      const formattedStatuses = sortedStatuses.map(status => ({
         value: status.toLowerCase().replace(/\s+/g, '_'),
         label: status
-      })) : []
+      }))
       setTicketStatuses(formattedStatuses)
     } catch (error) {
       console.debug('Background status options refresh failed:', error)
@@ -256,13 +373,21 @@ export default function TicketDetailsPage() {
         getTicketStatuses()
       ])
       
-      setIncidentCategories(categories)
-      setSeverities(severities)
+      // Sort incident categories with "Other" at the end
+      const sortedCategories = sortIncidentCategories(Array.isArray(categories) ? categories : []);
+      setIncidentCategories(sortedCategories)
       
-      const formattedStatuses = Array.isArray(statuses) ? statuses.map(status => ({
+      // Sort severities in the desired order
+      const sortedSeverities = sortSeverities(Array.isArray(severities) ? severities : []);
+      setSeverities(sortedSeverities)
+      
+      // Sort statuses in the desired order
+      const sortedStatuses = sortTicketStatuses(Array.isArray(statuses) ? statuses : []);
+      
+      const formattedStatuses = sortedStatuses.map(status => ({
         value: status.toLowerCase().replace(/\s+/g, '_'),
         label: status
-      })) : []
+      }))
       setTicketStatuses(formattedStatuses)
     } catch (error) {
       console.debug('Background maintenance data refresh failed:', error)
@@ -328,8 +453,14 @@ export default function TicketDetailsPage() {
             getIncidentCategories(),
             getSeverities()
           ])
-          setIncidentCategories(incidentCats)
-          setSeverities(severities)
+          
+          // Sort incident categories with "Other" at the end
+          const sortedIncidentCats = sortIncidentCategories(Array.isArray(incidentCats) ? incidentCats : []);
+          setIncidentCategories(sortedIncidentCats)
+          
+          // Sort severities in the desired order
+          const sortedSeverities = sortSeverities(Array.isArray(severities) ? severities : []);
+          setSeverities(sortedSeverities)
         } catch (error) {
           console.error('Error loading convert modal data:', error)
         }
@@ -753,14 +884,19 @@ export default function TicketDetailsPage() {
         'Other': 'other'
       }
 
-      const selectedDisplayName = incidentCategories.find(
-        cat => cat.toLowerCase().replace(/\s+/g, '_') === convertData.category
-      ) || convertData.category
-
-      const dbCategoryValue = categoryMap[selectedDisplayName] || convertData.category
+      // Check if "Other" is selected and use the custom value
+      let finalCategory = convertData.category;
+      if (convertData.category === 'other' && convertData.otherCategory.trim()) {
+        finalCategory = convertData.otherCategory.trim().toLowerCase().replace(/\s+/g, '_');
+      } else {
+        const selectedDisplayName = incidentCategories.find(
+          cat => cat.toLowerCase().replace(/\s+/g, '_') === convertData.category
+        ) || convertData.category;
+        finalCategory = categoryMap[selectedDisplayName] || convertData.category;
+      }
 
       const payload: Record<string, string> = { 
-        category: dbCategoryValue, 
+        category: finalCategory, 
         severity: convertData.severity, 
         description: convertData.description || '' 
       }
@@ -1528,7 +1664,23 @@ export default function TicketDetailsPage() {
                       No incident categories configured. Using default options.
                     </p>
                   )}
-                </div>               
+                </div>
+                
+                {/* "Other" category text field - appears when "Other" is selected */}
+                {convertData.category === 'other' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Please specify category</label>
+                    <input
+                      type="text"
+                      value={convertData.otherCategory}
+                      onChange={(e) => setConvertData({ ...convertData, otherCategory: e.target.value })}
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                      placeholder="Enter custom category"
+                      required={convertData.category === 'other'}
+                    />
+                  </div>
+                )}
+                
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Severity *</label>
                   <select
