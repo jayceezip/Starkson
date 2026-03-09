@@ -106,6 +106,168 @@ router.get('/', authenticate, authorize('security_officer', 'admin'), async (req
   }
 })
 
+// Get incident timeline only (lighter weight for polling)
+router.get('/:id/timeline', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if user has access to this incident
+    const { data: incident, error: incidentError } = await supabase
+      .from('incidents')
+      .select('assigned_to, source_ticket_id, status')
+      .eq('id', id)
+      .single();
+    
+    if (incidentError || !incident) {
+      return res.status(404).json({ message: 'Incident not found' });
+    }
+    
+    // RBAC check
+    if (req.user.role === 'user') {
+      // Users can only see incidents converted from their tickets
+      const { data: ticket } = await supabase
+        .from('tickets')
+        .select('created_by')
+        .eq('id', incident.source_ticket_id)
+        .single();
+      
+      if (!ticket || ticket.created_by !== req.user.id) {
+        return res.status(403).json({ message: 'Forbidden' });
+      }
+    } else if (req.user.role === 'security_officer') {
+      if (incident.assigned_to && incident.assigned_to !== req.user.id) {
+        return res.status(403).json({ message: 'Forbidden' });
+      }
+    } else if (!['admin', 'it_support'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+    
+    // Get timeline based on user role
+    let query = supabase
+      .from('incident_timeline')
+      .select(`
+        *,
+        user:users!incident_timeline_user_id_fkey(id, fullname, username)
+      `)
+      .eq('incident_id', id)
+      .order('created_at', { ascending: true });
+    
+    // If user is a regular user, only show non-internal timeline entries
+    if (req.user.role === 'user') {
+      query = query.eq('is_internal', false);
+    }
+    
+    const { data: timeline, error } = await query;
+    
+    if (error) {
+      console.error('Error fetching timeline:', error);
+      return res.status(500).json({ message: 'Failed to fetch timeline' });
+    }
+    
+    // Format the response
+    const formattedTimeline = timeline.map(entry => ({
+      id: entry.id,
+      action: entry.action,
+      description: entry.description,
+      userName: entry.user?.fullname || 'Unknown User',
+      createdAt: entry.created_at,
+      isInternal: entry.is_internal
+    }));
+    
+    res.json(formattedTimeline);
+  } catch (error) {
+    console.error('Get timeline error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get incident status only (lighter weight for polling)
+router.get('/:id/status', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if user has access to this incident
+    const { data: incident, error: incidentError } = await supabase
+      .from('incidents')
+      .select('status, assigned_to, source_ticket_id')
+      .eq('id', id)
+      .single();
+    
+    if (incidentError || !incident) {
+      return res.status(404).json({ message: 'Incident not found' });
+    }
+    
+    // RBAC check
+    if (req.user.role === 'user') {
+      const { data: ticket } = await supabase
+        .from('tickets')
+        .select('created_by')
+        .eq('id', incident.source_ticket_id)
+        .single();
+      
+      if (!ticket || ticket.created_by !== req.user.id) {
+        return res.status(403).json({ message: 'Forbidden' });
+      }
+    } else if (req.user.role === 'security_officer') {
+      if (incident.assigned_to && incident.assigned_to !== req.user.id) {
+        return res.status(403).json({ message: 'Forbidden' });
+      }
+    } else if (!['admin', 'it_support'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+    
+    res.json({ status: incident.status });
+  } catch (error) {
+    console.error('Get status error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get incident investigation data only (lighter weight for polling)
+router.get('/:id/investigation', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if user has access to this incident
+    const { data: incident, error: incidentError } = await supabase
+      .from('incidents')
+      .select('root_cause, resolution_summary, assigned_to, source_ticket_id')
+      .eq('id', id)
+      .single();
+    
+    if (incidentError || !incident) {
+      return res.status(404).json({ message: 'Incident not found' });
+    }
+    
+    // RBAC check
+    if (req.user.role === 'user') {
+      const { data: ticket } = await supabase
+        .from('tickets')
+        .select('created_by')
+        .eq('id', incident.source_ticket_id)
+        .single();
+      
+      if (!ticket || ticket.created_by !== req.user.id) {
+        return res.status(403).json({ message: 'Forbidden' });
+      }
+    } else if (req.user.role === 'security_officer') {
+      if (incident.assigned_to && incident.assigned_to !== req.user.id) {
+        return res.status(403).json({ message: 'Forbidden' });
+      }
+    } else if (!['admin', 'it_support'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+    
+    res.json({
+      rootCause: incident.root_cause,
+      resolutionSummary: incident.resolution_summary
+    });
+  } catch (error) {
+    console.error('Get investigation error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Get single incident with details
 // Security Officer and Admin can view all incidents
 // IT Support can view incidents converted from tickets they have access to
@@ -661,4 +823,5 @@ router.post('/:id/timeline', authenticate, authorize('security_officer', 'admin'
     res.status(500).json({ message: 'Server error: ' + error.message })
   }
 })
+
 module.exports = router
