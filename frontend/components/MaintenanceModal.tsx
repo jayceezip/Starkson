@@ -406,6 +406,9 @@ export default function MaintenanceModal({
   // Loading states for add/delete operations
   const [addLoading, setAddLoading] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  // State for multi-select delete
+  const [selectedItems, setSelectedItems] = useState<string[]>([])
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false)
 
   const fetchBranches = async () => {
     try {
@@ -429,6 +432,7 @@ export default function MaintenanceModal({
       fetchBranches()
       setSuccessMessage('')
       setErrorMessage('')
+      setSelectedItems([])
     }
   }, [isOpen])
 
@@ -836,8 +840,76 @@ export default function MaintenanceModal({
     }
   }
 
+  // Handle multi-select delete
+  const handleMultiDelete = async () => {
+    if (selectedItems.length === 0 || !manageType) return
+    
+    setDeleteLoading(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+    
+    try {
+      const typeMap: Record<string, string> = {
+        'category': 'category',
+        'affected_system': 'affected_system',
+        'incident_category': 'incident_category',
+        'severity': 'severity',
+        'ticket_status': 'ticket_status',
+        'priority': 'priority',
+        'incident_status': 'incident_status'
+      }
+      
+      const apiType = typeMap[manageType]
+      
+      if (!apiType) {
+        throw new Error(`Invalid type for bulk delete: ${manageType}`)
+      }
+      
+      // Delete items sequentially
+      for (const item of selectedItems) {
+        await deleteMaintenanceItem(apiType, item)
+      }
+      
+      clearMaintenanceCache()
+      await refreshLists()
+      notifyMaintenanceDataChange()
+      
+      const singular = LABELS[manageType].singular
+      const plural = LABELS[manageType].plural
+      setSuccessMessage(`${selectedItems.length} ${selectedItems.length === 1 ? singular : plural} deleted successfully`)
+      setSelectedItems([])
+      
+      setTimeout(() => {
+        onClose()
+      }, 500)
+    } catch (error: any) {
+      console.error('Bulk delete error:', error)
+      setErrorMessage(error.response?.data?.message || error.message || `Failed to delete selected items`)
+    } finally {
+      setDeleteLoading(false)
+      setShowDeleteConfirmModal(false)
+    }
+  }
+
+  const toggleSelectItem = (item: string) => {
+    setSelectedItems(prev => 
+      prev.includes(item)
+        ? prev.filter(i => i !== item)
+        : [...prev, item]
+    )
+  }
+
+  const toggleSelectAll = (options: string[]) => {
+    if (selectedItems.length === options.length) {
+      setSelectedItems([])
+    } else {
+      setSelectedItems([...options])
+    }
+  }
+
   const goBack = () => {
     setSuccessMessage('') // Clear success message when navigating
+    setSelectedItems([]) // Clear selected items
     if (actionType) {
       setActionType(null)
     } else if (manageType) {
@@ -859,9 +931,8 @@ export default function MaintenanceModal({
 
   const getDeleteButtonText = () => {
     if (!manageType) return '';
-    const singular = LABELS[manageType].singular;
-    const article = getArticle(singular);
-    return `Delete ${article} ${singular}`;
+    const plural = LABELS[manageType].plural;
+    return `Delete ${plural}`;
   };
 
   return (
@@ -1085,122 +1156,98 @@ export default function MaintenanceModal({
                   />
                 )}
               </>
-            ) : manageType === 'category' ? (
-              actionType === 'add' ? (
-                <AddForm
-                  label={`New ${LABELS.category.singular}`}
-                  placeholder="e.g., Security"
-                  onSubmit={handleAddCategory}
-                  loading={addLoading}
-                />
-              ) : (
-                <DeleteForm
-                  label={`Select ${LABELS.category.singular} to delete`}
-                  options={categories}
-                  onDelete={handleDeleteCategory}
-                  loading={deleteLoading}
-                />
-              )
-            ) : manageType === 'incident_category' ? (
-              actionType === 'add' ? (
-                <AddForm
-                  label={`New ${LABELS.incident_category.singular}`}
-                  placeholder="e.g., Data Breach"
-                  onSubmit={handleAddIncidentCategory}
-                  loading={addLoading}
-                />
-              ) : (
-                <DeleteForm
-                  label={`Select ${LABELS.incident_category.singular} to delete`}
-                  options={incidentCategories}
-                  onDelete={handleDeleteIncidentCategory}
-                  loading={deleteLoading}
-                />
-              )
-            ) : manageType === 'severity' ? (
-              actionType === 'add' ? (
-                <AddForm
-                  label={`New ${LABELS.severity.singular}`}
-                  placeholder="e.g., Critical"
-                  onSubmit={handleAddSeverity}
-                  loading={addLoading}
-                />
-              ) : (
-                <DeleteForm
-                  label={`Select ${LABELS.severity.singular} to delete`}
-                  options={severities}
-                  onDelete={handleDeleteSeverity}
-                  loading={deleteLoading}
-                />
-              )
-            ) : manageType === 'ticket_status' ? (
-              actionType === 'add' ? (
-                <AddForm
-                  label={`New ${LABELS.ticket_status.singular}`}
-                  placeholder="e.g., On Hold"
-                  onSubmit={handleAddTicketStatus}
-                  loading={addLoading}
-                />
-              ) : (
-                <DeleteForm
-                  label={`Select ${LABELS.ticket_status.singular} to delete`}
-                  options={ticketStatuses}
-                  onDelete={handleDeleteTicketStatus}
-                  loading={deleteLoading}
-                />
-              )
-            ) : manageType === 'priority' ? (
-              actionType === 'add' ? (
-                <AddForm
-                  label={`New ${LABELS.priority.singular}`}
-                  placeholder="e.g., Urgent"
-                  onSubmit={handleAddPriority}
-                  loading={addLoading}
-                />
-              ) : (
-                <DeleteForm
-                  label={`Select ${LABELS.priority.singular} to delete`}
-                  options={priorities}
-                  onDelete={handleDeletePriority}
-                  loading={deleteLoading}
-                />
-              )
-            ) : manageType === 'incident_status' ? (
-              actionType === 'add' ? (
-                <AddForm
-                  label={`New ${LABELS.incident_status.singular}`}
-                  placeholder="e.g., In Progress"
-                  onSubmit={handleAddIncidentStatus}
-                  loading={addLoading}
-                />
-              ) : (
-                <DeleteForm
-                  label={`Select ${LABELS.incident_status.singular} to delete`}
-                  options={incidentStatuses}
-                  onDelete={handleDeleteIncidentStatus}
-                  loading={deleteLoading}
-                />
-              )
-            ) : manageType === 'affected_system' ? (
-              actionType === 'add' ? (
-                <AddForm
-                  label={`New ${LABELS.affected_system.singular}`}
-                  placeholder="e.g., Outlook"
-                  onSubmit={handleAddAffectedSystem}
-                  loading={addLoading}
-                />
-              ) : (
-                <DeleteForm
-                  label={`Select ${LABELS.affected_system.singular} to delete`}
-                  options={affectedSystems}
-                  onDelete={handleDeleteAffectedSystem}
-                  loading={deleteLoading}
-                />
-              )
-            ) : null}
+            ) : actionType === 'add' ? (
+              <AddForm
+                label={`New ${LABELS[manageType!].singular}`}
+                placeholder={`e.g., New ${LABELS[manageType!].singular}`}
+                onSubmit={getAddHandler(manageType!, {
+                  handleAddCategory,
+                  handleAddAffectedSystem,
+                  handleAddIncidentCategory,
+                  handleAddSeverity,
+                  handleAddTicketStatus,
+                  handleAddPriority,
+                  handleAddIncidentStatus
+                })}
+                loading={addLoading}
+              />
+            ) : (
+              <MultiDeleteForm
+                label={`Select ${LABELS[manageType!].plural} to delete`}
+                options={getOptionsForType(manageType!, {
+                  categories,
+                  affectedSystems,
+                  incidentCategories,
+                  severities,
+                  ticketStatuses,
+                  priorities,
+                  incidentStatuses
+                })}
+                selectedItems={selectedItems}
+                onToggleItem={toggleSelectItem}
+                onToggleAll={toggleSelectAll}
+                onDelete={() => setShowDeleteConfirmModal(true)}
+                loading={deleteLoading}
+                type={manageType!}
+              />
+            )}
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal - Styled like audit logs filter */}
+      {showDeleteConfirmModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => !deleteLoading && setShowDeleteConfirmModal(false)} aria-hidden="true" />
+          <div className="relative z-10 w-full max-w-md mx-4 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Confirm Delete</h3>
+                  <p className="text-sm text-gray-500">This action cannot be undone</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                <p className="text-amber-800">
+                  You are about to delete <span className="font-bold">{selectedItems.length}</span> selected {selectedItems.length === 1 ? LABELS[manageType!]?.singular?.toLowerCase() : LABELS[manageType!]?.plural?.toLowerCase()}.
+                </p>
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirmModal(false)}
+                  disabled={deleteLoading}
+                  className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleMultiDelete}
+                  disabled={deleteLoading}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {deleteLoading ? (
+                    <>
+                      <LoadingSpinner size="w-4 h-4" />
+                      Deleting...
+                    </>
+                  ) : (
+                    'Delete'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* View Branches Modal */}
       <ViewBranchesModal
@@ -1210,6 +1257,34 @@ export default function MaintenanceModal({
       />
     </>
   )
+}
+
+// Helper function to get options based on type
+function getOptionsForType(type: ManageType, data: any): string[] {
+  switch(type) {
+    case 'category': return data.categories || [];
+    case 'affected_system': return data.affectedSystems || [];
+    case 'incident_category': return data.incidentCategories || [];
+    case 'severity': return data.severities || [];
+    case 'ticket_status': return data.ticketStatuses || [];
+    case 'priority': return data.priorities || [];
+    case 'incident_status': return data.incidentStatuses || [];
+    default: return [];
+  }
+}
+
+// Helper function to get the appropriate add handler
+function getAddHandler(type: ManageType, handlers: any) {
+  switch(type) {
+    case 'category': return handlers.handleAddCategory;
+    case 'affected_system': return handlers.handleAddAffectedSystem;
+    case 'incident_category': return handlers.handleAddIncidentCategory;
+    case 'severity': return handlers.handleAddSeverity;
+    case 'ticket_status': return handlers.handleAddTicketStatus;
+    case 'priority': return handlers.handleAddPriority;
+    case 'incident_status': return handlers.handleAddIncidentStatus;
+    default: return async () => {};
+  }
 }
 
 function AddForm({
@@ -1392,59 +1467,95 @@ function BranchDeleteForm({
   )
 }
 
-function DeleteForm({
+function MultiDeleteForm({
   label,
   options,
+  selectedItems,
+  onToggleItem,
+  onToggleAll,
   onDelete,
-  loading = false,
+  loading,
+  type,
 }: {
   label: string
   options: string[]
-  onDelete: (value: string) => void
-  loading?: boolean
+  selectedItems: string[]
+  onToggleItem: (item: string) => void
+  onToggleAll: (options: string[]) => void
+  onDelete: () => void
+  loading: boolean
+  type: ManageType
 }) {
-  const [selected, setSelected] = useState('')
-
-  const handleDelete = () => {
-    if (selected) {
-      onDelete(selected)
-      setSelected('')
-    }
-  }
-
   if (options.length === 0) {
     return <p className="text-sm text-gray-500">No items to delete.</p>
   }
 
   return (
     <div className="space-y-4">
-      <label className="block text-sm font-medium text-gray-700">{label}</label>
-      <select
-        value={selected}
-        onChange={(e) => setSelected(e.target.value)}
-        disabled={loading}
-        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        <option value="">Select...</option>
+      <div className="flex items-center justify-between mb-2">
+        <label className="block text-sm font-medium text-gray-700">{label}</label>
+        <button
+          type="button"
+          onClick={() => onToggleAll(options)}
+          className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
+        >
+          {selectedItems.length === options.length ? 'Deselect All' : 'Select All'}
+        </button>
+      </div>
+      
+      {/* Selection list styled like audit logs filter */}
+      <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100 max-h-60 overflow-y-auto">
         {options.map((opt) => (
-          <option key={opt} value={opt}>{opt}</option>
+          <div
+            key={opt}
+            onClick={() => onToggleItem(opt)}
+            className={`
+              flex items-center gap-3 px-4 py-2.5 cursor-pointer
+              hover:bg-blue-50/30 transition-colors
+              ${selectedItems.includes(opt) ? 'bg-blue-50/50' : 'bg-white'}
+            `}
+          >
+            <div className={`
+              w-4 h-4 rounded border flex items-center justify-center
+              transition-all duration-150
+              ${selectedItems.includes(opt) 
+                ? 'bg-blue-600 border-blue-600' 
+                : 'border-gray-300 bg-white'
+              }
+            `}>
+              {selectedItems.includes(opt) && (
+                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </div>
+            <span className="text-sm text-gray-900 flex-1">{opt}</span>
+          </div>
         ))}
-      </select>
-      <button
-        type="button"
-        onClick={handleDelete}
-        disabled={!selected || loading}
-        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {loading ? (
-          <>
-            <LoadingSpinner />
-            Deleting...
-          </>
-        ) : (
-          'Delete'
-        )}
-      </button>
+      </div>
+
+      {selectedItems.length > 0 && (
+        <div className="flex items-center justify-between pt-2">
+          <span className="text-sm font-medium text-gray-600">
+            <span className="text-blue-600 font-bold">{selectedItems.length}</span> selected
+          </span>
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+          >
+            {loading ? (
+              <>
+                <LoadingSpinner />
+                Deleting...
+              </>
+            ) : (
+              'Delete Selected'
+            )}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
