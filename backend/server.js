@@ -11,31 +11,67 @@ const PORT = process.env.PORT || 5000
 
 // CORS configuration - MODIFIED SECTION
 const corsOptions = {
-  origin: ['https://starkson-afhs.onrender.com', 'http://localhost:3000', 'http://localhost:5173'],
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+      'https://starkson-afhs.onrender.com', 
+      'http://localhost:3000', 
+      'http://localhost:5173'
+    ];
+    
+    // Allow requests with no origin (like mobile apps, curl, etc)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+      callback(null, true);
+    } else {
+      console.log('❌ Blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
   credentials: true,
-  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
+  optionsSuccessStatus: 200,
+  preflightContinue: false
 }
 
-// Apply CORS middleware with options
+// Apply CORS middleware to ALL routes (not just API)
 app.use(cors(corsOptions))
 
-// Handle preflight requests explicitly
-app.options('*', cors(corsOptions))
+// Add CORS headers manually as a backup
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowedOrigins = [
+    'https://starkson-afhs.onrender.com', 
+    'http://localhost:3000', 
+    'http://localhost:5173'
+  ];
+  
+  if (allowedOrigins.includes(origin) || !origin || process.env.NODE_ENV !== 'production') {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+  }
+  
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    console.log('🔧 Preflight request from:', origin);
+    return res.status(200).end();
+  }
+  
+  next();
+});
 
 // Body parsing middleware
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
-// Log all API requests for debugging
-app.use('/api/*', (req, res, next) => {
-  console.log(`🌐 API Request: ${req.method} ${req.originalUrl}`)
-  if (req.method === 'OPTIONS') {
-    console.log('🔧 Preflight request detected')
-  }
-  next()
-})
+// Log all requests for debugging
+app.use((req, res, next) => {
+  console.log(`🌐 ${req.method} ${req.url} - Origin: ${req.headers.origin || 'No origin'}`);
+  next();
+});
 
 // Routes
 app.use('/api/auth', require('./routes/auth'))
@@ -76,6 +112,15 @@ app.use('*', (req, res) => {
     path: req.originalUrl
   })
 })
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('❌ Server error:', err);
+  res.status(500).json({ 
+    message: 'Internal server error',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
 
 // Start server
 app.listen(PORT, () => {
