@@ -721,31 +721,6 @@ export default function IncidentDetailsPage() {
     <ProtectedRoute allowedRoles={['security_officer', 'admin', 'it_support']}>
       <div className="min-h-screen bg-[#f5f5f7] pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
         <div className="max-w-6xl mx-auto">
-          {/* TEMPORARY DEBUG BUTTON */}
-          <div className="mb-4 p-4 bg-yellow-100 rounded-lg border border-yellow-300">
-            <p className="text-sm font-medium text-yellow-800 mb-2">🔧 Debug Controls (Temporary)</p>
-            <div className="flex gap-2">
-              <button 
-                onClick={async () => {
-                  console.log('%c🟡 MANUAL FETCH TRIGGERED', 'font-size: 14px; font-weight: bold; color: orange;');
-                  await fetchTimelineOnly();
-                  console.log('%c🟡 MANUAL FETCH COMPLETE', 'font-size: 14px; font-weight: bold; color: green;');
-                }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-              >
-                Manual Test Fetch Timeline
-              </button>
-              <button 
-                onClick={() => {
-                  console.log('%c🟡 CURRENT TIMELINE IDS:', 'font-size: 14px; font-weight: bold;', Array.from(lastTimelineIdsRef.current));
-                }}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors"
-              >
-                Show Timeline IDs
-              </button>
-            </div>
-          </div>
-
           <div className="mb-6">
             <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 tracking-tight">{incident.title || 'Untitled Incident'}</h1>
             <p className="text-gray-500 font-mono text-sm mt-0.5">{incident.incidentNumber || `#${incident.id}`}</p>

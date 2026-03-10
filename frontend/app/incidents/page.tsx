@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, Fragment, Suspense } from 'react'
+import { useEffect, useState, useCallback, Fragment, Suspense, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Listbox, Transition } from '@headlessui/react'
@@ -26,6 +26,101 @@ interface Incident {
 }
 
 const PAGE_SIZE = 10
+
+// Helper function to sort incident statuses in the desired order
+const sortIncidentStatusOptions = (statuses: { value: string; label: string }[]): { value: string; label: string }[] => {
+  // Define the desired order for default statuses with the EXACT labels you want
+  const statusOrder = [
+    'All Statuses',
+    'New',
+    'Triaged',
+    'Investigating',
+    'Contained',
+    'Recovered',
+    'Closed'
+  ];
+  
+  // Separate "All statuses" from the rest
+  const allStatusesOption = statuses.find(opt => opt.value === '') || { value: '', label: 'All statuses' };
+  const otherOptions = statuses.filter(opt => opt.value !== '');
+  
+  // Separate into default statuses and custom statuses
+  const defaultOptions: { value: string; label: string }[] = [];
+  const customOptions: { value: string; label: string }[] = [];
+  
+  otherOptions.forEach(opt => {
+    if (statusOrder.includes(opt.label)) {
+      defaultOptions.push(opt);
+    } else {
+      customOptions.push(opt);
+    }
+  });
+  
+  // Sort default statuses according to the specified order
+  defaultOptions.sort((a, b) => statusOrder.indexOf(a.label) - statusOrder.indexOf(b.label));
+  
+  // Sort custom statuses alphabetically by label
+  customOptions.sort((a, b) => a.label.localeCompare(b.label));
+  
+  // Find the index where custom statuses should be inserted (after "Contained")
+  const containedIndex = defaultOptions.findIndex(opt => opt.label === 'Contained');
+  const insertIndex = containedIndex !== -1 ? containedIndex + 1 : defaultOptions.length;
+  
+  // Insert custom statuses after "Contained" and before "Recovered"
+  const result = [...defaultOptions];
+  if (insertIndex >= 0 && insertIndex <= result.length) {
+    result.splice(insertIndex, 0, ...customOptions);
+  } else {
+    result.push(...customOptions);
+  }
+  
+  // Return with "All statuses" at the top
+  return [allStatusesOption, ...result];
+};
+
+// Helper function to sort severities in the desired order
+const sortSeverityOptions = (severities: { value: string; label: string }[]): { value: string; label: string }[] => {
+  // Define the desired order for default severities (excluding "All severities")
+  const severityOrder = ['Low', 'Medium', 'High', 'Critical'];
+  
+  // Separate "All severities" from the rest
+  const allSeveritiesOption = severities.find(opt => opt.value === '') || { value: '', label: 'All severities' };
+  const otherOptions = severities.filter(opt => opt.value !== '');
+  
+  // Separate into default severities and custom severities
+  const defaultOptions: { value: string; label: string }[] = [];
+  const customOptions: { value: string; label: string }[] = [];
+  
+  otherOptions.forEach(opt => {
+    if (severityOrder.includes(opt.label)) {
+      defaultOptions.push(opt);
+    } else {
+      customOptions.push(opt);
+    }
+  });
+  
+  // Sort default severities according to the specified order
+  defaultOptions.sort((a, b) => severityOrder.indexOf(a.label) - severityOrder.indexOf(b.label));
+  
+  // Sort custom severities alphabetically by label
+  customOptions.sort((a, b) => a.label.localeCompare(b.label));
+  
+  // Return default severities first, then custom severities at the bottom, with "All severities" at the top
+  return [allSeveritiesOption, ...defaultOptions, ...customOptions];
+};
+
+// Helper function to sort categories (just alphabetically, but you can customize if needed)
+const sortCategoryOptions = (categories: { value: string; label: string }[]): { value: string; label: string }[] => {
+  // Separate "All categories" from the rest
+  const allCategoriesOption = categories.find(opt => opt.value === '') || { value: '', label: 'All categories' };
+  const otherOptions = categories.filter(opt => opt.value !== '');
+  
+  // Sort the rest alphabetically by label
+  otherOptions.sort((a, b) => a.label.localeCompare(b.label));
+  
+  // Return with "All categories" at the top
+  return [allCategoriesOption, ...otherOptions];
+};
 
 // Modern Status Select Component for Filters - with dynamic options
 const ModernStatusFilterSelect = ({ 
@@ -280,15 +375,14 @@ function IncidentsPageContent() {
   ])
   const [exporting, setExporting] = useState(false)
 
-  // Load dynamic maintenance data (async)
-  const loadMaintenanceData = useCallback(async () => {
+  // Refs for polling
+  const maintenancePollingRef = useRef<NodeJS.Timeout>()
+  const isMaintenancePollingRef = useRef<boolean>(false)
+
+  // Function to refresh status options only (lighter weight)
+  const refreshStatusOptions = useCallback(async () => {
     try {
-      const [statuses, severities, categories] = await Promise.all([
-        getIncidentStatuses(),
-        getSeverities(),
-        getIncidentCategories()
-      ])
-      
+      const statuses = await getIncidentStatuses()
       const statusOpts = [
         { value: '', label: 'All statuses' },
         ...(Array.isArray(statuses) ? statuses.map(status => ({
@@ -296,8 +390,18 @@ function IncidentsPageContent() {
           label: status
         })) : [])
       ]
-      setStatusOptions(statusOpts)
+      // Sort status options
+      const sortedStatusOpts = sortIncidentStatusOptions(statusOpts);
+      setStatusOptions(sortedStatusOpts)
+    } catch (error) {
+      console.debug('Background status options refresh failed:', error)
+    }
+  }, [])
 
+  // Function to refresh severity options only (lighter weight)
+  const refreshSeverityOptions = useCallback(async () => {
+    try {
+      const severities = await getSeverities()
       const severityOpts = [
         { value: '', label: 'All severities' },
         ...(Array.isArray(severities) ? severities.map(severity => ({
@@ -305,8 +409,18 @@ function IncidentsPageContent() {
           label: severity
         })) : [])
       ]
-      setSeverityOptions(severityOpts)
+      // Sort severity options
+      const sortedSeverityOpts = sortSeverityOptions(severityOpts);
+      setSeverityOptions(sortedSeverityOpts)
+    } catch (error) {
+      console.debug('Background severity options refresh failed:', error)
+    }
+  }, [])
 
+  // Function to refresh category options only (lighter weight)
+  const refreshCategoryOptions = useCallback(async () => {
+    try {
+      const categories = await getIncidentCategories()
       const categoryOpts = [
         { value: '', label: 'All categories' },
         ...(Array.isArray(categories) ? categories.map(category => ({
@@ -314,15 +428,112 @@ function IncidentsPageContent() {
           label: category
         })) : [])
       ]
-      setCategoryOptions(categoryOpts)
+      // Sort category options
+      const sortedCategoryOpts = sortCategoryOptions(categoryOpts);
+      setCategoryOptions(sortedCategoryOpts)
     } catch (error) {
-      console.error('Error loading maintenance data:', error)
-      // Set default empty options on error
-      setStatusOptions([{ value: '', label: 'All statuses' }])
-      setSeverityOptions([{ value: '', label: 'All severities' }])
-      setCategoryOptions([{ value: '', label: 'All categories' }])
+      console.debug('Background category options refresh failed:', error)
     }
   }, [])
+
+  // Function to refresh all maintenance data (lighter weight combined)
+  const refreshAllMaintenanceData = useCallback(async () => {
+    try {
+      const [statuses, severities, categories] = await Promise.all([
+        getIncidentStatuses(),
+        getSeverities(),
+        getIncidentCategories()
+      ]);
+      
+      // Update status options
+      const statusOpts = [
+        { value: '', label: 'All statuses' },
+        ...(Array.isArray(statuses) ? statuses.map(status => ({
+          value: status.toLowerCase().replace(/\s+/g, '_'),
+          label: status
+        })) : [])
+      ];
+      const sortedStatusOpts = sortIncidentStatusOptions(statusOpts);
+      setStatusOptions(sortedStatusOpts);
+
+      // Update severity options
+      const severityOpts = [
+        { value: '', label: 'All severities' },
+        ...(Array.isArray(severities) ? severities.map(severity => ({
+          value: severity.toLowerCase(),
+          label: severity
+        })) : [])
+      ];
+      const sortedSeverityOpts = sortSeverityOptions(severityOpts);
+      setSeverityOptions(sortedSeverityOpts);
+
+      // Update category options
+      const categoryOpts = [
+        { value: '', label: 'All categories' },
+        ...(Array.isArray(categories) ? categories.map(category => ({
+          value: category.toLowerCase().replace(/\s+/g, '_'),
+          label: category
+        })) : [])
+      ];
+      const sortedCategoryOpts = sortCategoryOptions(categoryOpts);
+      setCategoryOptions(sortedCategoryOpts);
+    } catch (error) {
+      console.debug('Background maintenance data refresh failed:', error)
+    }
+  }, [])
+
+  // Load dynamic maintenance data (async)
+  const loadMaintenanceData = useCallback(async () => {
+    try {
+      const [statuses, severities, categories] = await Promise.all([
+        getIncidentStatuses(),
+        getSeverities(),
+        getIncidentCategories()
+      ]);
+      
+      // Create status options
+      const statusOpts = [
+        { value: '', label: 'All statuses' },
+        ...(Array.isArray(statuses) ? statuses.map(status => ({
+          value: status.toLowerCase().replace(/\s+/g, '_'),
+          label: status
+        })) : [])
+      ];
+      // Sort status options with custom logic (new statuses go between Contained and Recovered)
+      const sortedStatusOpts = sortIncidentStatusOptions(statusOpts);
+      setStatusOptions(sortedStatusOpts);
+
+      // Create severity options
+      const severityOpts = [
+        { value: '', label: 'All severities' },
+        ...(Array.isArray(severities) ? severities.map(severity => ({
+          value: severity.toLowerCase(),
+          label: severity
+        })) : [])
+      ];
+      // Sort severity options with default ones first, custom ones at bottom
+      const sortedSeverityOpts = sortSeverityOptions(severityOpts);
+      setSeverityOptions(sortedSeverityOpts);
+
+      // Create category options
+      const categoryOpts = [
+        { value: '', label: 'All categories' },
+        ...(Array.isArray(categories) ? categories.map(category => ({
+          value: category.toLowerCase().replace(/\s+/g, '_'),
+          label: category
+        })) : [])
+      ];
+      // Sort category options alphabetically
+      const sortedCategoryOpts = sortCategoryOptions(categoryOpts);
+      setCategoryOptions(sortedCategoryOpts);
+    } catch (error) {
+      console.error('Error loading maintenance data:', error);
+      // Set default empty options on error
+      setStatusOptions([{ value: '', label: 'All statuses' }]);
+      setSeverityOptions([{ value: '', label: 'All severities' }]);
+      setCategoryOptions([{ value: '', label: 'All categories' }]);
+    }
+  }, []);
 
   useEffect(() => {
     setMounted(true)
@@ -341,6 +552,49 @@ function IncidentsPageContent() {
       window.removeEventListener('maintenanceDataChanged', handleMaintenanceDataChange)
     }
   }, [loadMaintenanceData])
+
+  // Start polling for maintenance data updates every 5 seconds
+  useEffect(() => {
+    if (!mounted || !user) return
+
+    // Clear any existing interval
+    if (maintenancePollingRef.current) {
+      clearInterval(maintenancePollingRef.current)
+    }
+
+    // Start polling for maintenance data updates every 5 seconds
+    maintenancePollingRef.current = setInterval(() => {
+      if (!isMaintenancePollingRef.current) {
+        isMaintenancePollingRef.current = true
+        refreshAllMaintenanceData().finally(() => {
+          isMaintenancePollingRef.current = false
+        })
+      }
+    }, 5000)
+
+    // Cleanup on unmount
+    return () => {
+      if (maintenancePollingRef.current) {
+        clearInterval(maintenancePollingRef.current)
+        maintenancePollingRef.current = undefined
+      }
+    }
+  }, [mounted, user, refreshAllMaintenanceData])
+
+  // Force an immediate refresh when the component becomes visible again
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshAllMaintenanceData()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [refreshAllMaintenanceData])
 
   const fetchIncidents = useCallback(async (showLoading = true) => {
     if (!user) return
@@ -436,24 +690,25 @@ function IncidentsPageContent() {
 
   // Helper function to get display label for status
   const getStatusLabel = (status: string) => {
-    const matchingOption = statusOptions.find(opt => opt.value === status)
-    if (matchingOption) return matchingOption.label
-    return status ? status.replace(/_/g, ' ') : 'new'
-  }
+    const matchingOption = statusOptions.find(opt => opt.value === status);
+    if (matchingOption) return matchingOption.label;
+    // If not found in options, try to format it nicely
+    return status ? status.replace(/_/g, ' ') : 'new';
+  };
 
   // Helper function to get display label for severity
   const getSeverityLabel = (severity: string) => {
-    const matchingOption = severityOptions.find(opt => opt.value === severity)
-    if (matchingOption) return matchingOption.label
-    return severity || 'medium'
-  }
+    const matchingOption = severityOptions.find(opt => opt.value === severity);
+    if (matchingOption) return matchingOption.label;
+    return severity || 'medium';
+  };
 
   // Helper function to get display label for category
   const getCategoryLabel = (category: string) => {
-    const matchingOption = categoryOptions.find(opt => opt.value === category)
-    if (matchingOption) return matchingOption.label
-    return category ? category.replace(/_/g, ' ') : ''
-  }
+    const matchingOption = categoryOptions.find(opt => opt.value === category);
+    if (matchingOption) return matchingOption.label;
+    return category ? category.replace(/_/g, ' ') : '';
+  };
 
   const csvEscape = (val: unknown) => {
     if (val == null) return ''

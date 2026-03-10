@@ -187,6 +187,11 @@ export default function TicketDetailsPage() {
   const [severities, setSeverities] = useState<string[]>([])
   const [ticketStatuses, setTicketStatuses] = useState<{ value: string; label: string }[]>([])
 
+  // Add refs for incident timeline polling
+  const incidentTimelinePollingRef = useRef<NodeJS.Timeout>()
+  const isIncidentTimelinePollingRef = useRef<boolean>(false)
+  const lastIncidentTimelineIdsRef = useRef<Set<string>>(new Set())
+
   // Helper function to sort incident categories with "Other" at the end
   const sortIncidentCategories = (categories: string[]): string[] => {
     // Separate "Other" from the rest
@@ -293,6 +298,75 @@ export default function TicketDetailsPage() {
   const isPollingRef = useRef<boolean>(false)
   const isMaintenancePollingRef = useRef<boolean>(false)
   const ticketIdRef = useRef<string | null>(null)
+
+  // Function to fetch incident timeline only (for converted tickets)
+  const fetchIncidentTimelineOnly = useCallback(async () => {
+    if (!params.id || !ticket?.convertedIncidentId) return
+    
+    const incidentId = ticket.convertedIncidentId
+    if (!incidentId) return
+    
+    try {
+      console.log(`%c🔵 [${user?.role}] Fetching incident timeline for ticket...`, 'color: blue;');
+      const response = await api.get(`/incidents/${incidentId}/timeline`)
+      const newTimeline = response.data as TimelineEntry[]
+      
+      setTicket(prev => {
+        if (!prev) return prev
+        
+        const newTimelineIds = new Set<string>(newTimeline.map((entry: TimelineEntry) => entry.id))
+        
+        // Check if there are new timeline entries
+        const hasNewTimeline = Array.from(newTimelineIds).some(id => !lastIncidentTimelineIdsRef.current.has(id))
+        
+        if (hasNewTimeline) {
+          console.log(`%c🔵 [${user?.role}] 🔔 NEW INCIDENT TIMELINE ENTRIES DETECTED!`, 'font-size: 14px; font-weight: bold; color: purple;');
+          lastIncidentTimelineIdsRef.current = newTimelineIds
+          
+          return {
+            ...prev,
+            incidentTimeline: newTimeline
+          }
+        } else {
+          console.log(`%c🔵 [${user?.role}] No new incident timeline entries`, 'color: gray;');
+        }
+        
+        return prev
+      })
+    } catch (error) {
+      console.error(`%c🔴 [${user?.role}] Incident timeline fetch FAILED:`, error, 'color: red; font-weight: bold;');
+    }
+  }, [params.id, ticket?.convertedIncidentId, user])
+
+  // Start polling for incident timeline updates when ticket is converted
+  useEffect(() => {
+    if (!mounted || !user || !params.id || !ticket?.convertedIncidentId) return
+
+    console.log(`%c🔵 [${user?.role}] ===== SETTING UP INCIDENT TIMELINE POLLING FOR CONVERTED TICKET =====`, 'font-size: 14px; font-weight: bold; color: blue;');
+    
+    // Clear any existing interval
+    if (incidentTimelinePollingRef.current) {
+      clearInterval(incidentTimelinePollingRef.current)
+    }
+
+    // Start polling for incident timeline updates every 2 seconds
+    incidentTimelinePollingRef.current = setInterval(() => {
+      if (!isIncidentTimelinePollingRef.current) {
+        isIncidentTimelinePollingRef.current = true
+        fetchIncidentTimelineOnly().finally(() => {
+          isIncidentTimelinePollingRef.current = false
+        })
+      }
+    }, 2000)
+
+    // Cleanup on unmount
+    return () => {
+      if (incidentTimelinePollingRef.current) {
+        clearInterval(incidentTimelinePollingRef.current)
+        incidentTimelinePollingRef.current = undefined
+      }
+    }
+  }, [mounted, user, params.id, ticket?.convertedIncidentId, fetchIncidentTimelineOnly])
 
   // Fetch all maintenance data when component mounts
   const loadMaintenanceData = useCallback(async () => {
@@ -618,6 +692,11 @@ export default function TicketDetailsPage() {
         lastAttachmentIdsRef.current = new Set<number>(ticketData.attachments.map((a: Attachment) => a.id))
       }
       lastStatusRef.current = ticketData.status
+      
+      // Initialize incident timeline IDs if present
+      if (ticketData.incidentTimeline) {
+        lastIncidentTimelineIdsRef.current = new Set<string>(ticketData.incidentTimeline.map((entry: TimelineEntry) => entry.id))
+      }
       
       ticketIdRef.current = ticketId
     } catch (error: any) {
@@ -1116,15 +1195,19 @@ export default function TicketDetailsPage() {
 
               {(ticket.isConverted || (ticket.incidentTimeline && ticket.incidentTimeline.length > 0)) ? (
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                  <h2 className="text-xl font-bold mb-4">
-                    {ticket.isConverted ? 'Incident Timeline' : 'Timeline'}
-                    {ticket.convertedIncidentNumber && (
-                      <span className="ml-2 text-sm font-normal text-gray-500">
-                        (Incident: {ticket.convertedIncidentNumber})
-                      </span>
-                    )}
-                  </h2>
-                  <div className="space-y-4">
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-bold">
+                      {ticket.isConverted ? 'Incident Timeline' : 'Timeline'}
+                      {ticket.convertedIncidentNumber && (
+                        <span className="ml-2 text-sm font-normal text-gray-500">
+                          (Incident: {ticket.convertedIncidentNumber})
+                        </span>
+                      )}
+                    </h2>
+                  </div>
+                  
+                  {/* Scrollable timeline container - same as admin view */}
+                  <div className="space-y-4 max-h-96 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
                     {ticket.incidentTimeline && ticket.incidentTimeline.length > 0 ? (
                       ticket.incidentTimeline.map((t: any) => {
                       const timelineDate = t.created_at || t.createdAt
