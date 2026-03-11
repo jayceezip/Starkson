@@ -824,4 +824,49 @@ router.post('/:id/timeline', authenticate, authorize('security_officer', 'admin'
   }
 })
 
+// Get incident by formatted incident number (e.g., INC-D01-000003)
+router.get('/number/:incidentNumber', authenticate, async (req, res) => {
+  try {
+    const { incidentNumber } = req.params
+    const userId = req.user.id
+    const userRole = req.user.role
+
+    console.log(`Fetching incident by number: ${incidentNumber} for user: ${userId}, role: ${userRole}`)
+
+    // Use Supabase to query by incident_number
+    const { supabase } = require('../config/database')
+    
+    let query = supabase
+      .from('incidents')
+      .select(`
+        *,
+        ticket:tickets(*)
+      `)
+      .eq('incident_number', incidentNumber)
+    
+    const { data, error } = await query.single()
+    
+    if (error) {
+      console.error('Database error:', error)
+      return res.status(404).json({ message: 'Incident not found' })
+    }
+    
+    if (!data) {
+      return res.status(404).json({ message: 'Incident not found' })
+    }
+    
+    // For regular users, check if they have access to the related ticket
+    if (userRole !== 'admin' && userRole !== 'super_admin') {
+      // Check if user owns the related ticket (using created_by)
+      if (data.ticket && data.ticket.created_by !== userId) {
+        return res.status(403).json({ message: 'Access denied' })
+      }
+    }
+    
+    res.json(data)
+  } catch (error) {
+    console.error('Get incident by number error:', error)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
 module.exports = router

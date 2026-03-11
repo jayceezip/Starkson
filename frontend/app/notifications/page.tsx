@@ -6,6 +6,7 @@ import Link from 'next/link'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getStoredUser } from '@/lib/auth'
 import { useNotifications } from '@/context/NotificationContext'
+import api from '@/lib/api'
 
 export default function NotificationsPage() {
   const router = useRouter()
@@ -85,26 +86,265 @@ export default function NotificationsPage() {
     setShowDeleteConfirm(null)
   }
 
+  // Helper function to check if a string is a UUID
+  const isUUID = (str: string) => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    return uuidRegex.test(str)
+  }
+
+  // Function to fetch ticket by formatted number
+  const fetchTicketByNumber = async (ticketNumber: string) => {
+    try {
+      const response = await api.get(`/tickets/number/${ticketNumber}`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching ticket by number:', error)
+      return null
+    }
+  }
+
+  // Function to fetch incident by formatted number
+  const fetchIncidentByNumber = async (incidentNumber: string) => {
+    try {
+      const response = await api.get(`/incidents/number/${incidentNumber}`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching incident by number:', error)
+      return null
+    }
+  }
+
   const handleNotificationClick = async (notification: any) => {
+    console.log('Full notification object:', JSON.stringify(notification, null, 2))
+    console.log('Available properties:', Object.keys(notification))
+    
     // Mark as read if unread
     if (!notification.isRead) {
       await markAsRead(notification.id)
     }
     
-    // Redirect based on notification type and resource
-    if (notification.ticket_id) {
-      // If there's a ticket_id, go to the ticket
-      router.push(`/tickets/${notification.ticket_id}`)
-    } else if (notification.resourceType === 'incident' && notification.resourceId) {
-      // If it's an incident with resourceId, go to the incident
-      router.push(`/incidents/${notification.resourceId}`)
-    } else if (notification.resourceType === 'ticket' && notification.resourceId) {
-      // If it's a ticket with resourceId, go to the ticket
-      router.push(`/tickets/${notification.resourceId}`)
-    } else {
-      // Default fallback
-      console.log('No redirect path available for notification:', notification)
+    // Get user role
+    const user = getStoredUser()
+    console.log('User role:', user?.role)
+    
+    // Try to find any ID that might be a ticket ID or incident ID
+    const possibleTicketIds = []
+    const possibleIncidentIds = []
+    const possibleTicketNumbers = [] // For formatted ticket numbers like D01-000004
+    const possibleIncidentNumbers = [] // For formatted incident numbers like INC-D01-000003
+    
+    // Check all possible places where ticket ID might be stored
+    if (notification.ticket_id) possibleTicketIds.push({ source: 'ticket_id', value: notification.ticket_id })
+    if (notification.ticketId) possibleTicketIds.push({ source: 'ticketId', value: notification.ticketId })
+    if (notification.resourceId && notification.resourceType === 'ticket') {
+      possibleTicketIds.push({ source: 'resourceId', value: notification.resourceId })
     }
+    if (notification.data?.ticketId) possibleTicketIds.push({ source: 'data.ticketId', value: notification.data.ticketId })
+    if (notification.data?.ticket_id) possibleTicketIds.push({ source: 'data.ticket_id', value: notification.data.ticket_id })
+    
+    // Check for incident IDs
+    if (notification.incident_id) possibleIncidentIds.push({ source: 'incident_id', value: notification.incident_id })
+    if (notification.incidentId) possibleIncidentIds.push({ source: 'incidentId', value: notification.incidentId })
+    if (notification.resourceId && notification.resourceType === 'incident') {
+      possibleIncidentIds.push({ source: 'resourceId', value: notification.resourceId })
+    }
+    if (notification.data?.incidentId) possibleIncidentIds.push({ source: 'data.incidentId', value: notification.data.incidentId })
+    if (notification.data?.incident_id) possibleIncidentIds.push({ source: 'data.incident_id', value: notification.data.incident_id })
+    
+    // Also try to extract IDs from the message
+    if (notification.message) {
+      // Look for incident ID pattern (INC-XXXXX)
+      const incidentMatch = notification.message.match(/(INC-[A-Z0-9-]+)/)
+      if (incidentMatch) {
+        if (isUUID(incidentMatch[1])) {
+          possibleIncidentIds.push({ source: 'message_extract_incident_uuid', value: incidentMatch[1] })
+        } else {
+          possibleIncidentNumbers.push({ source: 'message_extract_incident_number', value: incidentMatch[1] })
+        }
+      }
+      
+      // Look for ticket ID pattern (D01-XXXXX)
+      const ticketMatch = notification.message.match(/(D01-[A-Z0-9-]+)/)
+      if (ticketMatch) {
+        if (isUUID(ticketMatch[1])) {
+          possibleTicketIds.push({ source: 'message_extract_ticket_uuid', value: ticketMatch[1] })
+        } else {
+          possibleTicketNumbers.push({ source: 'message_extract_ticket_number', value: ticketMatch[1] })
+        }
+      }
+    }
+    
+    console.log('Possible ticket IDs found:', possibleTicketIds)
+    console.log('Possible ticket numbers found:', possibleTicketNumbers)
+    console.log('Possible incident IDs found:', possibleIncidentIds)
+    console.log('Possible incident numbers found:', possibleIncidentNumbers)
+    
+    // For regular users, prioritize redirecting to tickets (which they have access to)
+    if (user?.role === 'user') {
+      // First try to find a ticket UUID
+      if (possibleTicketIds.length > 0) {
+        const ticketId = possibleTicketIds[0].value
+        // Check if it's a UUID format
+        if (isUUID(ticketId)) {
+          console.log(`User: Redirecting to ticket ${ticketId} from source: ${possibleTicketIds[0].source}`)
+          router.push(`/tickets/${ticketId}`)
+          return
+        }
+      }
+      
+      // If we have a ticket number, fetch the UUID
+      if (possibleTicketNumbers.length > 0) {
+        const ticketNumber = possibleTicketNumbers[0].value
+        console.log(`User: Fetching ticket by number: ${ticketNumber}`)
+        
+        try {
+          const ticket = await fetchTicketByNumber(ticketNumber)
+          if (ticket && ticket.id) {
+            console.log(`User: Found ticket UUID: ${ticket.id} for number: ${ticketNumber}`)
+            router.push(`/tickets/${ticket.id}`)
+            return
+          }
+        } catch (error) {
+          console.error('Failed to fetch ticket by number:', error)
+        }
+      }
+      
+      // For ticket conversion, try to get the original ticket
+      if (notification.title?.toLowerCase().includes('ticket converted to incident') ||
+          notification.message?.toLowerCase().includes('ticket was converted to incident')) {
+        
+        // Try to extract the original ticket number from the message
+        const ticketMatch = notification.message?.match(/(D01-[A-Z0-9-]+)/)
+        if (ticketMatch) {
+          const ticketNumber = ticketMatch[1]
+          console.log(`User: Ticket conversion - fetching original ticket: ${ticketNumber}`)
+          
+          try {
+            const ticket = await fetchTicketByNumber(ticketNumber)
+            if (ticket && ticket.id) {
+              console.log(`User: Redirecting to original ticket UUID: ${ticket.id}`)
+              router.push(`/tickets/${ticket.id}`)
+              return
+            }
+          } catch (error) {
+            console.error('Failed to fetch original ticket:', error)
+          }
+        }
+      }
+      
+      // If we only have incident ID/number, try to get the related ticket
+      if (possibleIncidentIds.length > 0 || possibleIncidentNumbers.length > 0) {
+        const incidentNumber = possibleIncidentNumbers[0]?.value || 
+                              (possibleIncidentIds[0]?.value && !isUUID(possibleIncidentIds[0].value) ? possibleIncidentIds[0].value : null)
+        
+        if (incidentNumber) {
+          console.log(`User: Fetching incident by number: ${incidentNumber}`)
+          try {
+            const incident = await fetchIncidentByNumber(incidentNumber)
+            if (incident && incident.ticket_id) {
+              console.log(`User: Found related ticket UUID: ${incident.ticket_id}`)
+              router.push(`/tickets/${incident.ticket_id}`)
+              return
+            }
+          } catch (error) {
+            console.error('Failed to fetch incident:', error)
+          }
+        }
+        
+        console.log('User does not have access to incidents')
+        alert('You do not have permission to view incident details. Please contact an administrator if you need access.')
+        return
+      }
+    } else {
+      // For admins and other roles, prioritize incident IDs for incident-related notifications
+      if (notification.type === 'incident' || 
+          notification.type === 'ADDED_INCIDENT_TIMELINE' || 
+          notification.type === 'INCIDENT_TIMELINE_UPDATE' ||
+          notification.message?.toLowerCase().includes('incident')) {
+        
+        // Check for incident UUID first
+        if (possibleIncidentIds.length > 0) {
+          const incidentId = possibleIncidentIds[0].value
+          if (isUUID(incidentId)) {
+            console.log(`Admin: Redirecting to incident ${incidentId} from source: ${possibleIncidentIds[0].source}`)
+            router.push(`/incidents/${incidentId}`)
+            return
+          }
+        }
+        
+        // Try incident number
+        if (possibleIncidentNumbers.length > 0) {
+          const incidentNumber = possibleIncidentNumbers[0].value
+          console.log(`Admin: Fetching incident by number: ${incidentNumber}`)
+          try {
+            const incident = await fetchIncidentByNumber(incidentNumber)
+            if (incident && incident.id) {
+              console.log(`Admin: Redirecting to incident UUID: ${incident.id}`)
+              router.push(`/incidents/${incident.id}`)
+              return
+            }
+          } catch (error) {
+            console.error('Failed to fetch incident by number:', error)
+          }
+        }
+      }
+      
+      // Otherwise try ticket IDs
+      if (possibleTicketIds.length > 0) {
+        const ticketId = possibleTicketIds[0].value
+        if (isUUID(ticketId)) {
+          console.log(`Admin: Redirecting to ticket ${ticketId} from source: ${possibleTicketIds[0].source}`)
+          router.push(`/tickets/${ticketId}`)
+          return
+        }
+      }
+      
+      // Try ticket numbers
+      if (possibleTicketNumbers.length > 0) {
+        const ticketNumber = possibleTicketNumbers[0].value
+        console.log(`Admin: Fetching ticket by number: ${ticketNumber}`)
+        
+        try {
+          const ticket = await fetchTicketByNumber(ticketNumber)
+          if (ticket && ticket.id) {
+            console.log(`Admin: Found ticket UUID: ${ticket.id} for number: ${ticketNumber}`)
+            router.push(`/tickets/${ticket.id}`)
+            return
+          }
+        } catch (error) {
+          console.error('Failed to fetch ticket by number:', error)
+        }
+      }
+      
+      // If no ticket ID but we have incident ID
+      if (possibleIncidentIds.length > 0) {
+        const incidentId = possibleIncidentIds[0].value
+        if (isUUID(incidentId)) {
+          console.log(`Admin: Redirecting to incident ${incidentId} from source: ${possibleIncidentIds[0].source}`)
+          router.push(`/incidents/${incidentId}`)
+          return
+        }
+      }
+      
+      // Try incident numbers as last resort
+      if (possibleIncidentNumbers.length > 0) {
+        const incidentNumber = possibleIncidentNumbers[0].value
+        console.log(`Admin: Fetching incident by number: ${incidentNumber}`)
+        try {
+          const incident = await fetchIncidentByNumber(incidentNumber)
+          if (incident && incident.id) {
+            console.log(`Admin: Redirecting to incident UUID: ${incident.id}`)
+            router.push(`/incidents/${incident.id}`)
+            return
+          }
+        } catch (error) {
+          console.error('Failed to fetch incident by number:', error)
+        }
+      }
+    }
+    
+    console.log('No ticket or incident ID found in notification')
+    alert('Could not find ticket or incident information for this notification')
   }
 
   const getNotificationIcon = (type: string) => {
@@ -331,8 +571,17 @@ export default function NotificationsPage() {
                           </div>
                         </div>
                         
-                        {/* Show View Details button if there's a ticket_id or resource info */}
-                        {(notification.ticket_id || (notification.resourceType && notification.resourceId)) && (
+                        {/* Show View Details button if there's a ticket_id, incident_id, or resource info */}
+                        {/* But hide it for generic "Incident linked to your ticket was updated" messages */}
+                        {(notification.ticket_id || 
+                          notification.incident_id || 
+                          notification.ticketId || 
+                          notification.incidentId ||
+                          notification.resourceId ||
+                          (notification.resourceType && notification.resourceId)) && 
+                          // Don't show for generic incident update messages without specific details
+                          !(notification.title === 'Incident updated' && 
+                            notification.message === 'Incident linked to your ticket was updated') && (
                           <div className="mt-3">
                             <button
                               onClick={() => handleNotificationClick(notification)}

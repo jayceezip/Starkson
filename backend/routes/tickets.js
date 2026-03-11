@@ -92,6 +92,59 @@ const calculateSLADue = async (priority) => {
   return dueDate.toISOString()
 }
 
+// Get ticket by formatted ticket number (e.g., D01-000004)
+router.get('/number/:ticketNumber', authenticate, async (req, res) => {
+  console.log('========== TICKET NUMBER ROUTE HIT ==========');
+  console.log('Params:', req.params);
+  console.log('Ticket number:', req.params.ticketNumber);
+  console.log('User:', req.user);
+  
+  try {
+    const { ticketNumber } = req.params
+    const userId = req.user.id
+    const userRole = req.user.role
+
+    console.log(`Fetching ticket by number: ${ticketNumber} for user: ${userId}, role: ${userRole}`)
+
+    // Get direct Supabase client
+    const { supabase } = require('../config/database')
+    
+    // First, let's check if the ticket exists at all
+    const { data: ticket, error: ticketError } = await supabase
+      .from('tickets')
+      .select('*')
+      .eq('ticket_number', ticketNumber)
+      .maybeSingle() // Use maybeSingle instead of single to avoid errors
+    
+    console.log('Query result:', { ticket, error: ticketError });
+    
+    if (ticketError) {
+      console.error('Database error:', ticketError)
+      return res.status(500).json({ message: 'Database error', error: ticketError })
+    }
+    
+    if (!ticket) {
+      console.log(`Ticket not found with number: ${ticketNumber}`)
+      return res.status(404).json({ message: 'Ticket not found' })
+    }
+    
+    console.log('Found ticket:', ticket);
+    
+    // Check if user has access to this ticket
+    if (userRole !== 'admin' && userRole !== 'super_admin') {
+      if (ticket.created_by !== userId) {
+        console.log(`Access denied: user ${userId} tried to access ticket ${ticketNumber} created by ${ticket.created_by}`)
+        return res.status(403).json({ message: 'Access denied' })
+      }
+    }
+    
+    res.json(ticket)
+  } catch (error) {
+    console.error('Get ticket by number error:', error)
+    res.status(500).json({ message: 'Server error', error: error.message })
+  }
+})
+
 // Get all tickets
 router.get('/', authenticate, async (req, res) => {
   try {
@@ -1567,4 +1620,6 @@ router.get('/ticket/:ticketId', authenticate, async (req, res) => {
     res.status(500).json({ message: 'Server error' })
   }
 })
+
+
 module.exports = router
