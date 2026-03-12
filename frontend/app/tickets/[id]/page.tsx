@@ -1527,12 +1527,6 @@ export default function TicketDetailsPage() {
                     <span className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Created By</span>
                     <p className="mt-1 text-gray-900">{ticket.createdByName || 'N/A'}</p>
                   </div>
-                  {ticket.assignedToName && (
-                    <div>
-                      <span className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Assigned To</span>
-                      <p className="mt-1 text-gray-900">{ticket.assignedToName}</p>
-                    </div>
-                  )}
                   {(ticket.sla_due || ticket.slaDue) ? (
                     <div>
                       <span className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">SLA Due</span>
