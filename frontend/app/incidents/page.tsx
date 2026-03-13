@@ -740,39 +740,128 @@ function IncidentsPageContent() {
   }
 
   const handleExportIncidentsPDF = async () => {
-    setExporting(true)
-    try {
-      const [jsPDFModule, autoTableModule] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
-      const jsPDF = jsPDFModule.default
-      const autoTable = (autoTableModule as any).default ?? (autoTableModule as any).autoTable
-      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-      const tableData = filteredIncidents.map((inc) => [
-        inc.incidentNumber || `#${inc.id}`,
-        (inc.title || '').slice(0, 35),
-        getCategoryLabel(inc.category || ''),
-        getSeverityLabel(inc.severity || 'medium'),
-        getStatusLabel(inc.status || 'new'),
-        inc.createdAt ? new Date(inc.createdAt).toLocaleDateString() : '—',
-      ])
-      doc.setFontSize(14)
-      doc.text('Incidents Export', 14, 12)
-      doc.setFontSize(10)
-      doc.text(`Generated: ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })} (PH time) | Total: ${filteredIncidents.length}`, 14, 18)
-      autoTable(doc, {
-        head: [['Incident #', 'Title', 'Category', 'Severity', 'Status', 'Created']],
-        body: tableData,
-        startY: 22,
-        styles: { fontSize: 7, cellPadding: 1.5 },
-        headStyles: { fillColor: [66, 66, 66] },
-      })
-      doc.save(`incidents-export-${new Date().toISOString().slice(0, 10)}.pdf`)
-    } catch (e) {
-      console.error('PDF export failed:', e)
-      alert('Failed to generate PDF.')
-    } finally {
-      setExporting(false)
+  setExporting(true)
+  try {
+    const [jsPDFModule, autoTableModule] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
+    const jsPDF = jsPDFModule.default
+    const autoTable = (autoTableModule as any).default ?? (autoTableModule as any).autoTable
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+
+    // Prepare table data - match the columns in the incidents table (excluding SLA)
+    const tableData = filteredIncidents.map((inc) => [
+      inc.incidentNumber || `#${inc.id}`,
+      getCategoryLabel(inc.category || ''),
+      (inc.title || '').slice(0, 30),
+      getSeverityLabel(inc.severity || 'medium'),
+      getStatusLabel(inc.status || 'new'),
+      inc.affectedAsset || '—',
+      inc.affectedUser || '—',
+      inc.sourceTicketNumber || '—',
+      inc.createdAt ? new Date(inc.createdAt).toLocaleDateString() : '—',
+    ])
+
+    // Logo handling - exactly like audit logs and tickets
+    const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/STARKSON-LG.png` : ''
+    let startY = 14
+    let logoEndX = 14 // Default X position if no logo
+    
+    if (logoUrl) {
+      try {
+        const imgResp = await fetch(logoUrl)
+        const imgBlob = await imgResp.blob()
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = reject
+          reader.readAsDataURL(imgBlob)
+        })
+        const imgW = 45
+        const imgH = 45
+        doc.addImage(base64, 'PNG', 14, 2, imgW, imgH)
+        // Calculate where the logo ends (x + width) plus a margin
+        logoEndX = 14 + imgW + 5 // 5mm margin after logo
+        startY = 24
+      } catch {
+        startY = 14
+        logoEndX = 14
+      }
     }
+    
+    // Header - exactly like audit logs and tickets
+    doc.setFontSize(16)
+    doc.text('Incidents Export (Full Report)', logoEndX, startY)
+    
+    doc.setFontSize(10)
+    doc.text(`Generated: ${new Date().toLocaleString('en-PH', { 
+      timeZone: 'Asia/Manila',
+      dateStyle: 'full',
+      timeStyle: 'short'
+    })} (PH time) | Total incidents: ${filteredIncidents.length}`, logoEndX, startY + 7)
+    
+    // Add filter information if any filters are applied
+    const filterParts = []
+    if (filters.status) filterParts.push(`Status: ${statusOptions.find(o => o.value === filters.status)?.label || filters.status}`)
+    if (filters.severity) filterParts.push(`Severity: ${severityOptions.find(o => o.value === filters.severity)?.label || filters.severity}`)
+    if (filters.category) filterParts.push(`Category: ${categoryOptions.find(o => o.value === filters.category)?.label || filters.category}`)
+    if (filters.branch) filterParts.push(`Branch: ${REAL_BRANCHES.find(b => b.acronym === filters.branch)?.name || filters.branch}`)
+    if (searchQuery.trim()) filterParts.push(`Search: "${searchQuery.trim()}"`)
+    
+    if (filterParts.length > 0) {
+      doc.text(`Filters: ${filterParts.join(' • ')}`, logoEndX, startY + 14)
+    }
+    
+    const tableStartY = startY + (filterParts.length > 0 ? 20 : 18)
+    
+    // Generate table with all columns from incidents table
+    autoTable(doc, {
+      head: [['Incident #', 'Category', 'Title', 'Severity', 'Status', 'Asset', 'User', 'Source Ticket', 'Created']],
+      body: tableData,
+      startY: tableStartY,
+      styles: { 
+        fontSize: 7,
+        cellPadding: 1.5,
+      },
+      headStyles: { 
+        fillColor: [66, 66, 66],
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        fontSize: 7,
+      },
+      columnStyles: {
+        0: { cellWidth: 18 }, // Incident #
+        1: { cellWidth: 18 }, // Category
+        2: { cellWidth: 35 }, // Title
+        3: { cellWidth: 15 }, // Severity
+        4: { cellWidth: 16 }, // Status
+        5: { cellWidth: 18 }, // Affected Asset
+        6: { cellWidth: 18 }, // Affected User
+        7: { cellWidth: 18 }, // Source Ticket
+        8: { cellWidth: 16 }, // Created
+      },
+      margin: { left: 14, right: 14 },
+    })
+
+    // Add footer with page numbers after table generation
+    const pageCount = doc.getNumberOfPages()
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i)
+      doc.setFontSize(8)
+      doc.setTextColor(150, 150, 150)
+      doc.text(
+        `Page ${i} of ${pageCount}`,
+        doc.internal.pageSize.width / 2,
+        doc.internal.pageSize.height - 10,
+        { align: 'center' }
+      )
+    }
+    doc.save(`incidents-export-${new Date().toISOString().slice(0, 10)}.pdf`)
+  } catch (e) {
+    console.error('PDF export failed:', e)
+    alert('Failed to generate PDF.')
+  } finally {
+    setExporting(false)
   }
+}
 
   if (!mounted || !user) {
     return (

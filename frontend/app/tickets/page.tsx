@@ -491,40 +491,130 @@ export default function TicketsPage() {
     URL.revokeObjectURL(a.href)
   }
 
-  const handleExportTicketsPDF = async () => {
-    setExporting(true)
-    try {
-      const [jsPDFModule, autoTableModule] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
-      const jsPDF = jsPDFModule.default
-      const autoTable = (autoTableModule as any).default ?? (autoTableModule as any).autoTable
-      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-      const tableData = filteredTickets.map((t) => [
-        t.ticketNumber || `#${t.id}`,
-        (t.title || '').slice(0, 40),
-        getStatusLabel(t.status || 'new'),
-        getPriorityLabel(t.priority || 'medium'),
-        t.createdByName || '—',
-        t.createdAt ? new Date(t.createdAt).toLocaleDateString() : '—',
-      ])
-      doc.setFontSize(14)
-      doc.text('Tickets Export', 14, 12)
-      doc.setFontSize(10)
-      doc.text(`Generated: ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })} (PH time) | Total: ${filteredTickets.length}`, 14, 18)
-      autoTable(doc, {
-        head: [['Ticket #', 'Title', 'Status', 'Priority', 'Created By', 'Created']],
-        body: tableData,
-        startY: 22,
-        styles: { fontSize: 7, cellPadding: 1.5 },
-        headStyles: { fillColor: [66, 66, 66] },
-      })
-      doc.save(`tickets-export-${new Date().toISOString().slice(0, 10)}.pdf`)
-    } catch (e) {
-      console.error('PDF export failed:', e)
-      alert('Failed to generate PDF.')
-    } finally {
-      setExporting(false)
+ const handleExportTicketsPDF = async () => {
+  setExporting(true)
+  try {
+    const [jsPDFModule, autoTableModule] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
+    const jsPDF = jsPDFModule.default
+    const autoTable = (autoTableModule as any).default ?? (autoTableModule as any).autoTable
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' }) // Changed to portrait
+
+    // Prepare table data - removed SLA column
+    const tableData = filteredTickets.map((t) => [
+      t.ticketNumber || `#${t.id}`,
+      (t.requestType || '').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
+      (t.title || '').slice(0, 25), // Reduced character limit for portrait
+      t.category || '—',
+      t.affectedSystem || '—',
+      getStatusLabel(t.status || 'new'),
+      getPriorityLabel(t.priority || 'medium'),
+      t.createdByName || '—',
+      t.assignedToName || '—',
+      t.createdAt ? new Date(t.createdAt).toLocaleDateString() : '—',
+    ])
+
+    // Logo handling - exactly like audit logs
+    const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/STARKSON-LG.png` : ''
+    let startY = 14
+    let logoEndX = 14 // Default X position if no logo
+    
+    if (logoUrl) {
+      try {
+        const imgResp = await fetch(logoUrl)
+        const imgBlob = await imgResp.blob()
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = reject
+          reader.readAsDataURL(imgBlob)
+        })
+        const imgW = 45
+        const imgH = 45
+        doc.addImage(base64, 'PNG', 14, 2, imgW, imgH)
+        // Calculate where the logo ends (x + width) plus a margin
+        logoEndX = 14 + imgW + 5 // 5mm margin after logo
+        startY = 24
+      } catch {
+        startY = 14
+        logoEndX = 14
+      }
     }
+    
+    // Header - exactly like audit logs
+    doc.setFontSize(16)
+    doc.text('Tickets Export (Full Report)', logoEndX, startY)
+    
+    doc.setFontSize(10)
+    doc.text(`Generated: ${new Date().toLocaleString('en-PH', { 
+      timeZone: 'Asia/Manila',
+      dateStyle: 'full',
+      timeStyle: 'short'
+    })} (PH time) | Total tickets: ${filteredTickets.length}`, logoEndX, startY + 7)
+    
+    // Add filter information if any filters are applied
+    const filterParts = []
+    if (filters.status) filterParts.push(`Status: ${statusOptions.find(o => o.value === filters.status)?.label || filters.status}`)
+    if (filters.priority) filterParts.push(`Priority: ${priorityOptions.find(o => o.value === filters.priority)?.label || filters.priority}`)
+    if (filters.branch) filterParts.push(`Branch: ${sortedBranches.find(b => b.acronym === filters.branch)?.name || filters.branch}`)
+    if (searchQuery.trim()) filterParts.push(`Search: "${searchQuery.trim()}"`)
+    
+    if (filterParts.length > 0) {
+      doc.text(`Filters: ${filterParts.join(' • ')}`, logoEndX, startY + 14)
+    }
+    
+    const tableStartY = startY + (filterParts.length > 0 ? 20 : 18)
+    
+    // Generate table without SLA column
+    autoTable(doc, {
+      head: [['Ticket #', 'Type', 'Title', 'Category', 'System', 'Status', 'Priority', 'Created By', 'Assigned To', 'Created']],
+      body: tableData,
+      startY: tableStartY,
+      styles: { 
+        fontSize: 7,
+        cellPadding: 1.5,
+      },
+      headStyles: { 
+        fillColor: [66, 66, 66],
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        fontSize: 7,
+      },
+      columnStyles: {
+        0: { cellWidth: 18 }, // Ticket #
+        1: { cellWidth: 16 }, // Type
+        2: { cellWidth: 30 }, // Title
+        3: { cellWidth: 16 }, // Category
+        4: { cellWidth: 18 }, // Affected System
+        5: { cellWidth: 16 }, // Status
+        6: { cellWidth: 15 }, // Priority
+        7: { cellWidth: 18 }, // Created By
+        8: { cellWidth: 18 }, // Assigned To
+        9: { cellWidth: 16 }, // Created
+      },
+      margin: { left: 14, right: 14 },
+    })
+
+    // Add footer with page numbers after table generation
+    const pageCount = doc.getNumberOfPages()
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i)
+      doc.setFontSize(8)
+      doc.setTextColor(150, 150, 150)
+      doc.text(
+        `Page ${i} of ${pageCount}`,
+        doc.internal.pageSize.width / 2,
+        doc.internal.pageSize.height - 10,
+        { align: 'center' }
+      )
+    }
+    doc.save(`tickets-export-${new Date().toISOString().slice(0, 10)}.pdf`)
+  } catch (e) {
+    console.error('PDF export failed:', e)
+    alert('Failed to generate PDF.')
+  } finally {
+    setExporting(false)
   }
+}
 
   if (!mounted || !user) {
     return (
