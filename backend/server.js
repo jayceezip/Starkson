@@ -15,7 +15,8 @@ const corsOptions = {
     const allowedOrigins = [
       'https://starkson-afhs.onrender.com', 
       'http://localhost:3000', 
-      'http://localhost:5173'
+      'http://localhost:5173',
+      'http://10.0.0.66:3000'
     ];
     
     // Allow requests with no origin (like mobile apps, curl, etc)
