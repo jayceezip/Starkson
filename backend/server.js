@@ -12,12 +12,13 @@ const PORT = process.env.PORT || 5000
 // CORS configuration - MODIFIED SECTION
 const corsOptions = {
   origin: function (origin, callback) {
-    const allowedOrigins = [
-      'https://starkson-afhs.onrender.com', 
-      'http://localhost:3000', 
-      'http://localhost:5173',
-      'http://10.0.0.66:3000'
-    ];
+  const allowedOrigins = [
+    'https://starkson-afhs.onrender.com', 
+    'http://localhost:3000', 
+    'http://localhost:5173',
+    'http://10.0.0.66:3000',
+    'http://10.0.0.66:5173'
+  ];
     
     // Allow requests with no origin (like mobile apps, curl, etc)
     if (!origin) return callback(null, true);
@@ -45,7 +46,9 @@ app.use((req, res, next) => {
   const allowedOrigins = [
     'https://starkson-afhs.onrender.com', 
     'http://localhost:3000', 
-    'http://localhost:5173'
+    'http://localhost:5173',
+    'http://10.0.0.66:3000',
+    'http://10.0.0.66:5173'
   ];
   
   if (allowedOrigins.includes(origin) || !origin || process.env.NODE_ENV !== 'production') {
@@ -123,9 +126,10 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
+// Start server - listen on all interfaces (0.0.0.0) to allow external access
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`)
+  console.log(`Server accessible at http://10.0.0.66:${PORT}`)
   console.log('Supabase client initialized')
   console.log('CORS enabled for:', corsOptions.origin)
 })
