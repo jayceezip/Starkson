@@ -17,7 +17,8 @@ const corsOptions = {
     'http://localhost:3000', 
     'http://localhost:5173',
     'http://10.0.0.66:3000',
-    'http://10.0.0.66:5173'
+    'http://10.0.0.66:5173',
+    'https://starkson-8bhb.onrender.com'
   ];
     
     // Allow requests with no origin (like mobile apps, curl, etc)
